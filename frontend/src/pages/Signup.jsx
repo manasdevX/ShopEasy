@@ -2,6 +2,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import Navbar from "../components/Navbar";
 import AuthFooter from "../components/AuthFooter";
+import { GoogleLogin } from "@react-oauth/google";
 
 export default function Signup() {
   const navigate = useNavigate();
@@ -53,11 +54,24 @@ export default function Signup() {
     }
   };
 
+  const handleGoogleSuccess = (credentialResponse) => {
+    const googleToken = credentialResponse.credential;
+
+    console.log("Google Signup Token:", googleToken);
+
+    // Later → send token to backend
+    navigate("/");
+  };
+
+  const handleGoogleError = () => {
+    setError("Google Sign-Up failed. Please try again.");
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-gray-100">
       <Navbar />
 
-      <div className="flex-grow flex items-center justify-center px-4">
+      <div className="flex-grow flex items-center justify-center px-4 pt-12">
         <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-8">
           <h1 className="text-3xl font-bold text-center text-orange-500 mb-2">
             ShopEasy
@@ -113,6 +127,17 @@ export default function Signup() {
               {loading ? "Creating account..." : "Sign Up"}
             </button>
           </form>
+
+          <div className="flex items-center my-6">
+            <div className="flex-grow h-px bg-gray-300" />
+            <span className="px-3 text-sm text-gray-500">OR</span>
+            <div className="flex-grow h-px bg-gray-300" />
+          </div>
+
+          <GoogleLogin
+            onSuccess={handleGoogleSuccess}
+            onError={handleGoogleError}
+          />
 
           <p className="mt-6 text-center text-sm">
             Already have an account?{" "}
