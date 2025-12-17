@@ -1,8 +1,7 @@
-const Product = require("../models/Product");
+import Product from "../models/Product.js";
 
 const createProduct = async (req, res) => {
-  const product = new Product(req.body);
-  await product.save();
+  const product = await Product.create(req.body);
   res.status(201).json(product);
 };
 
@@ -11,7 +10,4 @@ const getAllProducts = async (req, res) => {
   res.json(products);
 };
 
-module.exports = {
-  createProduct,
-  getAllProducts,
-};
+export { createProduct, getAllProducts };
