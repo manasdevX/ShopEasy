@@ -1,5 +1,5 @@
-const mongoose = require("mongoose");
-const bcrypt = require("bcryptjs");
+import mongoose from "mongoose";
+import bcrypt from "bcryptjs";
 
 const addressSchema = new mongoose.Schema(
   {
@@ -10,7 +10,7 @@ const addressSchema = new mongoose.Schema(
     state: { type: String, required: true },
     country: { type: String, default: "India" },
     addressLine: { type: String, required: true },
-    isDefault: { type: Boolean, default: false }
+    isDefault: { type: Boolean, default: false },
   },
   { _id: false }
 );
@@ -20,91 +20,76 @@ const cartItemSchema = new mongoose.Schema(
     product: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Product",
-      required: true
+      required: true,
     },
     quantity: {
       type: Number,
       required: true,
-      min: 1
-    }
+      min: 1,
+    },
   },
   { _id: false }
 );
 
 const userSchema = new mongoose.Schema(
   {
-    // 🔹 Authentication
     name: {
       type: String,
       required: true,
-      trim: true
+      trim: true,
     },
     email: {
       type: String,
       required: true,
       unique: true,
-      lowercase: true
+      lowercase: true,
     },
     password: {
       type: String,
       required: true,
-      select: false
+      select: false,
     },
-
-    // 🔹 Profile
     phone: {
-      type: String
+      type: String,
     },
     avatar: {
-      type: String
+      type: String,
     },
-
-    // 🔹 Role & Status
     role: {
       type: String,
       enum: ["user", "admin"],
-      default: "user"
+      default: "user",
     },
     isBlocked: {
       type: Boolean,
-      default: false
+      default: false,
     },
-
-    // 🔹 Address
     addresses: [addressSchema],
-
-    // 🔹 Shopping
     cart: [cartItemSchema],
     wishlist: [
       {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "Product"
-      }
+        ref: "Product",
+      },
     ],
-
-    // 🔹 Orders
     orders: [
       {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "Order"
-      }
-    ]
+        ref: "Order",
+      },
+    ],
   },
-  {
-    timestamps: true
-  }
+  { timestamps: true }
 );
 
-// 🔐 Password Hashing
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
-  this.password = await bcrypt.hash(this.password, 10);
+  this.password = await bcrypt.hash(this.password, 12);
   next();
 });
 
-// 🔑 Password Match Method
 userSchema.methods.matchPassword = async function (enteredPassword) {
-  return await bcrypt.compare(enteredPassword, this.password);
+  return bcrypt.compare(enteredPassword, this.password);
 };
 
-module.exports = mongoose.model("User", userSchema);
+export default mongoose.model("User", userSchema);
