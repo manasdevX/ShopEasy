@@ -11,32 +11,26 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [identifierError, setIdentifierError] = useState("");
   const [passwordError, setPasswordError] = useState("");
+  const [apiError, setApiError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  // Email
+  // Email validation
   const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
-  // Indian phone number
+  // Indian phone validation
   const isValidPhone = (phone) => /^[6-9]\d{9}$/.test(phone);
 
-  // Password:
-  // • Min 8 chars
-  // • 1 uppercase
-  // • 1 lowercase
-  // • 1 number
-  // • 1 special char
+  // Strong password validation
   const isValidPassword = (password) =>
-    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/.test(
-      password
-    );
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(password);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     let isValid = true;
-
-    // Reset errors
     setIdentifierError("");
     setPasswordError("");
+    setApiError("");
 
     // Identifier validation
     if (!identifier) {
@@ -67,18 +61,45 @@ export default function Login() {
 
     if (!isValid) return;
 
-    // ✅ All checks passed
-    navigate("/");
+    // ✅ CALL BACKEND
+    try {
+      setLoading(true);
+
+      const response = await fetch("http://localhost:5000/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: identifier,
+          password,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setApiError(data.message || "Login failed");
+        setLoading(false);
+        return;
+      }
+
+      // ✅ SAVE TOKEN
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data));
+
+      // ✅ REDIRECT
+      navigate("/");
+    } catch (error) {
+      setApiError("Server error. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleGoogleSuccess = (credentialResponse) => {
-    const googleToken = credentialResponse.credential;
-
-    // 🔴 FRONTEND ONLY (TEMP)
-    console.log("Google Token:", googleToken);
-
-    // ✅ Later send this token to backend
-    navigate("/");
+    console.log("Google Token:", credentialResponse.credential);
+    // later send token to backend
   };
 
   const handleGoogleError = () => {
@@ -87,10 +108,8 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-100">
-      {/* Header */}
       <Navbar />
 
-      {/* Login Section */}
       <div className="flex-grow flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-8">
           <h1 className="text-3xl font-bold text-center text-orange-500 mb-2">
@@ -99,6 +118,10 @@ export default function Login() {
           <p className="text-center text-gray-600 mb-6">
             Login to your account
           </p>
+
+          {apiError && (
+            <p className="text-center text-red-500 mb-4">{apiError}</p>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -146,20 +169,14 @@ export default function Login() {
               </Link>
             </div>
 
-            <button className="w-full bg-orange-500 text-white py-2 rounded-lg hover:bg-orange-600">
-              Login
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-orange-500 text-white py-2 rounded-lg hover:bg-orange-600 disabled:opacity-60"
+            >
+              {loading ? "Logging in..." : "Login"}
             </button>
           </form>
-
-          <div className="flex items-center my-6">
-            <div className="flex-grow h-px bg-gray-300" />
-            <span className="px-3 text-sm text-gray-500">OR</span>
-            <div className="flex-grow h-px bg-gray-300" />
-          </div>
-
-          <button className="w-full border py-2 rounded-lg hover:bg-gray-100">
-            Login with OTP
-          </button>
 
           <div className="flex items-center my-6">
             <div className="flex-grow h-px bg-gray-300" />
@@ -181,7 +198,6 @@ export default function Login() {
         </div>
       </div>
 
-      {/* Footer */}
       <AuthFooter />
     </div>
   );
