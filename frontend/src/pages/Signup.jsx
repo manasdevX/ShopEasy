@@ -2,7 +2,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import Navbar from "../components/Navbar";
 import AuthFooter from "../components/AuthFooter";
-import { GoogleLogin } from "@react-oauth/google";
+import { useGoogleLogin } from "@react-oauth/google";
 
 export default function Signup() {
   const navigate = useNavigate();
@@ -13,6 +13,7 @@ export default function Signup() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // 🔐 Normal signup
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -27,9 +28,7 @@ export default function Signup() {
 
       const response = await fetch("http://localhost:5000/api/auth/register", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name,
           email: identifier,
@@ -46,26 +45,47 @@ export default function Signup() {
       }
 
       localStorage.setItem("token", data.token);
-      setLoading(false);
+      localStorage.setItem("user", JSON.stringify(data));
+
       navigate("/");
-    } catch (err) {
+    } catch {
       setError("Something went wrong. Please try again.");
+    } finally {
       setLoading(false);
     }
   };
 
-  const handleGoogleSuccess = (credentialResponse) => {
-    const googleToken = credentialResponse.credential;
+  // 🔵 Google signup
+  const googleSignup = useGoogleLogin({
+    onSuccess: async (tokenResponse) => {
+      try {
+        const response = await fetch("http://localhost:5000/api/auth/google", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            token: tokenResponse.access_token,
+          }),
+        });
 
-    console.log("Google Signup Token:", googleToken);
+        const data = await response.json();
 
-    // Later → send token to backend
-    navigate("/");
-  };
+        if (!response.ok) {
+          setError(data.message || "Google signup failed");
+          return;
+        }
 
-  const handleGoogleError = () => {
-    setError("Google Sign-Up failed. Please try again.");
-  };
+        localStorage.setItem("token", data.token);
+        localStorage.setItem("user", JSON.stringify(data));
+
+        navigate("/");
+      } catch {
+        setError("Google signup failed. Please try again.");
+      }
+    },
+    onError: () => {
+      setError("Google signup failed. Please try again.");
+    },
+  });
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-100">
@@ -100,7 +120,7 @@ export default function Signup() {
             <div>
               <label className="block text-sm font-medium mb-1">Email</label>
               <input
-                type="text"
+                type="email"
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
                 placeholder="Enter email"
@@ -128,16 +148,29 @@ export default function Signup() {
             </button>
           </form>
 
+          {/* OR */}
           <div className="flex items-center my-6">
             <div className="flex-grow h-px bg-gray-300" />
             <span className="px-3 text-sm text-gray-500">OR</span>
             <div className="flex-grow h-px bg-gray-300" />
           </div>
 
-          <GoogleLogin
-            onSuccess={handleGoogleSuccess}
-            onError={handleGoogleError}
-          />
+          {/* ✅ Continue with Google */}
+          <button
+            onClick={() => googleSignup()}
+            className="w-full flex items-center justify-center gap-3 
+             bg-[#E8F0FE] text-[#1A73E8] 
+             py-2.5 rounded-lg 
+             hover:bg-[#DDE7FD] 
+             transition font-medium"
+          >
+            <img
+              src="https://www.svgrepo.com/show/475656/google-color.svg"
+              alt="Google"
+              className="w-5 h-5"
+            />
+            Continue with Google
+          </button>
 
           <p className="mt-6 text-center text-sm">
             Already have an account?{" "}

@@ -2,7 +2,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import Navbar from "../components/Navbar";
 import AuthFooter from "../components/AuthFooter";
-import { GoogleLogin } from "@react-oauth/google";
+import { useGoogleLogin } from "@react-oauth/google";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -14,16 +14,17 @@ export default function Login() {
   const [apiError, setApiError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Email validation
+  // =====================
+  // VALIDATIONS
+  // =====================
   const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-
-  // Indian phone validation
   const isValidPhone = (phone) => /^[6-9]\d{9}$/.test(phone);
-
-  // Strong password validation
   const isValidPassword = (password) =>
     /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(password);
 
+  // =====================
+  // EMAIL / PASSWORD LOGIN
+  // =====================
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -32,7 +33,6 @@ export default function Login() {
     setPasswordError("");
     setApiError("");
 
-    // Identifier validation
     if (!identifier) {
       setIdentifierError("Email or phone number is required");
       isValid = false;
@@ -41,14 +41,11 @@ export default function Login() {
         setIdentifierError("Please enter a valid email address");
         isValid = false;
       }
-    } else {
-      if (!isValidPhone(identifier)) {
-        setIdentifierError("Please enter a valid phone number");
-        isValid = false;
-      }
+    } else if (!isValidPhone(identifier)) {
+      setIdentifierError("Please enter a valid phone number");
+      isValid = false;
     }
 
-    // Password validation
     if (!password) {
       setPasswordError("Password is required");
       isValid = false;
@@ -61,50 +58,60 @@ export default function Login() {
 
     if (!isValid) return;
 
-    // ✅ CALL BACKEND
     try {
       setLoading(true);
 
-      const response = await fetch("http://localhost:5000/api/auth/login", {
+      const res = await fetch("http://localhost:5000/api/auth/login", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email: identifier,
-          password,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: identifier, password }),
       });
 
-      const data = await response.json();
+      const data = await res.json();
 
-      if (!response.ok) {
+      if (!res.ok) {
         setApiError(data.message || "Login failed");
-        setLoading(false);
         return;
       }
 
-      // ✅ SAVE TOKEN
       localStorage.setItem("token", data.token);
       localStorage.setItem("user", JSON.stringify(data));
-
-      // ✅ REDIRECT
       navigate("/");
-    } catch (error) {
+    } catch {
       setApiError("Server error. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleGoogleSuccess = (credentialResponse) => {
-    console.log("Google Token:", credentialResponse.credential);
-    // later send token to backend
-  };
+  // =====================
+  // GOOGLE LOGIN
+  // =====================
+  const googleLogin = useGoogleLogin({
+    onSuccess: async (tokenResponse) => {
+      try {
+        const res = await fetch("http://localhost:5000/api/auth/google", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: tokenResponse.access_token }),
+        });
 
-  const handleGoogleError = () => {
-    alert("Google Sign-In failed. Please try again.");
-  };
+        const data = await res.json();
+
+        if (!res.ok) {
+          setApiError(data.message || "Google login failed");
+          return;
+        }
+
+        localStorage.setItem("token", data.token);
+        localStorage.setItem("user", JSON.stringify(data));
+        navigate("/");
+      } catch {
+        setApiError("Google login failed. Try again.");
+      }
+    },
+    onError: () => setApiError("Google Sign-In failed"),
+  });
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-100">
@@ -115,6 +122,7 @@ export default function Login() {
           <h1 className="text-3xl font-bold text-center text-orange-500 mb-2">
             ShopEasy
           </h1>
+
           <p className="text-center text-gray-600 mb-6">
             Login to your account
           </p>
@@ -184,10 +192,21 @@ export default function Login() {
             <div className="flex-grow h-px bg-gray-300" />
           </div>
 
-          <GoogleLogin
-            onSuccess={handleGoogleSuccess}
-            onError={handleGoogleError}
-          />
+          {/* ✅ GOOGLE BUTTON */}
+          <button
+            onClick={() => googleLogin()}
+            className="w-full flex items-center justify-center gap-3 
+                       bg-[#E8F0FE] text-[#1A73E8]
+                       py-2.5 rounded-lg 
+                       hover:bg-[#DDE7FD] transition font-medium"
+          >
+            <img
+              src="https://www.svgrepo.com/show/475656/google-color.svg"
+              alt="Google"
+              className="w-5 h-5"
+            />
+            Continue with Google
+          </button>
 
           <p className="mt-6 text-center text-sm">
             New to ShopEasy?{" "}
