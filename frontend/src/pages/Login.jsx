@@ -2,7 +2,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import Navbar from "../components/Navbar";
 import AuthFooter from "../components/AuthFooter";
-import { useGoogleLogin } from "@react-oauth/google";
+import { GoogleLogin } from "@react-oauth/google";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -18,9 +18,11 @@ export default function Login() {
   // VALIDATIONS
   // =====================
   const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
   const isValidPhone = (phone) => /^[6-9]\d{9}$/.test(phone);
-  const isValidPassword = (password) =>
-    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(password);
+
+  // ❗ frontend password validation should NOT block login
+  // backend will decide correct / incorrect password
 
   // =====================
   // EMAIL / PASSWORD LOGIN
@@ -49,11 +51,6 @@ export default function Login() {
     if (!password) {
       setPasswordError("Password is required");
       isValid = false;
-    } else if (!isValidPassword(password)) {
-      setPasswordError(
-        "Password must be at least 8 characters and include uppercase, lowercase, number & special character"
-      );
-      isValid = false;
     }
 
     if (!isValid) return;
@@ -64,7 +61,10 @@ export default function Login() {
       const res = await fetch("http://localhost:5000/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: identifier, password }),
+        body: JSON.stringify({
+          email: identifier,
+          password,
+        }),
       });
 
       const data = await res.json();
@@ -85,33 +85,32 @@ export default function Login() {
   };
 
   // =====================
-  // GOOGLE LOGIN
+  // GOOGLE LOGIN (ID TOKEN ✅)
   // =====================
-  const googleLogin = useGoogleLogin({
-    onSuccess: async (tokenResponse) => {
-      try {
-        const res = await fetch("http://localhost:5000/api/auth/google", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token: tokenResponse.access_token }),
-        });
+  const handleGoogleSuccess = async (credentialResponse) => {
+    try {
+      const idToken = credentialResponse.credential; // ✅ JWT
 
-        const data = await res.json();
+      const res = await fetch("http://localhost:5000/api/auth/google", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: idToken }),
+      });
 
-        if (!res.ok) {
-          setApiError(data.message || "Google login failed");
-          return;
-        }
+      const data = await res.json();
 
-        localStorage.setItem("token", data.token);
-        localStorage.setItem("user", JSON.stringify(data));
-        navigate("/");
-      } catch {
-        setApiError("Google login failed. Try again.");
+      if (!res.ok) {
+        setApiError(data.message || "Google login failed");
+        return;
       }
-    },
-    onError: () => setApiError("Google Sign-In failed"),
-  });
+
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data));
+      navigate("/");
+    } catch {
+      setApiError("Google authentication failed");
+    }
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-100">
@@ -192,21 +191,16 @@ export default function Login() {
             <div className="flex-grow h-px bg-gray-300" />
           </div>
 
-          {/* ✅ GOOGLE BUTTON */}
-          <button
-            onClick={() => googleLogin()}
-            className="w-full flex items-center justify-center gap-3 
-                       bg-[#E8F0FE] text-[#1A73E8]
-                       py-2.5 rounded-lg 
-                       hover:bg-[#DDE7FD] transition font-medium"
-          >
-            <img
-              src="https://www.svgrepo.com/show/475656/google-color.svg"
-              alt="Google"
-              className="w-5 h-5"
-            />
-            Continue with Google
-          </button>
+          {/* ✅ OFFICIAL GOOGLE BUTTON */}
+          <GoogleLogin
+            onSuccess={handleGoogleSuccess}
+            onError={() => setApiError("Google authentication failed")}
+            text="continue_with"
+            theme="filled_blue"
+            shape="pill"
+            size="large"
+            width="100%"
+          />
 
           <p className="mt-6 text-center text-sm">
             New to ShopEasy?{" "}
