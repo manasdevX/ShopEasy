@@ -88,18 +88,30 @@ export default function Navbar() {
                 <ChevronDown size={14} />
               </button>
 
-              {/* DROPDOWN */}
-              <div className="absolute right-0 mt-2 w-44 bg-white text-gray-800 rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition">
+              {/* ACCOUNT DROPDOWN */}
+              <div
+                className="absolute top-full right-0 mt-2
+             w-52 bg-white text-gray-800
+             rounded-lg overflow-hidden shadow-xl
+             opacity-0 invisible
+             group-hover:opacity-100 group-hover:visible
+             transition-all duration-200
+             z-50"
+              >
                 <Link
-                  to="/profile"
-                  className="block px-4 py-2 hover:bg-gray-100"
+                  to="/account"
+                  className="block px-4 py-2 hover:bg-gray-100 transition"
                 >
                   My Profile
                 </Link>
 
+                <div className="border-t" />
+
                 <button
                   onClick={handleLogout}
-                  className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center gap-2 text-red-500"
+                  className="w-full text-left px-4 py-2
+               hover:bg-gray-100 transition
+               flex items-center gap-2 text-red-500"
                 >
                   <LogOut size={16} />
                   Logout

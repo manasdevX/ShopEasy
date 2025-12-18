@@ -2,7 +2,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import Navbar from "../components/Navbar";
 import AuthFooter from "../components/AuthFooter";
-import { GoogleLogin } from "@react-oauth/google";
+import { useGoogleLogin } from "@react-oauth/google";
+import { Eye, EyeOff } from "lucide-react";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -13,6 +14,7 @@ export default function Login() {
   const [passwordError, setPasswordError] = useState("");
   const [apiError, setApiError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   // =====================
   // VALIDATIONS
@@ -111,6 +113,15 @@ export default function Login() {
       setApiError("Google authentication failed");
     }
   };
+  const googleLogin = useGoogleLogin({
+    onSuccess: (tokenResponse) => {
+      // Adapt response to existing handler
+      handleGoogleSuccess({
+        credential: tokenResponse.access_token,
+      });
+    },
+    onError: () => setApiError("Google authentication failed"),
+  });
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-100">
@@ -152,16 +163,28 @@ export default function Login() {
 
             <div>
               <label className="block text-sm font-medium mb-1">Password</label>
-              <input
-                type="password"
-                value={password}
-                placeholder="Enter password"
-                className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-orange-400"
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  setPasswordError("");
-                }}
-              />
+
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  placeholder="Enter password"
+                  className="w-full border px-3 py-2 pr-10 rounded-lg focus:ring-2 focus:ring-orange-400"
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    setPasswordError("");
+                  }}
+                />
+
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute inset-y-0 right-3 flex items-center text-gray-500 hover:text-gray-700"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+
               {passwordError && (
                 <p className="text-sm text-red-500 mt-2">{passwordError}</p>
               )}
@@ -191,16 +214,23 @@ export default function Login() {
             <div className="flex-grow h-px bg-gray-300" />
           </div>
 
-          {/* ✅ OFFICIAL GOOGLE BUTTON */}
-          <GoogleLogin
-            onSuccess={handleGoogleSuccess}
-            onError={() => setApiError("Google authentication failed")}
-            text="continue_with"
-            theme="filled_blue"
-            shape="pill"
-            size="large"
-            width="100%"
-          />
+          <button
+            type="button"
+            onClick={() => googleLogin()}
+            disabled={loading}
+            className={`w-full flex items-center justify-center gap-3
+              bg-[#e8f0fe] hover:bg-[#dfe9fd]
+              text-[#1a73e8] font-medium
+              py-3 rounded-lg transition
+              ${loading ? "opacity-60 cursor-not-allowed" : ""}`}
+          >
+            <img
+              src="https://developers.google.com/identity/images/g-logo.png"
+              alt="Google"
+              className="w-5 h-5"
+            />
+            <span>Continue with Google</span>
+          </button>
 
           <p className="mt-6 text-center text-sm">
             New to ShopEasy?{" "}
