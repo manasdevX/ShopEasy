@@ -3,7 +3,8 @@ import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Account from "./pages/Account";
-import ForgotPassword from "./pages/ForgotPassword"; // 👈 Import this
+import ForgotPassword from "./pages/ForgotPassword";
+import { Toaster } from "react-hot-toast";
 
 export default function App() {
   return (

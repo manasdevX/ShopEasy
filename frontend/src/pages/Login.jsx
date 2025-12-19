@@ -20,11 +20,7 @@ export default function Login() {
   // VALIDATIONS
   // =====================
   const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-
   const isValidPhone = (phone) => /^[6-9]\d{9}$/.test(phone);
-
-  // ❗ frontend password validation should NOT block login
-  // backend will decide correct / incorrect password
 
   // =====================
   // EMAIL / PASSWORD LOGIN
@@ -64,7 +60,7 @@ export default function Login() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: identifier,
+          email: identifier, // Backend handles email/phone in 'email' field
           password,
         }),
       });
@@ -87,16 +83,17 @@ export default function Login() {
   };
 
   // =====================
-  // GOOGLE LOGIN (ID TOKEN ✅)
+  // GOOGLE LOGIN (Hybrid Flow ✅)
   // =====================
   const handleGoogleSuccess = async (credentialResponse) => {
     try {
-      const idToken = credentialResponse.credential; // ✅ JWT
+      // credentialResponse.credential holds the Access Token passed from the hook below
+      const accessToken = credentialResponse.credential;
 
       const res = await fetch("http://localhost:5000/api/auth/google", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: idToken }),
+        body: JSON.stringify({ token: accessToken }),
       });
 
       const data = await res.json();
@@ -106,16 +103,33 @@ export default function Login() {
         return;
       }
 
-      localStorage.setItem("token", data.token);
-      localStorage.setItem("user", JSON.stringify(data));
-      navigate("/");
-    } catch {
+      // --- NEW LOGIC START ---
+      if (data.isNewUser) {
+        // CASE 1: New User -> Redirect to Signup to finish profile
+        // We pass the Google data to Signup so the user doesn't have to verify email again
+        navigate("/signup", {
+          state: {
+            name: data.name,
+            email: data.email,
+            googleId: data.googleId,
+          },
+        });
+      } else {
+        // CASE 2: Existing User -> Login immediately
+        localStorage.setItem("token", data.token);
+        localStorage.setItem("user", JSON.stringify(data.user));
+        navigate("/");
+      }
+      // --- NEW LOGIC END ---
+    } catch (error) {
+      console.error(error);
       setApiError("Google authentication failed");
     }
   };
+
   const googleLogin = useGoogleLogin({
     onSuccess: (tokenResponse) => {
-      // Adapt response to existing handler
+      // We pass the access_token to our handler
       handleGoogleSuccess({
         credential: tokenResponse.access_token,
       });
@@ -138,7 +152,9 @@ export default function Login() {
           </p>
 
           {apiError && (
-            <p className="text-center text-red-500 mb-4">{apiError}</p>
+            <p className="text-center text-red-500 mb-4 bg-red-50 p-2 rounded border border-red-100">
+              {apiError}
+            </p>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -150,14 +166,14 @@ export default function Login() {
                 type="text"
                 value={identifier}
                 placeholder="Enter email or phone"
-                className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-orange-400"
+                className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-orange-400 outline-none transition-all"
                 onChange={(e) => {
                   setIdentifier(e.target.value);
                   setIdentifierError("");
                 }}
               />
               {identifierError && (
-                <p className="text-sm text-red-500 mt-2">{identifierError}</p>
+                <p className="text-sm text-red-500 mt-1">{identifierError}</p>
               )}
             </div>
 
@@ -169,7 +185,7 @@ export default function Login() {
                   type={showPassword ? "text" : "password"}
                   value={password}
                   placeholder="Enter password"
-                  className="w-full border px-3 py-2 pr-10 rounded-lg focus:ring-2 focus:ring-orange-400"
+                  className="w-full border px-3 py-2 pr-10 rounded-lg focus:ring-2 focus:ring-orange-400 outline-none transition-all"
                   onChange={(e) => {
                     setPassword(e.target.value);
                     setPasswordError("");
@@ -186,7 +202,7 @@ export default function Login() {
               </div>
 
               {passwordError && (
-                <p className="text-sm text-red-500 mt-2">{passwordError}</p>
+                <p className="text-sm text-red-500 mt-1">{passwordError}</p>
               )}
             </div>
 
@@ -202,7 +218,7 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-orange-500 text-white py-2 rounded-lg hover:bg-orange-600 disabled:opacity-60"
+              className="w-full bg-orange-500 text-white py-2 rounded-lg hover:bg-orange-600 disabled:opacity-60 transition-colors"
             >
               {loading ? "Logging in..." : "Login"}
             </button>
