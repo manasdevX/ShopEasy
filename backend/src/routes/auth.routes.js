@@ -1,22 +1,29 @@
 import express from "express";
 import {
-  registerUser,
+  sendEmailOtp,
+  sendMobileOtp,
+  checkOtp,
+  registerVerifiedUser,
   loginUser,
+  googleAuth,
   sendForgotPasswordOTP,
   resetPasswordWithOTP,
-  verifyEmail, 
-  verifyMobile, 
 } from "../controllers/auth.controller.js";
-import { googleAuth } from "../controllers/auth.controller.js";
 
 const router = express.Router();
 
-router.post("/register", registerUser);
+// --- INLINE VERIFICATION ROUTES ---
+router.post("/send-email-otp", sendEmailOtp);
+router.post("/send-mobile-otp", sendMobileOtp);
+router.post("/check-otp", checkOtp); // Helper to verify OTP matches before signup
+
+// --- FINAL REGISTRATION ---
+router.post("/register", registerVerifiedUser);
+
+// --- AUTH ROUTES ---
 router.post("/login", loginUser);
 router.post("/google", googleAuth);
 router.post("/forgot-password", sendForgotPasswordOTP);
 router.post("/reset-password", resetPasswordWithOTP);
-router.put("/verify-email/:token", verifyEmail); 
-router.post("/verify-mobile", verifyMobile);    
 
 export default router;
