@@ -6,12 +6,13 @@ import { Eye, EyeOff } from "lucide-react";
 export default function ForgotPassword() {
   const navigate = useNavigate();
 
-  // Steps: 1 = Email, 2 = OTP & New Password
+  // Steps: 1 = Email/Phone, 2 = OTP & New Password
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
 
   // Form State
-  const [email, setEmail] = useState("");
+  // We renamed 'email' to 'identifier' to support both Email & Phone
+  const [identifier, setIdentifier] = useState("");
   const [otp, setOtp] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -57,14 +58,15 @@ export default function ForgotPassword() {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email }),
+          // Sending 'identifier' instead of just email
+          body: JSON.stringify({ identifier }),
         }
       );
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.message);
 
-      setMessage("OTP sent to your email!");
+      setMessage(data.message || "OTP sent successfully!");
 
       // If we are already on step 2, just reset the timer
       if (step === 2) {
@@ -115,7 +117,8 @@ export default function ForgotPassword() {
       const res = await fetch("http://localhost:5000/api/auth/reset-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, otp, password }),
+        // Sending identifier, otp, and new password
+        body: JSON.stringify({ identifier, otp, password }),
       });
 
       const data = await res.json();
@@ -157,15 +160,15 @@ export default function ForgotPassword() {
             <form onSubmit={handleInitialSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-1">
-                  Email Address
+                  Email Address or Phone Number
                 </label>
                 <input
-                  type="email"
+                  type="text" // Changed to text to accept both email and phone
                   required
                   className="w-full border px-3 py-2 rounded focus:ring-2 focus:ring-orange-400"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Enter your registered email"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  placeholder="Enter email or phone number"
                 />
               </div>
               <button
@@ -188,6 +191,7 @@ export default function ForgotPassword() {
                   value={otp}
                   onChange={(e) => setOtp(e.target.value)}
                   placeholder="Enter 6-digit OTP"
+                  maxLength={6}
                 />
               </div>
 

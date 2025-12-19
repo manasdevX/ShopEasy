@@ -1,5 +1,5 @@
-import { Link, useNavigate } from "react-router-dom";
-import { useState, useEffect } from "react"; // Added useEffect
+import { Link, useNavigate, useLocation } from "react-router-dom";
+import { useState, useEffect } from "react";
 import Navbar from "../components/Navbar";
 import AuthFooter from "../components/AuthFooter";
 import { useGoogleLogin } from "@react-oauth/google";
@@ -8,6 +8,7 @@ import toast from "react-hot-toast";
 
 export default function Signup() {
   const navigate = useNavigate();
+  const location = useLocation();
 
   // ================= STATE =================
   const [formData, setFormData] = useState({
@@ -19,6 +20,11 @@ export default function Signup() {
 
   const [emailOtp, setEmailOtp] = useState("");
   const [mobileOtp, setMobileOtp] = useState("");
+  const [googleId, setGoogleId] = useState(null);
+
+  // Error States
+  const [phoneError, setPhoneError] = useState("");
+  const [emailError, setEmailError] = useState(""); // <--- NEW: Email Error State
 
   // Verification Flags
   const [isEmailSent, setIsEmailSent] = useState(false);
@@ -26,7 +32,7 @@ export default function Signup() {
   const [isEmailVerified, setIsEmailVerified] = useState(false);
   const [isMobileVerified, setIsMobileVerified] = useState(false);
 
-  // TIMERS (New)
+  // Timers
   const [emailTimer, setEmailTimer] = useState(0);
   const [mobileTimer, setMobileTimer] = useState(0);
 
@@ -36,7 +42,21 @@ export default function Signup() {
   const [verifyingMobile, setVerifyingMobile] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // ================= TIMER LOGIC (New) =================
+  // ================= AUTOFILL LOGIC =================
+  useEffect(() => {
+    if (location.state) {
+      const { name, email, googleId } = location.state;
+      if (email && googleId) {
+        setFormData((prev) => ({ ...prev, name, email }));
+        setGoogleId(googleId);
+        setIsEmailVerified(true);
+        window.history.replaceState({}, document.title);
+        toast.success("Google Verified! Please verify phone to finish.");
+      }
+    }
+  }, [location.state]);
+
+  // ================= TIMER LOGIC =================
   useEffect(() => {
     let interval;
     if (emailTimer > 0) {
@@ -55,38 +75,37 @@ export default function Signup() {
 
   // ================= HANDLERS =================
 
-  // Update Form Data
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
 
-    // Reset verification if user changes email/phone after verifying
-    if (e.target.name === "email") {
+    // Reset verification logic
+    if (e.target.name === "email" && !googleId) {
       setIsEmailVerified(false);
       setIsEmailSent(false);
       setEmailOtp("");
-      setEmailTimer(0); // Reset timer
+      setEmailTimer(0);
+      setEmailError(""); // <--- Clear email error on type
     }
     if (e.target.name === "phone") {
       setIsMobileVerified(false);
       setIsMobileSent(false);
       setMobileOtp("");
-      setMobileTimer(0); // Reset timer
+      setMobileTimer(0);
+      setPhoneError(""); // <--- Clear phone error on type
     }
   };
 
   // --- EMAIL FLOW ---
   const sendEmailOtp = async () => {
-    // 1. Strict Validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formData.email)) {
-      return toast.error("Please enter a valid email address");
-    }
-
-    if (formData.email.endsWith("@gmail.co")) {
+    if (!emailRegex.test(formData.email))
+      return toast.error("Invalid email address");
+    if (formData.email.endsWith("@gmail.co"))
       return toast.error("Did you mean @gmail.com?");
-    }
 
     setVerifyingEmail(true);
+    setEmailError(""); // Clear previous errors
+
     try {
       const res = await fetch("http://localhost:5000/api/auth/send-email-otp", {
         method: "POST",
@@ -94,11 +113,14 @@ export default function Signup() {
         body: JSON.stringify({ email: formData.email }),
       });
       const data = await res.json();
+
       if (res.ok) {
         setIsEmailSent(true);
-        setEmailTimer(30); // 🕒 Start 30s Timer
+        setEmailTimer(30);
         toast.success(data.message);
       } else {
+        // 🔴 SHOW ERROR TO USER
+        setEmailError(data.message);
         toast.error(data.message);
       }
     } catch {
@@ -121,7 +143,7 @@ export default function Signup() {
       } else {
         toast.error("Invalid Email OTP");
       }
-    } catch (error) {
+    } catch {
       toast.error("Verification failed");
     }
   };
@@ -129,7 +151,10 @@ export default function Signup() {
   // --- MOBILE FLOW ---
   const sendMobileOtp = async () => {
     if (!formData.phone) return toast.error("Please enter phone first");
+
     setVerifyingMobile(true);
+    setPhoneError("");
+
     try {
       const res = await fetch(
         "http://localhost:5000/api/auth/send-mobile-otp",
@@ -140,14 +165,17 @@ export default function Signup() {
         }
       );
       const data = await res.json();
+
       if (res.ok) {
         setIsMobileSent(true);
-        setMobileTimer(30); // 🕒 Start 30s Timer
+        setMobileTimer(30);
         toast.success("OTP sent to Mobile!");
       } else {
+        // 🔴 SHOW ERROR TO USER
+        setPhoneError(data.message);
         toast.error(data.message);
       }
-    } catch (error) {
+    } catch {
       toast.error("Server Error");
     } finally {
       setVerifyingMobile(false);
@@ -167,7 +195,7 @@ export default function Signup() {
       } else {
         toast.error("Invalid Mobile OTP");
       }
-    } catch (error) {
+    } catch {
       toast.error("Verification failed");
     }
   };
@@ -175,10 +203,8 @@ export default function Signup() {
   // --- FINAL SUBMIT ---
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    if (!isEmailVerified || !isMobileVerified) {
-      return toast.error("Please verify both Email and Phone to continue.");
-    }
+    if (!isEmailVerified || !isMobileVerified)
+      return toast.error("Verify Email & Phone first");
 
     setLoading(true);
     try {
@@ -189,6 +215,7 @@ export default function Signup() {
           ...formData,
           emailOtp,
           mobileOtp,
+          googleId,
         }),
       });
       const data = await res.json();
@@ -201,14 +228,14 @@ export default function Signup() {
       } else {
         toast.error(data.message);
       }
-    } catch (error) {
-      toast.error("Registration Failed. Try again.");
+    } catch {
+      toast.error("Registration Failed");
     } finally {
       setLoading(false);
     }
   };
 
-  // Google Login Hook
+  // --- GOOGLE LOGIN ---
   const googleLogin = useGoogleLogin({
     onSuccess: async (tokenResponse) => {
       try {
@@ -218,9 +245,25 @@ export default function Signup() {
           body: JSON.stringify({ token: tokenResponse.access_token }),
         });
         const data = await res.json();
+
         if (res.ok) {
-          localStorage.setItem("token", data.token);
-          navigate("/");
+          if (data.isNewUser) {
+            setFormData((prev) => ({
+              ...prev,
+              name: data.name,
+              email: data.email,
+            }));
+            setGoogleId(data.googleId);
+            setIsEmailVerified(true);
+            toast.success("Google Verified! Please verify phone to finish.");
+          } else {
+            localStorage.setItem("token", data.token);
+            localStorage.setItem("user", JSON.stringify(data.user));
+            toast.success("Welcome back!");
+            navigate("/");
+          }
+        } else {
+          toast.error(data.message);
         }
       } catch (err) {
         toast.error("Google Login Failed");
@@ -251,7 +294,7 @@ export default function Signup() {
               required
             />
 
-            {/* EMAIL VERIFICATION BLOCK */}
+            {/* EMAIL BLOCK */}
             <div className="space-y-2">
               <div className="flex gap-2">
                 <input
@@ -260,17 +303,21 @@ export default function Signup() {
                   placeholder="Email"
                   value={formData.email}
                   onChange={handleChange}
+                  disabled={isEmailVerified || !!googleId}
                   className={`flex-grow border px-3 py-2 rounded-lg ${
-                    isEmailVerified ? "border-green-500 bg-green-50" : ""
+                    emailError
+                      ? "border-red-500 focus:ring-red-200"
+                      : isEmailVerified
+                      ? "border-green-500 bg-green-50"
+                      : ""
                   }`}
-                  disabled={isEmailVerified}
                   required
                 />
+
                 {!isEmailVerified ? (
                   <button
                     type="button"
                     onClick={sendEmailOtp}
-                    // ✅ FIXED: Only disable if verifying OR if timer is running
                     disabled={verifyingEmail || emailTimer > 0}
                     className="bg-orange-500 text-white px-3 py-2 rounded-lg text-sm font-medium w-24 min-w-[96px]"
                   >
@@ -289,8 +336,13 @@ export default function Signup() {
                 )}
               </div>
 
+              {/* 🔴 EMAIL ERROR MESSAGE */}
+              {emailError && (
+                <p className="text-red-500 text-sm ml-1">{emailError}</p>
+              )}
+
               {/* Email OTP Input */}
-              {isEmailSent && !isEmailVerified && (
+              {isEmailSent && !isEmailVerified && !googleId && (
                 <div className="flex gap-2 animate-in fade-in slide-in-from-top-1">
                   <input
                     type="text"
@@ -310,7 +362,7 @@ export default function Signup() {
               )}
             </div>
 
-            {/* PHONE VERIFICATION BLOCK */}
+            {/* PHONE BLOCK */}
             <div className="space-y-2">
               <div className="flex gap-2">
                 <input
@@ -320,7 +372,11 @@ export default function Signup() {
                   value={formData.phone}
                   onChange={handleChange}
                   className={`flex-grow border px-3 py-2 rounded-lg ${
-                    isMobileVerified ? "border-green-500 bg-green-50" : ""
+                    phoneError
+                      ? "border-red-500 focus:ring-red-200"
+                      : isMobileVerified
+                      ? "border-green-500 bg-green-50"
+                      : ""
                   }`}
                   disabled={isMobileVerified}
                   required
@@ -329,7 +385,6 @@ export default function Signup() {
                   <button
                     type="button"
                     onClick={sendMobileOtp}
-                    // ✅ FIXED: Only disable if verifying OR if timer is running
                     disabled={verifyingMobile || mobileTimer > 0}
                     className="bg-orange-500 text-white px-3 py-2 rounded-lg text-sm font-medium w-24 min-w-[96px]"
                   >
@@ -347,6 +402,11 @@ export default function Signup() {
                   <CheckCircle className="text-green-500 mt-2" />
                 )}
               </div>
+
+              {/* 🔴 PHONE ERROR MESSAGE */}
+              {phoneError && (
+                <p className="text-red-500 text-sm ml-1">{phoneError}</p>
+              )}
 
               {/* Mobile OTP Input */}
               {isMobileSent && !isMobileVerified && (
@@ -399,7 +459,7 @@ export default function Signup() {
             </button>
           </form>
 
-          {/* GOOGLE & FOOTER */}
+          {/* GOOGLE BUTTON */}
           <div className="flex items-center my-6">
             <div className="flex-grow h-px bg-gray-300" />
             <span className="px-3 text-sm text-gray-500">OR</span>
