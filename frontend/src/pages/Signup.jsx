@@ -29,7 +29,7 @@ export default function Signup() {
   const isValidPhone = (phone) => /^[6-9]\d{9}$/.test(phone);
 
   const isValidPassword = (password) => {
-    return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/.test(
+    return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#])[A-Za-z\d@$!%*?&#]{8,}$/.test(
       password
     );
   };

@@ -51,6 +51,9 @@ const userSchema = new mongoose.Schema(
     },
     phone: {
       type: String,
+      required: true,
+      unique: true,
+      sparse: true,
     },
     avatar: {
       type: String,
@@ -64,6 +67,45 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+
+    /* =========================
+       🔐 OTP & PASSWORD RESET
+    ========================= */
+    resetPasswordOtp: {
+      type: String,
+    },
+    resetPasswordExpire: {
+      type: Date,
+    },
+
+    /* =========================
+       ✅ ACCOUNT VERIFICATION
+    ========================= */
+    isEmailVerified: {
+      type: Boolean,
+      default: false,
+    },
+    emailVerificationToken: {
+      type: String,
+    },
+    emailVerificationExpire: {
+      type: Date,
+    },
+
+    isMobileVerified: {
+      type: Boolean,
+      default: false,
+    },
+    mobileOtp: {
+      type: String,
+    },
+    mobileOtpExpire: {
+      type: Date,
+    },
+
+    /* =========================
+       📦 USER DATA
+    ========================= */
     addresses: [addressSchema],
     cart: [cartItemSchema],
     wishlist: [
@@ -82,12 +124,14 @@ const userSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Encrypt password before saving
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
   this.password = await bcrypt.hash(this.password, 12);
   next();
 });
 
+// Method to compare passwords
 userSchema.methods.matchPassword = async function (enteredPassword) {
   return bcrypt.compare(enteredPassword, this.password);
 };
