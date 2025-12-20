@@ -5,14 +5,12 @@ import {
   User, Mail, Phone, MapPin, 
   Camera, ShieldCheck, Pencil,
   ChevronRight, Package, Heart, Lock, 
-  Globe, X, Check
+  Globe, X, Check, AlertCircle
 } from "lucide-react";
 
-// 'export default' added here to resolve the Uncaught SyntaxError in App.jsx
 export default function Account() {
   const fileInputRef = useRef(null);
   
-  // 1. Permanent State (Sidebar & Database)
   const [user, setUser] = useState({
     name: "Shourya Shivhare",
     email: "shourya@gmail.com",
@@ -27,14 +25,28 @@ export default function Account() {
     }
   });
 
-  // 2. Draft State (Form Inputs)
   const [formData, setFormData] = useState({ ...user });
-  
-  // 3. Button Status State
-  const [status, setStatus] = useState("idle"); // 'idle' | 'loading' | 'success'
+  const [errors, setErrors] = useState({});
+  const [status, setStatus] = useState("idle");
+
+  // Validation Logic
+  const validate = () => {
+    let newErrors = {};
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const phoneRegex = /^[6-9]\d{9}$/; 
+
+    if (!emailRegex.test(formData.email)) newErrors.email = "Invalid email address";
+    if (!phoneRegex.test(formData.phone)) newErrors.phone = "Invalid 10-digit number";
+    if (formData.name.trim().length < 2) newErrors.name = "Name is too short";
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
+    if (errors[name]) setErrors(prev => ({ ...prev, [name]: null }));
+
     if (['addressLine', 'city', 'state', 'pincode', 'country'].includes(name)) {
       setFormData(prev => ({
         ...prev,
@@ -50,6 +62,7 @@ export default function Account() {
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
+        setUser(prev => ({ ...prev, avatar: reader.result }));
         setFormData(prev => ({ ...prev, avatar: reader.result }));
       };
       reader.readAsDataURL(file);
@@ -57,17 +70,12 @@ export default function Account() {
   };
 
   const handleSave = () => {
+    if (!validate()) return;
     setStatus("loading");
-
-    // Simulate Backend API Call
     setTimeout(() => {
-      setUser({ ...formData }); // Sync permanent state with draft
+      setUser({ ...formData });
       setStatus("success");
-
-      // Reset to normal after 2 seconds
-      setTimeout(() => {
-        setStatus("idle");
-      }, 2000);
+      setTimeout(() => setStatus("idle"), 2000);
     }, 1000);
   };
 
@@ -78,18 +86,44 @@ export default function Account() {
       <main className="max-w-6xl mx-auto px-6 py-12">
         <div className="flex flex-col lg:flex-row gap-8">
           
-          {/* --- LEFT SIDEBAR (Synced with 'user') --- */}
+          {/* --- LEFT SIDEBAR (Clean UI Restored) --- */}
           <aside className="w-full lg:w-80 space-y-6">
             <div className="bg-white dark:bg-slate-900 rounded-3xl p-8 shadow-sm border border-slate-200 dark:border-slate-800 text-center transition-colors">
-              <div className="relative w-28 h-28 mx-auto mb-4 group">
+              
+              <div className="relative w-32 h-32 mx-auto mb-6">
+                {/* Main Avatar Circle */}
                 <div className="w-full h-full rounded-full bg-slate-100 dark:bg-slate-800 border-4 border-white dark:border-slate-900 shadow-md overflow-hidden flex items-center justify-center">
                   {user.avatar ? (
                     <img src={user.avatar} className="w-full h-full object-cover" alt="Profile" />
                   ) : (
-                    <User size={48} className="text-slate-300 dark:text-slate-600" />
+                    <User size={54} className="text-slate-300 dark:text-slate-600" />
                   )}
                 </div>
+
+                {/* Pencil Button (Upload) */}
+                <button 
+                  onClick={() => fileInputRef.current.click()} 
+                  className="absolute bottom-1 right-1 bg-orange-600 text-white p-2 rounded-xl shadow-lg hover:bg-orange-500 transition-all active:scale-90"
+                >
+                  <Pencil size={14} />
+                </button>
+                
+                {/* X Button (Remove) */}
+                {user.avatar && (
+                  <button 
+                    onClick={() => {
+                        setUser(prev => ({ ...prev, avatar: null }));
+                        setFormData(prev => ({ ...prev, avatar: null }));
+                    }} 
+                    className="absolute top-1 right-1 bg-white dark:bg-slate-800 text-red-500 p-1.5 rounded-full shadow-md border border-slate-100 dark:border-slate-700 hover:scale-110 transition-transform"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+
+                <input type="file" ref={fileInputRef} onChange={handleImageChange} className="hidden" accept="image/*" />
               </div>
+
               <h2 className="text-xl font-bold text-slate-900 dark:text-white truncate">{user.name}</h2>
               <p className="text-slate-500 dark:text-slate-400 text-sm mb-4 truncate">{user.email}</p>
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400 text-[10px] font-bold uppercase tracking-widest">
@@ -114,14 +148,13 @@ export default function Account() {
             </nav>
           </aside>
 
-          {/* --- MAIN CONTENT (Synced with 'formData') --- */}
+          {/* --- MAIN CONTENT (Form with Validation) --- */}
           <div className="flex-1 space-y-6">
             <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden transition-colors">
               
               <div className="px-8 py-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white">Profile Settings</h3>
                 
-                {/* MORPHING SAVE BUTTON */}
                 <button 
                   onClick={handleSave}
                   disabled={status !== "idle"}
@@ -134,14 +167,12 @@ export default function Account() {
                   }`}
                 >
                   {status === "idle" && <span>Save Changes</span>}
-                  
                   {status === "loading" && (
                     <span className="flex items-center gap-2">
                       <div className="w-4 h-4 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin" />
                       Saving...
                     </span>
                   )}
-
                   {status === "success" && (
                     <span className="flex items-center gap-2 animate-in zoom-in duration-300">
                       <Check size={18} />
@@ -152,42 +183,12 @@ export default function Account() {
               </div>
 
               <div className="p-8 space-y-10">
-                {/* PHOTO UPLOAD */}
-                <div className="flex flex-col md:flex-row items-center gap-8 pb-8 border-b border-slate-50 dark:border-slate-800/50">
-                  <div className="relative group">
-                    <div className="w-24 h-24 rounded-2xl bg-slate-50 dark:bg-slate-800 border-2 border-dashed border-slate-200 dark:border-slate-700 overflow-hidden flex items-center justify-center">
-                      {formData.avatar ? (
-                        <img src={formData.avatar} className="w-full h-full object-cover" alt="Draft" />
-                      ) : (
-                        <Camera size={24} className="text-slate-300 dark:text-slate-600" />
-                      )}
-                    </div>
-                    <button onClick={() => fileInputRef.current.click()} className="absolute -bottom-2 -right-2 bg-slate-900 dark:bg-orange-600 text-white p-2 rounded-lg shadow-xl hover:bg-orange-500 transition-colors">
-                      <Pencil size={12} />
-                    </button>
-                    {formData.avatar && (
-                      <button onClick={() => setFormData(prev => ({ ...prev, avatar: null }))} className="absolute -top-2 -right-2 bg-white dark:bg-slate-800 text-red-500 p-1 rounded-full shadow-md border border-slate-100 dark:border-slate-700">
-                        <X size={12} />
-                      </button>
-                    )}
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-slate-900 dark:text-white">Profile Photo</h4>
-                    <input type="file" ref={fileInputRef} onChange={handleImageChange} className="hidden" accept="image/*" />
-                    <button onClick={() => fileInputRef.current.click()} className="text-xs font-bold text-orange-600 dark:text-orange-400 uppercase tracking-widest hover:text-orange-700 mt-2">
-                      Change Image
-                    </button>
-                  </div>
-                </div>
-
-                {/* BASIC INFO */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <InputField label="Full Name" name="name" value={formData.name} onChange={handleInputChange} />
-                  <InputField label="Email Address" name="email" value={formData.email} onChange={handleInputChange} icon={<Mail size={16}/>} />
-                  <InputField label="Phone Number" name="phone" value={formData.phone} onChange={handleInputChange} icon={<Phone size={16}/>} />
+                  <InputField label="Full Name" name="name" value={formData.name} onChange={handleInputChange} error={errors.name} />
+                  <InputField label="Email Address" name="email" value={formData.email} onChange={handleInputChange} icon={<Mail size={16}/>} error={errors.email} />
+                  <InputField label="Phone Number" name="phone" value={formData.phone} onChange={handleInputChange} icon={<Phone size={16}/>} error={errors.phone} />
                 </div>
 
-                {/* ADDRESS INFO */}
                 <div className="pt-4 space-y-6">
                   <h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-2">
                     <MapPin size={14}/> Shipping Address
@@ -213,16 +214,22 @@ export default function Account() {
   );
 }
 
-// Reusable Input Component with Dark Mode
-function InputField({ label, name, value, onChange, icon }) {
+function InputField({ label, name, value, onChange, icon, error }) {
   return (
     <div className="space-y-2">
-      <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider ml-1">
-        {label}
-      </label>
+      <div className="flex justify-between items-center ml-1">
+        <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+          {label}
+        </label>
+        {error && (
+          <span className="text-[10px] text-red-500 font-bold flex items-center gap-1 animate-in fade-in slide-in-from-right-1">
+            <AlertCircle size={10} /> {error}
+          </span>
+        )}
+      </div>
       <div className="relative">
         {icon && (
-          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600">
+          <div className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors ${error ? 'text-red-400' : 'text-slate-300 dark:text-slate-600'}`}>
             {icon}
           </div>
         )}
@@ -231,7 +238,9 @@ function InputField({ label, name, value, onChange, icon }) {
           value={value} 
           onChange={onChange}
           autoComplete="off"
-          className={`w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 rounded-2xl px-4 py-3.5 outline-none focus:bg-white dark:focus:bg-slate-800 focus:border-orange-500 dark:focus:border-orange-500 transition-all font-medium text-slate-900 dark:text-slate-100 ${icon ? 'pl-11' : ''}`}
+          className={`w-full bg-slate-50 dark:bg-slate-800/50 border rounded-2xl px-4 py-3.5 outline-none transition-all font-medium text-slate-900 dark:text-slate-100 
+            ${icon ? 'pl-11' : ''} 
+            ${error ? 'border-red-400 focus:border-red-500' : 'border-slate-200 dark:border-slate-800 focus:bg-white dark:focus:bg-slate-800 focus:border-orange-500'}`}
         />
       </div>
     </div>

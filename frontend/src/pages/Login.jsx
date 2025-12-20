@@ -3,7 +3,8 @@ import { useState } from "react";
 import Navbar from "../components/Navbar";
 import AuthFooter from "../components/AuthFooter";
 import { useGoogleLogin } from "@react-oauth/google";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react"; // Added Loader2 for consistency
+import toast from "react-hot-toast";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -12,37 +13,34 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [identifierError, setIdentifierError] = useState("");
   const [passwordError, setPasswordError] = useState("");
-  const [apiError, setApiError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // =====================
-  // VALIDATIONS
-  // =====================
+  // Use the exact same base style as Signup.jsx
+  const inputBase = `w-full border px-4 py-2.5 rounded-lg outline-none transition-all duration-200 
+    bg-white dark:bg-slate-800 text-slate-900 dark:text-white
+    autofill:shadow-[inset_0_0_0px_1000px_#ffffff] dark:autofill:shadow-[inset_0_0_0px_1000px_#1e293b]
+    autofill:text-fill-slate-900 dark:autofill:text-fill-white border-gray-300 dark:border-slate-700`;
+
   const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   const isValidPhone = (phone) => /^[6-9]\d{9}$/.test(phone);
 
-  // =====================
-  // EMAIL / PASSWORD LOGIN
-  // =====================
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     let isValid = true;
     setIdentifierError("");
     setPasswordError("");
-    setApiError("");
 
     if (!identifier) {
-      setIdentifierError("Email or phone number is required");
+      setIdentifierError("Email or phone is required");
       isValid = false;
     } else if (identifier.includes("@")) {
       if (!isValidEmail(identifier)) {
-        setIdentifierError("Please enter a valid email address");
+        setIdentifierError("Invalid email address");
         isValid = false;
       }
     } else if (!isValidPhone(identifier)) {
-      setIdentifierError("Please enter a valid phone number");
+      setIdentifierError("Invalid phone number");
       isValid = false;
     }
 
@@ -55,165 +53,117 @@ export default function Login() {
 
     try {
       setLoading(true);
-
       const res = await fetch("http://localhost:5000/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: identifier, // Backend handles email/phone in 'email' field
-          password,
-        }),
+        body: JSON.stringify({ email: identifier, password }),
       });
 
       const data = await res.json();
-
       if (!res.ok) {
-        setApiError(data.message || "Login failed");
+        toast.error(data.message || "Login failed");
         return;
       }
 
       localStorage.setItem("token", data.token);
       localStorage.setItem("user", JSON.stringify(data));
+      toast.success("Login successful!");
       navigate("/");
     } catch {
-      setApiError("Server error. Please try again.");
+      toast.error("Server error. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  // =====================
-  // GOOGLE LOGIN (Hybrid Flow ✅)
-  // =====================
-  const handleGoogleSuccess = async (credentialResponse) => {
-    try {
-      const accessToken = credentialResponse.credential;
-
-      const res = await fetch("http://localhost:5000/api/auth/google", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: accessToken }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setApiError(data.message || "Google login failed");
-        return;
-      }
-
-      if (data.isNewUser) {
-        navigate("/signup", {
-          state: {
-            name: data.name,
-            email: data.email,
-            googleId: data.googleId,
-          },
-        });
-      } else {
-        localStorage.setItem("token", data.token);
-        localStorage.setItem("user", JSON.stringify(data.user));
-        navigate("/");
-      }
-    } catch (error) {
-      console.error(error);
-      setApiError("Google authentication failed");
-    }
-  };
-
   const googleLogin = useGoogleLogin({
-    onSuccess: (tokenResponse) => {
-      handleGoogleSuccess({
-        credential: tokenResponse.access_token,
-      });
+    onSuccess: async (tokenResponse) => {
+      try {
+        const res = await fetch("http://localhost:5000/api/auth/google", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: tokenResponse.access_token }),
+        });
+        const data = await res.json();
+
+        if (res.ok) {
+          if (data.isNewUser) {
+            navigate("/signup", { state: { name: data.name, email: data.email, googleId: data.googleId } });
+          } else {
+            localStorage.setItem("token", data.token);
+            localStorage.setItem("user", JSON.stringify(data.user));
+            toast.success("Welcome back!");
+            navigate("/");
+          }
+        }
+      } catch {
+        toast.error("Google Login Failed");
+      }
     },
-    onError: () => setApiError("Google authentication failed"),
   });
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-100 dark:bg-[#030712] transition-colors duration-300">
+    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-[#030712] transition-colors duration-300 font-sans">
       <Navbar />
 
       <div className="flex-grow flex items-center justify-center px-4 py-12">
-        <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-xl shadow-lg p-8 border dark:border-slate-800">
-          <h1 className="text-3xl font-bold text-center text-orange-500 mb-2">
+        <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-xl p-8 border dark:border-slate-800">
+          <h1 className="text-4xl font-black text-center text-orange-500 mb-2 tracking-tight">
             ShopEasy
           </h1>
+          <p className="text-center text-gray-500 dark:text-slate-400 mb-8 font-medium">Login to your account</p>
 
-          <p className="text-center text-gray-600 dark:text-slate-400 mb-6">
-            Login to your account
-          </p>
-
-          {apiError && (
-            <p className="text-center text-red-500 mb-4 bg-red-50 dark:bg-red-500/10 p-2 rounded border border-red-100 dark:border-red-500/20">
-              {apiError}
-            </p>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {/* IDENTIFIER */}
             <div>
-              <label className="block text-sm font-medium mb-1 dark:text-slate-200">
-                Email or Phone Number
-              </label>
               <input
                 type="text"
+                placeholder="Email or Phone Number"
                 value={identifier}
-                placeholder="Enter email or phone"
-                className="w-full border dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 rounded-lg focus:ring-2 focus:ring-orange-400 outline-none transition-all"
-                onChange={(e) => {
-                  setIdentifier(e.target.value);
-                  setIdentifierError("");
-                }}
+                onChange={(e) => { setIdentifier(e.target.value); setIdentifierError(""); }}
+                className={`${inputBase} ${identifierError ? 'border-red-500' : 'focus:ring-2 focus:ring-orange-400'}`}
               />
-              {identifierError && (
-                <p className="text-sm text-red-500 mt-1">{identifierError}</p>
-              )}
+              {identifierError && <p className="text-red-500 text-xs mt-1 ml-1">{identifierError}</p>}
             </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-1 dark:text-slate-200">Password</label>
-
-              <div className="relative">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  placeholder="Enter password"
-                  className="w-full border dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 pr-10 rounded-lg focus:ring-2 focus:ring-orange-400 outline-none transition-all"
-                  onChange={(e) => {
-                    setPassword(e.target.value);
-                    setPasswordError("");
-                  }}
-                />
-
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((prev) => !prev)}
-                  className="absolute inset-y-0 right-3 flex items-center text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200"
-                >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
-
-              {passwordError && (
-                <p className="text-sm text-red-500 mt-1">{passwordError}</p>
-              )}
+            {/* PASSWORD */}
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                placeholder="Password"
+                value={password}
+                onChange={(e) => { setPassword(e.target.value); setPasswordError(""); }}
+                className={`${inputBase} pr-12 ${passwordError ? 'border-red-500' : 'focus:ring-2 focus:ring-orange-400'}`}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute inset-y-0 right-3 flex items-center text-gray-400 hover:text-gray-600"
+              >
+                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              </button>
+              {passwordError && <p className="text-red-500 text-xs mt-1 ml-1">{passwordError}</p>}
             </div>
 
             <div className="text-right">
-              <Link
-                to="/forgot-password"
-                className="text-sm text-orange-500 hover:underline"
-              >
+              <Link to="/forgot-password" size="sm" className="text-xs font-bold text-orange-500 hover:text-orange-600 transition-colors uppercase tracking-wider">
                 Forgot password?
               </Link>
             </div>
 
+            {/* MAIN LOGIN BUTTON */}
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-orange-500 text-white py-2 rounded-lg hover:bg-orange-600 disabled:opacity-60 transition-colors"
+              className="w-full bg-orange-500 text-white py-3 rounded-lg hover:bg-orange-600 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed font-bold shadow-lg shadow-orange-500/20"
             >
-              {loading ? "Logging in..." : "Login"}
+              {loading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 className="animate-spin" size={20} /> Processing...
+                </span>
+              ) : (
+                "Login"
+              )}
             </button>
           </form>
 
@@ -241,15 +191,14 @@ export default function Login() {
             <span>Continue with Google</span>
           </button>
 
-          <p className="mt-6 text-center text-sm dark:text-slate-400">
+          <p className="mt-8 text-center text-sm text-gray-500 dark:text-slate-400">
             New to ShopEasy?{" "}
-            <Link to="/signup" className="text-orange-500 hover:underline font-semibold">
+            <Link to="/signup" className="text-orange-500 hover:text-orange-600 font-bold transition-colors">
               Create an account
             </Link>
           </p>
         </div>
       </div>
-
       <AuthFooter />
     </div>
   );
