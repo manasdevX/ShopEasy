@@ -11,7 +11,6 @@ export default function ForgotPassword() {
   const [loading, setLoading] = useState(false);
 
   // Form State
-  // We renamed 'email' to 'identifier' to support both Email & Phone
   const [identifier, setIdentifier] = useState("");
   const [otp, setOtp] = useState("");
   const [password, setPassword] = useState("");
@@ -46,7 +45,7 @@ export default function ForgotPassword() {
     return regex.test(pass);
   };
 
-  // Action: Send OTP (Used for Step 1 AND Resend)
+  // Action: Send OTP
   const sendOtpApi = async () => {
     setLoading(true);
     setError("");
@@ -58,7 +57,6 @@ export default function ForgotPassword() {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          // Sending 'identifier' instead of just email
           body: JSON.stringify({ identifier }),
         }
       );
@@ -68,7 +66,6 @@ export default function ForgotPassword() {
 
       setMessage(data.message || "OTP sent successfully!");
 
-      // If we are already on step 2, just reset the timer
       if (step === 2) {
         setCanResend(false);
         setTimeLeft(30);
@@ -82,20 +79,17 @@ export default function ForgotPassword() {
     }
   };
 
-  // Handler for Initial Submit
   const handleInitialSubmit = (e) => {
     e.preventDefault();
     sendOtpApi();
   };
 
-  // Handler for Resend Click
   const handleResendClick = () => {
     if (canResend) {
       sendOtpApi();
     }
   };
 
-  // Handler for Final Reset
   const handleResetPassword = async (e) => {
     e.preventDefault();
     setError("");
@@ -117,7 +111,6 @@ export default function ForgotPassword() {
       const res = await fetch("http://localhost:5000/api/auth/reset-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        // Sending identifier, otp, and new password
         body: JSON.stringify({ identifier, otp, password }),
       });
 
@@ -137,21 +130,21 @@ export default function ForgotPassword() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col">
+    <div className="min-h-screen bg-gray-100 dark:bg-[#030712] flex flex-col transition-colors duration-300">
       <Navbar />
       <div className="flex-grow flex items-center justify-center p-4">
-        <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
+        <div className="bg-white dark:bg-slate-900 p-8 rounded-lg shadow-md w-full max-w-md border dark:border-slate-800">
           <h2 className="text-2xl font-bold text-center mb-6 text-orange-500">
             {step === 1 ? "Forgot Password" : "Reset Password"}
           </h2>
 
           {error && (
-            <div className="bg-red-100 text-red-600 p-3 mb-4 rounded text-sm text-center">
+            <div className="bg-red-100 dark:bg-red-500/10 text-red-600 dark:text-red-400 p-3 mb-4 rounded text-sm text-center border dark:border-red-500/20">
               {error}
             </div>
           )}
           {message && (
-            <div className="bg-green-100 text-green-600 p-3 mb-4 rounded text-sm text-center font-medium">
+            <div className="bg-green-100 dark:bg-green-500/10 text-green-600 dark:text-green-400 p-3 mb-4 rounded text-sm text-center font-medium border dark:border-green-500/20">
               {message}
             </div>
           )}
@@ -159,13 +152,13 @@ export default function ForgotPassword() {
           {step === 1 && (
             <form onSubmit={handleInitialSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1">
+                <label className="block text-sm font-medium mb-1 dark:text-slate-300">
                   Email Address or Phone Number
                 </label>
                 <input
-                  type="text" // Changed to text to accept both email and phone
+                  type="text"
                   required
-                  className="w-full border px-3 py-2 rounded focus:ring-2 focus:ring-orange-400"
+                  className="w-full border dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 rounded focus:ring-2 focus:ring-orange-400 outline-none transition-all"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   placeholder="Enter email or phone number"
@@ -173,7 +166,7 @@ export default function ForgotPassword() {
               </div>
               <button
                 disabled={loading}
-                className="w-full bg-orange-500 text-white py-2 rounded hover:bg-orange-600 disabled:opacity-50"
+                className="w-full bg-orange-500 text-white py-2 rounded hover:bg-orange-600 disabled:opacity-50 transition-colors font-semibold"
               >
                 {loading ? "Sending..." : "Send OTP"}
               </button>
@@ -183,11 +176,11 @@ export default function ForgotPassword() {
           {step === 2 && (
             <form onSubmit={handleResetPassword} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1">OTP</label>
+                <label className="block text-sm font-medium mb-1 dark:text-slate-300">OTP</label>
                 <input
                   type="text"
                   required
-                  className="w-full border px-3 py-2 rounded focus:ring-2 focus:ring-orange-400"
+                  className="w-full border dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 rounded focus:ring-2 focus:ring-orange-400 outline-none transition-all"
                   value={otp}
                   onChange={(e) => setOtp(e.target.value)}
                   placeholder="Enter 6-digit OTP"
@@ -197,14 +190,14 @@ export default function ForgotPassword() {
 
               {/* New Password */}
               <div>
-                <label className="block text-sm font-medium mb-1">
+                <label className="block text-sm font-medium mb-1 dark:text-slate-300">
                   New Password
                 </label>
                 <div className="relative">
                   <input
                     type={showPassword ? "text" : "password"}
                     required
-                    className="w-full border px-3 py-2 pr-10 rounded focus:ring-2 focus:ring-orange-400"
+                    className="w-full border dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 pr-10 rounded focus:ring-2 focus:ring-orange-400 outline-none transition-all"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Enter new password"
@@ -212,26 +205,26 @@ export default function ForgotPassword() {
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute inset-y-0 right-3 flex items-center text-gray-500"
+                    className="absolute inset-y-0 right-3 flex items-center text-gray-500 dark:text-slate-400 hover:text-orange-500"
                   >
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-gray-500 dark:text-slate-500 mt-1">
                   Must be 8+ chars with uppercase, lowercase, number & symbol.
                 </p>
               </div>
 
               {/* Confirm Password */}
               <div>
-                <label className="block text-sm font-medium mb-1">
+                <label className="block text-sm font-medium mb-1 dark:text-slate-300">
                   Confirm Password
                 </label>
                 <div className="relative">
                   <input
                     type={showConfirmPassword ? "text" : "password"}
                     required
-                    className="w-full border px-3 py-2 pr-10 rounded focus:ring-2 focus:ring-orange-400"
+                    className="w-full border dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 pr-10 rounded focus:ring-2 focus:ring-orange-400 outline-none transition-all"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="Confirm new password"
@@ -239,25 +232,20 @@ export default function ForgotPassword() {
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute inset-y-0 right-3 flex items-center text-gray-500"
+                    className="absolute inset-y-0 right-3 flex items-center text-gray-500 dark:text-slate-400 hover:text-orange-500"
                   >
-                    {showConfirmPassword ? (
-                      <EyeOff size={18} />
-                    ) : (
-                      <Eye size={18} />
-                    )}
+                    {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
               </div>
 
               <button
                 disabled={loading}
-                className="w-full bg-orange-500 text-white py-2 rounded hover:bg-orange-600 disabled:opacity-50"
+                className="w-full bg-orange-500 text-white py-2 rounded hover:bg-orange-600 disabled:opacity-50 transition-colors font-semibold"
               >
                 {loading ? "Resetting..." : "Reset Password"}
               </button>
 
-              {/* Resend OTP Timer Logic */}
               <div className="text-center mt-4">
                 {canResend ? (
                   <button
@@ -268,7 +256,7 @@ export default function ForgotPassword() {
                     Resend OTP
                   </button>
                 ) : (
-                  <p className="text-sm text-gray-400">
+                  <p className="text-sm text-gray-400 dark:text-slate-500">
                     Resend OTP in {timeLeft}s
                   </p>
                 )}
