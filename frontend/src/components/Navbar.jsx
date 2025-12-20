@@ -1,6 +1,9 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect, useContext } from "react";
+import { ThemeContext } from "../context/ThemeContext";
 import {
+  Moon,
+  Sun,
   ShoppingCart,
   User,
   Store,
@@ -33,6 +36,8 @@ export default function Navbar() {
   const [activeCategory, setActiveCategory] = useState(null);
   const navigate = useNavigate();
 
+  const { theme, toggleTheme } = useContext(ThemeContext);
+
   // ✅ SAFE AUTH CHECK
   let user = null;
   try {
@@ -52,17 +57,19 @@ export default function Navbar() {
   return (
     <header className="relative w-full z-50">
       {/* 🔹 TOP NAVBAR */}
-      <div className="bg-gray-900 px-6 py-3 flex items-center gap-6">
+      <div className="bg-white dark:bg-gray-900 px-6 py-3 flex items-center gap-6">
         <Link to="/" className="text-orange-500 text-2xl font-bold">
           ShopEasy
         </Link>
 
         {/* SEARCH */}
-        <div className="flex flex-1 bg-white rounded-md overflow-hidden">
+        <div className="flex flex-1 bg-gray-100 dark:bg-gray-800 rounded-md overflow-hidden">
           <input
             type="text"
             placeholder="Search for products, brands and more"
-            className="px-4 py-2 w-full outline-none text-gray-800"
+            className="px-4 py-2 w-full outline-none
+           bg-transparent text-gray-800 dark:text-gray-100
+           placeholder-gray-500 dark:placeholder-gray-400"
           />
           <button className="px-4 bg-orange-500 text-white">
             <Search size={18} />
@@ -70,7 +77,16 @@ export default function Navbar() {
         </div>
 
         {/* RIGHT ACTIONS */}
-        <div className="flex items-center gap-6 text-white">
+        <div className="flex items-center gap-6 text-gray-800 dark:text-white">
+          <button
+            onClick={toggleTheme}
+            className="p-2 rounded-full
+           hover:bg-gray-200 dark:hover:bg-gray-700
+           transition"
+          >
+            {theme === "light" ? <Moon size={18} /> : <Sun size={18} />}
+          </button>
+
           {/* LOGIN / ACCOUNT */}
           {!isLoggedIn ? (
             <Link
@@ -91,16 +107,17 @@ export default function Navbar() {
               {/* ACCOUNT DROPDOWN */}
               <div
                 className="absolute top-full right-0 mt-2
-             w-52 bg-white text-gray-800
-             rounded-lg overflow-hidden shadow-xl
-             opacity-0 invisible
-             group-hover:opacity-100 group-hover:visible
-             transition-all duration-200
-             z-50"
+           w-52 bg-white dark:bg-gray-800
+           text-gray-800 dark:text-gray-100
+           rounded-lg overflow-hidden shadow-xl
+           opacity-0 invisible
+           group-hover:opacity-100 group-hover:visible
+           transition-all duration-200
+           z-50"
               >
                 <Link
                   to="/account"
-                  className="block px-4 py-2 hover:bg-gray-100 transition"
+                  className="block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition"
                 >
                   My Profile
                 </Link>
@@ -110,7 +127,7 @@ export default function Navbar() {
                 <button
                   onClick={handleLogout}
                   className="w-full text-left px-4 py-2
-               hover:bg-gray-100 transition
+               hover:bg-gray-100 dark:hover:bg-gray-700 transition
                flex items-center gap-2 text-red-500"
                 >
                   <LogOut size={16} />
@@ -128,15 +145,27 @@ export default function Navbar() {
             Cart
           </Link>
 
-          <div className="flex items-center gap-1 cursor-pointer hover:text-orange-400">
+          <Link
+            to="/seller"
+            className="flex items-center gap-2 px-3 py-1.5
+             rounded-md
+             border border-orange-400
+             text-orange-500
+             hover:bg-orange-500 hover:text-white
+             transition"
+          >
             <Store size={18} />
-            Become a Seller
-          </div>
+            <span className="text-sm font-medium">Become a Seller</span>
+          </Link>
         </div>
       </div>
 
       {/* 🔹 CATEGORY BAR */}
-      <div className="bg-white border-b px-6 py-3 hidden md:flex justify-between text-sm font-medium">
+      <div
+        className="bg-white dark:bg-gray-900
+                border-b border-gray-200 dark:border-gray-700
+                px-6 py-3 hidden md:flex justify-between text-sm font-medium"
+      >
         {Object.keys(CATEGORY_DATA).map((category) => {
           let positionClass = "left-1/2 -translate-x-1/2";
 
@@ -149,7 +178,9 @@ export default function Navbar() {
           return (
             <div
               key={category}
-              className="relative flex items-center gap-1 cursor-pointer hover:text-orange-500"
+              className="relative flex items-center gap-1 cursor-pointer
+           text-gray-700 dark:text-gray-200
+           hover:text-orange-500 transition"
               onMouseEnter={() => setActiveCategory(category)}
               onMouseLeave={() => setActiveCategory(null)}
             >
@@ -158,13 +189,14 @@ export default function Navbar() {
 
               {activeCategory === category && (
                 <div
-                  className={`absolute top-full ${positionClass} w-56 bg-white shadow-lg rounded-md z-50`}
+                  className={`absolute top-full ${positionClass} w-56 bg-white dark:bg-gray-800 shadow-lg rounded-md z-50`}
                 >
                   <div className="p-4">
                     {CATEGORY_DATA[category].map((item) => (
                       <div
                         key={item}
-                        className="py-1 text-gray-800 hover:text-orange-500"
+                        className="py-1 text-gray-700 dark:text-gray-200
+           hover:text-orange-500 transition"
                       >
                         {item}
                       </div>

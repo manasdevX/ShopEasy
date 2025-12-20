@@ -14,6 +14,7 @@
     "google-auth-library": "^10.5.0",
     "mongoose": "^8.20.3",
     "nodemailer": "^7.0.11",
+    "react-hot-toast": "^2.6.0",
     "twilio": "^5.11.1"
   },
   "devDependencies": {
