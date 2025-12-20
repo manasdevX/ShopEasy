@@ -47,7 +47,7 @@ export default function Footer() {
             </ul>
           </div>
 
-          {/* Column 4: Contact Us (Replacing Email Input) */}
+          {/* Column 4: Contact Us */}
           <div>
             <h3 className="text-slate-900 dark:text-white font-bold mb-6 text-sm uppercase tracking-wider">Get in Touch</h3>
             <div className="space-y-4">
@@ -76,15 +76,15 @@ export default function Footer() {
           </div>
         </div>
 
-        {/* --- BOTTOM BAR --- */}
-        <div className="pt-8 border-t border-slate-100 dark:border-slate-900 flex flex-col md:flex-row justify-between items-center gap-4">
-          <p className="text-[10px] md:text-xs text-slate-400 dark:text-slate-600 uppercase tracking-widest">
-            © 2025 ShopEasy Inc. All rights reserved.
+        {/* --- BOTTOM BAR (REVISED TO MATCH AUTHFOOTER) --- */}
+        <div className="pt-8 border-t border-slate-100 dark:border-slate-900 text-center">
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            © {new Date().getFullYear()} ShopEasy. All rights reserved.
           </p>
-          <div className="flex gap-6 text-xs text-slate-500 dark:text-slate-500 font-medium">
-            <Link to="/privacy" className="hover:text-orange-500 transition-colors">Privacy</Link>
-            <Link to="/terms" className="hover:text-orange-500 transition-colors">Terms</Link>
-            <Link to="/cookies" className="hover:text-orange-500 transition-colors">Cookies</Link>
+          <div className="mt-2 flex justify-center gap-6 text-sm text-slate-500 dark:text-slate-500">
+            <Link to="/terms" className="hover:underline hover:text-orange-500 transition-colors">Terms</Link>
+            <Link to="/privacy" className="hover:underline hover:text-orange-500 transition-colors">Privacy</Link>
+            <Link to="/help" className="hover:underline hover:text-orange-500 transition-colors">Help</Link>
           </div>
         </div>
       </div>
@@ -92,7 +92,7 @@ export default function Footer() {
   );
 }
 
-// Sub-component for Link styling
+// Sub-components remain the same...
 function FooterLink({ to, label }) {
   return (
     <Link to={to} className="hover:text-orange-500 hover:translate-x-1 transition-all inline-block">
@@ -101,7 +101,6 @@ function FooterLink({ to, label }) {
   );
 }
 
-// Sub-component for Social Icons
 function SocialIcon({ icon }) {
   return (
     <a href="#" className="w-9 h-9 flex items-center justify-center rounded-full bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-orange-500 hover:text-white dark:hover:bg-orange-500 dark:hover:text-white transition-all shadow-sm">
