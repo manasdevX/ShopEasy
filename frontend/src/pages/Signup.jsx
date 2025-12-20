@@ -24,7 +24,7 @@ export default function Signup() {
 
   // Error States
   const [phoneError, setPhoneError] = useState("");
-  const [emailError, setEmailError] = useState(""); // <--- NEW: Email Error State
+  const [emailError, setEmailError] = useState("");
 
   // Verification Flags
   const [isEmailSent, setIsEmailSent] = useState(false);
@@ -78,20 +78,19 @@ export default function Signup() {
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
 
-    // Reset verification logic
     if (e.target.name === "email" && !googleId) {
       setIsEmailVerified(false);
       setIsEmailSent(false);
       setEmailOtp("");
       setEmailTimer(0);
-      setEmailError(""); // <--- Clear email error on type
+      setEmailError("");
     }
     if (e.target.name === "phone") {
       setIsMobileVerified(false);
       setIsMobileSent(false);
       setMobileOtp("");
       setMobileTimer(0);
-      setPhoneError(""); // <--- Clear phone error on type
+      setPhoneError("");
     }
   };
 
@@ -104,7 +103,7 @@ export default function Signup() {
       return toast.error("Did you mean @gmail.com?");
 
     setVerifyingEmail(true);
-    setEmailError(""); // Clear previous errors
+    setEmailError("");
 
     try {
       const res = await fetch("http://localhost:5000/api/auth/send-email-otp", {
@@ -119,7 +118,6 @@ export default function Signup() {
         setEmailTimer(30);
         toast.success(data.message);
       } else {
-        // 🔴 SHOW ERROR TO USER
         setEmailError(data.message);
         toast.error(data.message);
       }
@@ -171,7 +169,6 @@ export default function Signup() {
         setMobileTimer(30);
         toast.success("OTP sent to Mobile!");
       } else {
-        // 🔴 SHOW ERROR TO USER
         setPhoneError(data.message);
         toast.error(data.message);
       }
@@ -272,15 +269,15 @@ export default function Signup() {
   });
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-100">
+    <div className="min-h-screen flex flex-col bg-gray-100 dark:bg-[#030712] transition-colors duration-300">
       <Navbar />
 
       <div className="flex-grow flex items-center justify-center px-4 py-12">
-        <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-8">
+        <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-xl shadow-lg p-8 border dark:border-slate-800">
           <h1 className="text-3xl font-bold text-center text-orange-500 mb-2">
             ShopEasy
           </h1>
-          <p className="text-center text-gray-600 mb-6">Create your account</p>
+          <p className="text-center text-gray-600 dark:text-slate-400 mb-6">Create your account</p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* NAME */}
@@ -290,7 +287,7 @@ export default function Signup() {
               placeholder="Full Name"
               value={formData.name}
               onChange={handleChange}
-              className="w-full border px-3 py-2 rounded-lg"
+              className="w-full border dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 rounded-lg focus:ring-2 focus:ring-orange-400 outline-none"
               required
             />
 
@@ -304,12 +301,12 @@ export default function Signup() {
                   value={formData.email}
                   onChange={handleChange}
                   disabled={isEmailVerified || !!googleId}
-                  className={`flex-grow border px-3 py-2 rounded-lg ${
+                  className={`flex-grow border dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 rounded-lg outline-none ${
                     emailError
                       ? "border-red-500 focus:ring-red-200"
                       : isEmailVerified
-                      ? "border-green-500 bg-green-50"
-                      : ""
+                      ? "border-green-500 bg-green-50 dark:bg-green-900/20"
+                      : "focus:ring-2 focus:ring-orange-400"
                   }`}
                   required
                 />
@@ -319,7 +316,7 @@ export default function Signup() {
                     type="button"
                     onClick={sendEmailOtp}
                     disabled={verifyingEmail || emailTimer > 0}
-                    className="bg-orange-500 text-white px-3 py-2 rounded-lg text-sm font-medium w-24 min-w-[96px]"
+                    className="bg-orange-500 text-white px-3 py-2 rounded-lg text-sm font-medium w-24 min-w-[96px] hover:bg-orange-600 disabled:opacity-50"
                   >
                     {verifyingEmail ? (
                       <Loader2 className="animate-spin mx-auto" size={18} />
@@ -336,12 +333,10 @@ export default function Signup() {
                 )}
               </div>
 
-              {/* 🔴 EMAIL ERROR MESSAGE */}
               {emailError && (
                 <p className="text-red-500 text-sm ml-1">{emailError}</p>
               )}
 
-              {/* Email OTP Input */}
               {isEmailSent && !isEmailVerified && !googleId && (
                 <div className="flex gap-2 animate-in fade-in slide-in-from-top-1">
                   <input
@@ -349,12 +344,12 @@ export default function Signup() {
                     placeholder="Enter Email OTP"
                     value={emailOtp}
                     onChange={(e) => setEmailOtp(e.target.value)}
-                    className="flex-grow border px-3 py-2 rounded-lg text-sm"
+                    className="flex-grow border dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-green-400"
                   />
                   <button
                     type="button"
                     onClick={verifyEmailOtp}
-                    className="bg-green-600 text-white px-3 py-2 rounded-lg text-sm w-24"
+                    className="bg-green-600 text-white px-3 py-2 rounded-lg text-sm w-24 hover:bg-green-700"
                   >
                     Check
                   </button>
@@ -371,12 +366,12 @@ export default function Signup() {
                   placeholder="Phone Number"
                   value={formData.phone}
                   onChange={handleChange}
-                  className={`flex-grow border px-3 py-2 rounded-lg ${
+                  className={`flex-grow border dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 rounded-lg outline-none ${
                     phoneError
                       ? "border-red-500 focus:ring-red-200"
                       : isMobileVerified
-                      ? "border-green-500 bg-green-50"
-                      : ""
+                      ? "border-green-500 bg-green-50 dark:bg-green-900/20"
+                      : "focus:ring-2 focus:ring-orange-400"
                   }`}
                   disabled={isMobileVerified}
                   required
@@ -386,7 +381,7 @@ export default function Signup() {
                     type="button"
                     onClick={sendMobileOtp}
                     disabled={verifyingMobile || mobileTimer > 0}
-                    className="bg-orange-500 text-white px-3 py-2 rounded-lg text-sm font-medium w-24 min-w-[96px]"
+                    className="bg-orange-500 text-white px-3 py-2 rounded-lg text-sm font-medium w-24 min-w-[96px] hover:bg-orange-600 disabled:opacity-50"
                   >
                     {verifyingMobile ? (
                       <Loader2 className="animate-spin mx-auto" size={18} />
@@ -403,12 +398,10 @@ export default function Signup() {
                 )}
               </div>
 
-              {/* 🔴 PHONE ERROR MESSAGE */}
               {phoneError && (
                 <p className="text-red-500 text-sm ml-1">{phoneError}</p>
               )}
 
-              {/* Mobile OTP Input */}
               {isMobileSent && !isMobileVerified && (
                 <div className="flex gap-2 animate-in fade-in slide-in-from-top-1">
                   <input
@@ -416,12 +409,12 @@ export default function Signup() {
                     placeholder="Enter Mobile OTP"
                     value={mobileOtp}
                     onChange={(e) => setMobileOtp(e.target.value)}
-                    className="flex-grow border px-3 py-2 rounded-lg text-sm"
+                    className="flex-grow border dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-green-400"
                   />
                   <button
                     type="button"
                     onClick={verifyMobileOtp}
-                    className="bg-green-600 text-white px-3 py-2 rounded-lg text-sm w-24"
+                    className="bg-green-600 text-white px-3 py-2 rounded-lg text-sm w-24 hover:bg-green-700"
                   >
                     Check
                   </button>
@@ -437,13 +430,13 @@ export default function Signup() {
                 placeholder="Password"
                 value={formData.password}
                 onChange={handleChange}
-                className="w-full border px-3 py-2 pr-10 rounded-lg"
+                className="w-full border dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 pr-10 rounded-lg outline-none focus:ring-2 focus:ring-orange-400"
                 required
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-3 flex items-center text-gray-500"
+                className="absolute inset-y-0 right-3 flex items-center text-gray-500 dark:text-slate-400"
               >
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
@@ -453,7 +446,7 @@ export default function Signup() {
             <button
               type="submit"
               disabled={loading || !isEmailVerified || !isMobileVerified}
-              className="w-full bg-orange-500 text-white py-2 rounded-lg hover:bg-orange-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full bg-orange-500 text-white py-2 rounded-lg hover:bg-orange-600 transition disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
             >
               {loading ? "Creating Account..." : "Create Account"}
             </button>
@@ -461,15 +454,15 @@ export default function Signup() {
 
           {/* GOOGLE BUTTON */}
           <div className="flex items-center my-6">
-            <div className="flex-grow h-px bg-gray-300" />
-            <span className="px-3 text-sm text-gray-500">OR</span>
-            <div className="flex-grow h-px bg-gray-300" />
+            <div className="flex-grow h-px bg-gray-300 dark:bg-slate-700" />
+            <span className="px-3 text-sm text-gray-500 dark:text-slate-500">OR</span>
+            <div className="flex-grow h-px bg-gray-300 dark:bg-slate-700" />
           </div>
 
           <button
             type="button"
             onClick={() => googleLogin()}
-            className="w-full flex items-center justify-center gap-3 bg-[#e8f0fe] hover:bg-[#dfe9fd] text-[#1a73e8] font-medium py-3 rounded-lg transition"
+            className="w-full flex items-center justify-center gap-3 bg-[#e8f0fe] dark:bg-slate-800 hover:bg-[#dfe9fd] dark:hover:bg-slate-700 text-[#1a73e8] dark:text-blue-400 font-medium py-3 rounded-lg transition"
           >
             <img
               src="https://developers.google.com/identity/images/g-logo.png"
@@ -479,9 +472,9 @@ export default function Signup() {
             <span>Continue with Google</span>
           </button>
 
-          <p className="mt-6 text-center text-sm">
+          <p className="mt-6 text-center text-sm dark:text-slate-400">
             Already have an account?{" "}
-            <Link to="/login" className="text-orange-500 hover:underline">
+            <Link to="/login" className="text-orange-500 hover:underline font-semibold">
               Login
             </Link>
           </p>

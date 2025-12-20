@@ -1,1 +1,47 @@
 @import "tailwindcss";
+
+/* 🔹 1. TELL TAILWIND V4 TO USE THE CLASS STRATEGY */
+/* This is the most important line. It replaces darkMode: 'class' from v3 */
+@variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* You can define custom colors here if needed */
+  --color-dark-bg: #030712;
+}
+
+@layer base {
+  /* 🔹 2. PREVENT LAYOUT SHIFT & SET BASE COLORS */
+  html {
+    /* Ensures scrollbars match the theme */
+    color-scheme: light dark;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900 transition-colors duration-300 ease-in-out;
+  }
+
+  /* 🔹 3. DEFINE GLOBAL DARK BODY COLOR */
+  .dark body {
+    @apply bg-[#030712] text-white;
+  }
+}
+
+/* 🔹 4. OPTIMIZED TRANSITIONS (Avoiding '*' for performance) */
+/* We target only elements that usually change colors to keep the site fast */
+body, div, section, nav, header, footer, button, input, span, h1, h2, h3, p {
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 300ms;
+}
+
+/* 🔹 5. MEDIA ASSET OPTIMIZATION */
+/* Dim images in dark mode for eye comfort */
+.dark img:not(.no-dim), 
+.dark video:not(.no-dim) {
+  filter: brightness(.8) contrast(1.1);
+}
+
+/* Class to skip dimming for specific images (like logos) */
+.no-dim {
+  filter: brightness(1) !important;
+}

@@ -87,7 +87,6 @@ export default function Login() {
   // =====================
   const handleGoogleSuccess = async (credentialResponse) => {
     try {
-      // credentialResponse.credential holds the Access Token passed from the hook below
       const accessToken = credentialResponse.credential;
 
       const res = await fetch("http://localhost:5000/api/auth/google", {
@@ -103,10 +102,7 @@ export default function Login() {
         return;
       }
 
-      // --- NEW LOGIC START ---
       if (data.isNewUser) {
-        // CASE 1: New User -> Redirect to Signup to finish profile
-        // We pass the Google data to Signup so the user doesn't have to verify email again
         navigate("/signup", {
           state: {
             name: data.name,
@@ -115,12 +111,10 @@ export default function Login() {
           },
         });
       } else {
-        // CASE 2: Existing User -> Login immediately
         localStorage.setItem("token", data.token);
         localStorage.setItem("user", JSON.stringify(data.user));
         navigate("/");
       }
-      // --- NEW LOGIC END ---
     } catch (error) {
       console.error(error);
       setApiError("Google authentication failed");
@@ -129,7 +123,6 @@ export default function Login() {
 
   const googleLogin = useGoogleLogin({
     onSuccess: (tokenResponse) => {
-      // We pass the access_token to our handler
       handleGoogleSuccess({
         credential: tokenResponse.access_token,
       });
@@ -138,35 +131,35 @@ export default function Login() {
   });
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-100">
+    <div className="min-h-screen flex flex-col bg-gray-100 dark:bg-[#030712] transition-colors duration-300">
       <Navbar />
 
       <div className="flex-grow flex items-center justify-center px-4 py-12">
-        <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-8">
+        <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-xl shadow-lg p-8 border dark:border-slate-800">
           <h1 className="text-3xl font-bold text-center text-orange-500 mb-2">
             ShopEasy
           </h1>
 
-          <p className="text-center text-gray-600 mb-6">
+          <p className="text-center text-gray-600 dark:text-slate-400 mb-6">
             Login to your account
           </p>
 
           {apiError && (
-            <p className="text-center text-red-500 mb-4 bg-red-50 p-2 rounded border border-red-100">
+            <p className="text-center text-red-500 mb-4 bg-red-50 dark:bg-red-500/10 p-2 rounded border border-red-100 dark:border-red-500/20">
               {apiError}
             </p>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-1">
+              <label className="block text-sm font-medium mb-1 dark:text-slate-200">
                 Email or Phone Number
               </label>
               <input
                 type="text"
                 value={identifier}
                 placeholder="Enter email or phone"
-                className="w-full border px-3 py-2 rounded-lg focus:ring-2 focus:ring-orange-400 outline-none transition-all"
+                className="w-full border dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 rounded-lg focus:ring-2 focus:ring-orange-400 outline-none transition-all"
                 onChange={(e) => {
                   setIdentifier(e.target.value);
                   setIdentifierError("");
@@ -178,14 +171,14 @@ export default function Login() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">Password</label>
+              <label className="block text-sm font-medium mb-1 dark:text-slate-200">Password</label>
 
               <div className="relative">
                 <input
                   type={showPassword ? "text" : "password"}
                   value={password}
                   placeholder="Enter password"
-                  className="w-full border px-3 py-2 pr-10 rounded-lg focus:ring-2 focus:ring-orange-400 outline-none transition-all"
+                  className="w-full border dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-3 py-2 pr-10 rounded-lg focus:ring-2 focus:ring-orange-400 outline-none transition-all"
                   onChange={(e) => {
                     setPassword(e.target.value);
                     setPasswordError("");
@@ -195,7 +188,7 @@ export default function Login() {
                 <button
                   type="button"
                   onClick={() => setShowPassword((prev) => !prev)}
-                  className="absolute inset-y-0 right-3 flex items-center text-gray-500 hover:text-gray-700"
+                  className="absolute inset-y-0 right-3 flex items-center text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200"
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
@@ -225,18 +218,18 @@ export default function Login() {
           </form>
 
           <div className="flex items-center my-6">
-            <div className="flex-grow h-px bg-gray-300" />
-            <span className="px-3 text-sm text-gray-500">OR</span>
-            <div className="flex-grow h-px bg-gray-300" />
+            <div className="flex-grow h-px bg-gray-300 dark:bg-slate-700" />
+            <span className="px-3 text-sm text-gray-500 dark:text-slate-500 font-medium">OR</span>
+            <div className="flex-grow h-px bg-gray-300 dark:bg-slate-700" />
           </div>
 
           <button
             type="button"
             onClick={() => googleLogin()}
             disabled={loading}
-            className={`w-full flex items-center justify-center gap-3
-              bg-[#e8f0fe] hover:bg-[#dfe9fd]
-              text-[#1a73e8] font-medium
+            className={`w-full flex items-center justify-center gap-3 
+              bg-[#e8f0fe] dark:bg-slate-800 hover:bg-[#dfe9fd] dark:hover:bg-slate-700
+              text-[#1a73e8] dark:text-blue-400 font-medium 
               py-3 rounded-lg transition
               ${loading ? "opacity-60 cursor-not-allowed" : ""}`}
           >
@@ -248,9 +241,9 @@ export default function Login() {
             <span>Continue with Google</span>
           </button>
 
-          <p className="mt-6 text-center text-sm">
+          <p className="mt-6 text-center text-sm dark:text-slate-400">
             New to ShopEasy?{" "}
-            <Link to="/signup" className="text-orange-500 hover:underline">
+            <Link to="/signup" className="text-orange-500 hover:underline font-semibold">
               Create an account
             </Link>
           </p>
