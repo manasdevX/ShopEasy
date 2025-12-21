@@ -11,36 +11,17 @@ import SellerRegister from "./pages/SellerRegister";
 export default function App() {
   return (
     <>
-      {/* TOASTER CONFIGURATION */}
-      <Toaster 
-        position="top-right" 
-        reverseOrder={false}
+      <Toaster
+        position="bottom-right"
         gutter={8}
         toastOptions={{
-          // Set duration and base styles
           duration: 3000,
-          className: "dark:bg-slate-800 dark:text-white font-sans text-sm",
+          className: "font-sans text-sm",
           style: {
-            padding: '16px',
-            fontWeight: '600',
-            borderRadius: '12px',
-            background: '#fff',
-            color: '#333',
-            boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
-          },
-          // Customizing the Success checkmark to match ShopEasy Orange
-          success: {
-            iconTheme: {
-              primary: '#f97316', // Tailwind orange-500
-              secondary: '#fff',
-            },
-          },
-          // Customizing Error icon
-          error: {
-            iconTheme: {
-              primary: '#ef4444', // Tailwind red-500
-              secondary: '#fff',
-            },
+            padding: "14px 16px",
+            fontWeight: 600,
+            borderRadius: "12px",
+            boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)",
           },
         }}
       />
