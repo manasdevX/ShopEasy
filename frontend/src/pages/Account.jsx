@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 
-// 1. CUSTOM PREMIUM TOAST
+// 1. CUSTOM PREMIUM TOAST COMPONENT
 const notify = (type, message) => {
   toast.custom((t) => (
     <div
@@ -80,6 +80,9 @@ export default function Account() {
   const [showAddAddress, setShowAddAddress] = useState(false);
   const [editingAddressId, setEditingAddressId] = useState(null);
   const [openMenuId, setOpenMenuId] = useState(null);
+
+  // 👇 New loading state to prevent double submissions
+  const [isAddressSaving, setIsAddressSaving] = useState(false);
 
   const [newAddress, setNewAddress] = useState({
     name: "",
@@ -180,6 +183,7 @@ export default function Account() {
   }, []);
 
   // ================= ADDRESS HANDLERS =================
+
   const handleSetDefault = async (id) => {
     setOpenMenuId(null);
     try {
@@ -195,10 +199,9 @@ export default function Account() {
       const updatedAddresses = await res.json();
 
       if (res.ok) {
-        // Sync User State
         setUser((prev) => ({ ...prev, addresses: updatedAddresses }));
 
-        // Sync Profile Settings Form
+        // Update Profile Settings Form to reflect the new default address
         const newDefault = updatedAddresses.find((a) => a.isDefault);
         if (newDefault) {
           setFormData((prev) => ({
@@ -233,6 +236,9 @@ export default function Account() {
       notify("error", "Please fill all required fields");
       return;
     }
+
+    // 👇 Prevent duplicate submissions
+    setIsAddressSaving(true);
 
     try {
       const token = localStorage.getItem("token");
@@ -299,6 +305,9 @@ export default function Account() {
       }
     } catch (err) {
       notify("error", "Network Error");
+    } finally {
+      // 👇 Re-enable button
+      setIsAddressSaving(false);
     }
   };
 
@@ -336,6 +345,7 @@ export default function Account() {
 
   const handleAddNewClick = () => {
     setEditingAddressId(null);
+    // Pre-fill Name/Phone from main profile but allow edits
     setNewAddress({
       name: user.name,
       phone: user.phone,
@@ -362,6 +372,7 @@ export default function Account() {
       const updatedAddresses = await res.json();
       if (res.ok) {
         setUser((prev) => ({ ...prev, addresses: updatedAddresses }));
+        // Recalculate profile address in case default was deleted
         const primaryAddr =
           updatedAddresses.find((a) => a.isDefault) ||
           updatedAddresses[updatedAddresses.length - 1] ||
@@ -434,7 +445,6 @@ export default function Account() {
     }
   };
 
-  // 👇 KEY FIX: Properly update 'user.addresses' when profile is saved
   const handleSave = async () => {
     if (!validate()) return;
     setStatus("saving");
@@ -458,26 +468,22 @@ export default function Account() {
         },
         body: JSON.stringify(payload),
       });
-
       const data = await res.json();
-
       if (res.ok) {
-        // 👇 UPDATE BOTH USER STATE (Addresses list) AND FORM DATA
         setUser({
           ...formData,
-          avatar: data.profilePicture, // Use response picture
-          addresses: data.addresses, // Sync the address list!
+          avatar: data.profilePicture,
+          addresses: data.addresses,
         });
-
-        // Also update form data with response to ensure sync
+        // Sync form data with returned data to ensure consistency
         setFormData((prev) => ({
           ...prev,
           addresses: data.addresses,
-          address: data.address, // Use formatted address from backend
+          address: data.address,
         }));
 
         setIsEditing(false);
-        notify("success", "Profile & Shipping Details Updated!");
+        notify("success", "Profile Updated Successfully!");
         setTimeout(() => setStatus("idle"), 2000);
       } else {
         notify("error", data.message || "Save failed");
@@ -851,11 +857,23 @@ export default function Account() {
                         </div>
                       </div>
                       <div className="flex gap-3">
+                        {/* 👇 Save button now uses `isAddressSaving` to prevent double-clicks */}
                         <button
                           onClick={handleSaveAddress}
-                          className="bg-blue-600 text-white px-8 py-2.5 rounded-md font-bold text-sm hover:bg-blue-700 uppercase shadow-md"
+                          disabled={isAddressSaving}
+                          className={`bg-blue-600 text-white px-8 py-2.5 rounded-md font-bold text-sm hover:bg-blue-700 uppercase shadow-md ${
+                            isAddressSaving
+                              ? "opacity-50 cursor-not-allowed"
+                              : ""
+                          }`}
                         >
-                          {editingAddressId ? "Update" : "Save"}
+                          {isAddressSaving ? (
+                            <Loader2 className="animate-spin" size={16} />
+                          ) : editingAddressId ? (
+                            "Update"
+                          ) : (
+                            "Save"
+                          )}
                         </button>
                         <button
                           onClick={handleCancelClick}
@@ -930,6 +948,7 @@ export default function Account() {
                               )}
                             </div>
 
+                            {/* Display Specific Address Name & Phone */}
                             <div className="mt-3 flex items-center gap-4">
                               <span className="font-bold text-slate-900 dark:text-white text-sm">
                                 {addr.fullName}

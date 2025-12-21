@@ -57,6 +57,10 @@ export const getUserProfile = async (req, res) => {
    2. UPDATE USER PROFILE (Main Profile Info + Primary Address)
    Route: PUT /api/user/profile
 ====================================================== */
+/* ======================================================
+   2. UPDATE USER PROFILE
+   Route: PUT /api/user/profile
+====================================================== */
 export const updateUserProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
@@ -65,76 +69,76 @@ export const updateUserProfile = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // 1. Update Basic Account Info (Name/Phone on the account itself)
+    // 1. Update Account Info
     user.name = req.body.name || user.name;
     user.phone = req.body.phone || user.phone;
+    if (req.body.profilePicture) user.profilePicture = req.body.profilePicture;
 
-    if (req.body.profilePicture) {
-      user.profilePicture = req.body.profilePicture;
-    }
-
-    // 2. Update Primary Address
+    // 2. Update Shipping Address (Strict Logic)
     if (req.body.address) {
-      // 👇 Extract name/phone specifically for the address
       const { street, city, pincode, state, name, phone, type } = req.body.address;
 
-      // Check if valid address data exists
       const hasValidAddress = street?.trim() && city?.trim() && pincode?.trim();
 
       if (hasValidAddress) {
-        const newAddressData = {
-          // 👇 KEY FIX: Use the specific name/phone from the form, or fallback to user profile
-          fullName: name || user.name, 
-          phone: phone || user.phone,
-          
-          addressLine: street,
-          city: city,
-          pincode: pincode,
-          state: state || "India",
-          country: "India",
-          isDefault: true, // Profile updates typically set the default address
-          type: type || "Home",
-        };
+        // A. Find the address to update (The Default one, or the first one)
+        let targetAddress = user.addresses.find((a) => a.isDefault);
+        
+        if (!targetAddress && user.addresses.length > 0) {
+          targetAddress = user.addresses[0]; // Fallback to first if no default
+        }
 
-        if (user.addresses.length > 0) {
-          // Update the first/default address
-          Object.assign(user.addresses[0], newAddressData);
+        if (targetAddress) {
+          // B. UPDATE EXISTING ADDRESS
+          targetAddress.fullName = name || user.name;
+          targetAddress.phone = phone || user.phone;
+          targetAddress.addressLine = street;
+          targetAddress.city = city;
+          targetAddress.pincode = pincode;
+          targetAddress.state = state || "";
+          targetAddress.country = "India";
+          targetAddress.type = type || "Home";
+          
+          // Ensure this stays/becomes default
+          user.addresses.forEach(a => a.isDefault = false); // Reset others
+          targetAddress.isDefault = true; // Set this one
+          
         } else {
-          // Add new if none exist
-          user.addresses.push(newAddressData);
+          // C. CREATE NEW (Only if list is empty)
+          user.addresses.push({
+            fullName: name || user.name,
+            phone: phone || user.phone,
+            addressLine: street,
+            city, pincode, state,
+            country: "India",
+            type: type || "Home",
+            isDefault: true
+          });
         }
       }
     }
 
-    // 3. Save to Database
-    const updatedUser = await user.save();
+    await user.save();
 
-    // Get the primary address to return in the response
-    const updatedAddress =
-      updatedUser.addresses.find((a) => a.isDefault) ||
-      updatedUser.addresses[0] ||
-      {};
+    // 3. Return Response
+    const primaryAddr = user.addresses.find((a) => a.isDefault) || user.addresses[0] || {};
 
-    // 4. Return Response
     res.json({
-      _id: updatedUser._id,
-      name: updatedUser.name,
-      email: updatedUser.email,
-      phone: updatedUser.phone,
-      profilePicture: updatedUser.profilePicture,
-      role: updatedUser.role,
-      addresses: updatedUser.addresses, // Return full list
-      
-      // Formatted primary address with specific Name/Phone
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      profilePicture: user.profilePicture,
+      addresses: user.addresses, // Returns updated list without duplicates
       address: {
-        name: updatedAddress.fullName || "", // 👈 Return address-specific Name
-        phone: updatedAddress.phone || "",   // 👈 Return address-specific Phone
-        street: updatedAddress.addressLine || "",
-        city: updatedAddress.city || "",
-        pincode: updatedAddress.pincode || "",
-        state: updatedAddress.state || "",
-        country: updatedAddress.country || "India",
-        type: updatedAddress.type || "Home",
+        name: primaryAddr.fullName || "",
+        phone: primaryAddr.phone || "",
+        street: primaryAddr.addressLine || "",
+        city: primaryAddr.city || "",
+        pincode: primaryAddr.pincode || "",
+        state: primaryAddr.state || "",
+        country: primaryAddr.country || "India",
+        type: primaryAddr.type || "Home",
       },
     });
   } catch (error) {
