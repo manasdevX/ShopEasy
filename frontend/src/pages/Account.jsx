@@ -203,7 +203,7 @@ export default function Account() {
       async (position) => {
         const { latitude, longitude } = position.coords;
         try {
-          // Use format=jsonv2 to get extra details
+          // Use OpenStreetMap Nominatim with jsonv2 for detailed address breakdown
           const res = await fetch(
             `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`
           );
@@ -213,20 +213,19 @@ export default function Account() {
             const addr = data.address;
 
             // 👇 1. Construct DETAILED Street Address (Flipkart Style)
-            // We combine: House# -> Building -> Road -> Suburb -> Neighbourhood -> Village -> Locality
             const streetComponents = [
               addr.house_number,
               addr.building,
               addr.apartment,
               addr.residential,
-              addr.hamlet, // Important for rural/semi-urban areas
+              addr.hamlet,
               addr.village,
               addr.road,
               addr.street,
               addr.suburb,
               addr.neighbourhood,
               addr.city_district,
-            ].filter((part) => part); // Remove undefined/null strings
+            ].filter((part) => part);
 
             // Remove duplicates and join with commas
             const uniqueStreetComponents = [...new Set(streetComponents)];
@@ -243,7 +242,7 @@ export default function Account() {
 
             setNewAddress((prev) => ({
               ...prev,
-              street: fullStreet || addr.display_name.split(",")[0], // Fallback to raw display name if parsing fails
+              street: fullStreet || addr.display_name.split(",")[0],
               city: city,
               state: addr.state || "",
               pincode: addr.postcode || "",
@@ -517,6 +516,7 @@ export default function Account() {
     }
   };
 
+  // 👇 UPDATED: Handle QuotaExceededError
   const handleSave = async () => {
     setStatus("saving");
     try {
@@ -539,27 +539,59 @@ export default function Account() {
         },
         body: JSON.stringify(payload),
       });
+
       const data = await res.json();
+
       if (res.ok) {
+        // 1. Update State
         setUser({
           ...formData,
-          avatar: data.user ? data.user.profilePicture : formData.avatar,
+          avatar: data.profilePicture || formData.avatar,
+          addresses: data.addresses,
         });
         setFormData((prev) => ({
           ...prev,
           addresses: data.addresses,
           address: data.address,
         }));
-        setUser((prev) => ({ ...prev, addresses: data.addresses }));
+
+        // 2. Safe Local Storage Update
+        try {
+          const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
+          const updatedUser = {
+            ...storedUser,
+            name: formData.name,
+            // Only save picture if it's NOT a massive base64 string, or try to save it
+            profilePicture: data.profilePicture || formData.avatar,
+          };
+          localStorage.setItem("user", JSON.stringify(updatedUser));
+        } catch (storageErr) {
+          console.warn(
+            "LocalStorage quota exceeded. Saving minimal user data."
+          );
+          // Fallback: Save ONLY name (skip image) to ensure Navbar updates
+          try {
+            const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
+            const safeUser = { ...storedUser, name: formData.name }; // Skip profilePicture
+            localStorage.setItem("user", JSON.stringify(safeUser));
+          } catch (e) {
+            console.error("Critical: LocalStorage completely full", e);
+          }
+        }
+
+        // 3. Dispatch Custom Event
+        window.dispatchEvent(new Event("user-info-updated"));
+        window.dispatchEvent(new Event("storage"));
 
         setIsEditing(false);
         notify("success", "Profile Updated Successfully!");
         setStatus("idle");
       } else {
-        notify("error", "Save failed");
+        notify("error", data.message || "Save failed");
         setStatus("idle");
       }
     } catch (err) {
+      console.error(err);
       notify("error", "Server Error");
       setStatus("idle");
     }
@@ -577,9 +609,9 @@ export default function Account() {
     <div className="min-h-screen bg-slate-50 dark:bg-[#030712] text-slate-900 dark:text-slate-100 transition-colors duration-300 font-sans">
       <Navbar />
 
-      {/* 👇 Reduced top/bottom padding from py-12 to py-8 */}
+      {/* Reduced top/bottom padding from py-12 to py-8 */}
       <main className="max-w-6xl mx-auto px-6 py-8">
-        {/* 👇 Reduced gap between sidebar and main content from gap-8 to gap-6 */}
+        {/* Reduced gap between sidebar and main content from gap-8 to gap-6 */}
         <div className="flex flex-col lg:flex-row gap-6">
           {/* SIDEBAR - Slightly tighter spacing */}
           <aside className="w-full lg:w-80 space-y-4">
@@ -1054,7 +1086,7 @@ export default function Account() {
               </div>
             )}
 
-            {/* Other Tabs... */}
+            {/* Other Tabs */}
             {activeTab === "orders" && (
               <PlaceholderTab
                 icon={<Package size={40} />}
@@ -1143,11 +1175,6 @@ function InputField({
               : "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:bg-white dark:focus:bg-slate-800 focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10"
           } ${error ? "!border-red-400" : ""}`}
         />
-        {isEditing && readOnly && (
-          <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400">
-            <Lock size={14} />
-          </div>
-        )}
       </div>
     </div>
   );
