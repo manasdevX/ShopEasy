@@ -1,13 +1,19 @@
 import express from "express";
-import authMiddleware from "../middlewares/auth.middleware.js";
 import {
   getUserProfile,
   updateUserProfile,
 } from "../controllers/user.controller.js";
+import { protect } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
-router.get("/profile", authMiddleware, getUserProfile);
-router.put("/profile", authMiddleware, updateUserProfile);
+/* ======================================================
+   USER PROFILE ROUTES
+   Endpoint: /api/user/profile
+====================================================== */
+router
+  .route("/profile")
+  .get(protect, getUserProfile) // Fetch profile data
+  .put(protect, updateUserProfile); // Update profile data
 
 export default router;

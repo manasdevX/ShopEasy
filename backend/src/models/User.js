@@ -1,6 +1,9 @@
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 
+/* ======================================================
+   1. ADDRESS SCHEMA (Sub-document)
+====================================================== */
 const addressSchema = new mongoose.Schema(
   {
     fullName: { type: String, required: true },
@@ -12,9 +15,12 @@ const addressSchema = new mongoose.Schema(
     addressLine: { type: String, required: true },
     isDefault: { type: Boolean, default: false },
   },
-  { _id: false }
+  { _id: true } // Keep _id to easily update/delete specific addresses
 );
 
+/* ======================================================
+   2. CART ITEM SCHEMA (Sub-document)
+====================================================== */
 const cartItemSchema = new mongoose.Schema(
   {
     product: {
@@ -31,8 +37,12 @@ const cartItemSchema = new mongoose.Schema(
   { _id: false }
 );
 
+/* ======================================================
+   3. MAIN USER SCHEMA
+====================================================== */
 const userSchema = new mongoose.Schema(
   {
+    // --- BASIC INFO ---
     name: {
       type: String,
       required: true,
@@ -47,17 +57,29 @@ const userSchema = new mongoose.Schema(
     password: {
       type: String,
       required: true,
-      select: false,
+      select: false, // Security: Don't return password by default
     },
     phone: {
       type: String,
       required: true,
       unique: true,
+      sparse: true, // Allows multiple null values (if phone not provided via Google)
+    },
+
+    // --- PROFILE PICTURE (Updated) ---
+    profilePicture: {
+      type: String,
+      default:
+        "https://icon-library.com/images/anonymous-avatar-icon/anonymous-avatar-icon-25.jpg",
+    },
+
+    // --- AUTH PROVIDERS (New) ---
+    googleId: {
+      type: String, // Stores the ID from Google OAuth
+      unique: true,
       sparse: true,
     },
-    avatar: {
-      type: String,
-    },
+
     role: {
       type: String,
       enum: ["user", "admin"],
@@ -69,51 +91,42 @@ const userSchema = new mongoose.Schema(
     },
 
     /* =========================
-       🔐 OTP & PASSWORD RESET
+        🔐 OTP & PASSWORD RESET
     ========================= */
-    resetPasswordOtp: {
-      type: String,
-    },
-    resetPasswordExpire: {
-      type: Date,
-    },
+    resetPasswordOtp: { type: String },
+    resetPasswordExpire: { type: Date },
 
     /* =========================
-       ✅ ACCOUNT VERIFICATION
+        ✅ ACCOUNT VERIFICATION
     ========================= */
     isEmailVerified: {
       type: Boolean,
       default: false,
     },
-    emailVerificationToken: {
-      type: String,
-    },
-    emailVerificationExpire: {
-      type: Date,
-    },
+    emailVerificationToken: { type: String },
+    emailVerificationExpire: { type: Date },
 
     isMobileVerified: {
       type: Boolean,
       default: false,
     },
-    mobileOtp: {
-      type: String,
-    },
-    mobileOtpExpire: {
-      type: Date,
-    },
+    mobileOtp: { type: String },
+    mobileOtpExpire: { type: Date },
 
     /* =========================
-       📦 USER DATA
+        📦 USER DATA
     ========================= */
-    addresses: [addressSchema],
+    addresses: [addressSchema], // Array of addresses
+
     cart: [cartItemSchema],
+
     wishlist: [
       {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Product",
       },
     ],
+
     orders: [
       {
         type: mongoose.Schema.Types.ObjectId,
@@ -124,16 +137,22 @@ const userSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+/* ======================================================
+   4. MIDDLEWARE & METHODS
+====================================================== */
+
 // Encrypt password before saving
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
-  this.password = await bcrypt.hash(this.password, 12);
+
+  const salt = await bcrypt.genSalt(12);
+  this.password = await bcrypt.hash(this.password, salt);
   next();
 });
 
 // Method to compare passwords
 userSchema.methods.matchPassword = async function (enteredPassword) {
-  return bcrypt.compare(enteredPassword, this.password);
+  return await bcrypt.compare(enteredPassword, this.password);
 };
 
 export default mongoose.model("User", userSchema);
