@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 
 /* ======================================================
    1. ADDRESS SCHEMA (Sub-document)
+   ✅ Updated to include 'type' (Home/Work)
 ====================================================== */
 const addressSchema = new mongoose.Schema(
   {
@@ -13,6 +14,14 @@ const addressSchema = new mongoose.Schema(
     state: { type: String, required: true },
     country: { type: String, default: "India" },
     addressLine: { type: String, required: true },
+
+    // 👇 NEW FIELD: Address Type
+    type: {
+      type: String,
+      enum: ["Home", "Work"],
+      default: "Home",
+    },
+
     isDefault: { type: Boolean, default: false },
   },
   { _id: true } // Keep _id to easily update/delete specific addresses
@@ -66,14 +75,14 @@ const userSchema = new mongoose.Schema(
       sparse: true, // Allows multiple null values (if phone not provided via Google)
     },
 
-    // --- PROFILE PICTURE (Updated) ---
+    // --- PROFILE PICTURE ---
     profilePicture: {
       type: String,
       default:
         "https://icon-library.com/images/anonymous-avatar-icon/anonymous-avatar-icon-25.jpg",
     },
 
-    // --- AUTH PROVIDERS (New) ---
+    // --- AUTH PROVIDERS ---
     googleId: {
       type: String, // Stores the ID from Google OAuth
       unique: true,
@@ -91,13 +100,13 @@ const userSchema = new mongoose.Schema(
     },
 
     /* =========================
-        🔐 OTP & PASSWORD RESET
+       🔐 OTP & PASSWORD RESET
     ========================= */
     resetPasswordOtp: { type: String },
     resetPasswordExpire: { type: Date },
 
     /* =========================
-        ✅ ACCOUNT VERIFICATION
+       ✅ ACCOUNT VERIFICATION
     ========================= */
     isEmailVerified: {
       type: Boolean,
@@ -114,7 +123,7 @@ const userSchema = new mongoose.Schema(
     mobileOtpExpire: { type: Date },
 
     /* =========================
-        📦 USER DATA
+       📦 USER DATA
     ========================= */
     addresses: [addressSchema], // Array of addresses
 
