@@ -118,7 +118,7 @@ export default function Navbar() {
           </Link>
 
           <Link
-            to="/seller"
+            to="/Seller/Landing"
             className="flex items-center gap-2 px-4 py-2 rounded-xl border border-orange-400 text-orange-500 hover:bg-orange-500 hover:text-white transition-all font-medium text-sm"
           >
             <Store size={18} />
