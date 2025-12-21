@@ -24,6 +24,8 @@ import {
   Home,
   Briefcase,
   Star,
+  Info,
+  LocateFixed,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -80,9 +82,8 @@ export default function Account() {
   const [showAddAddress, setShowAddAddress] = useState(false);
   const [editingAddressId, setEditingAddressId] = useState(null);
   const [openMenuId, setOpenMenuId] = useState(null);
-
-  // 👇 New loading state to prevent double submissions
   const [isAddressSaving, setIsAddressSaving] = useState(false);
+  const [isLocating, setIsLocating] = useState(false);
 
   const [newAddress, setNewAddress] = useState({
     name: "",
@@ -182,8 +183,92 @@ export default function Account() {
     fetchProfile();
   }, []);
 
-  // ================= ADDRESS HANDLERS =================
+  // ================= GEOLOCATION HANDLER (HIGH ACCURACY) =================
+  const handleUseCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      notify("error", "Geolocation is not supported by your browser");
+      return;
+    }
 
+    setIsLocating(true);
+
+    // Request high accuracy from the browser
+    const options = {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 0,
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        try {
+          // Use format=jsonv2 to get extra details
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`
+          );
+          const data = await res.json();
+
+          if (data && data.address) {
+            const addr = data.address;
+
+            // 👇 1. Construct DETAILED Street Address (Flipkart Style)
+            // We combine: House# -> Building -> Road -> Suburb -> Neighbourhood -> Village -> Locality
+            const streetComponents = [
+              addr.house_number,
+              addr.building,
+              addr.apartment,
+              addr.residential,
+              addr.hamlet, // Important for rural/semi-urban areas
+              addr.village,
+              addr.road,
+              addr.street,
+              addr.suburb,
+              addr.neighbourhood,
+              addr.city_district,
+            ].filter((part) => part); // Remove undefined/null strings
+
+            // Remove duplicates and join with commas
+            const uniqueStreetComponents = [...new Set(streetComponents)];
+            const fullStreet = uniqueStreetComponents.join(", ");
+
+            // 👇 2. Determine City (Fallback cascade)
+            const city =
+              addr.city ||
+              addr.town ||
+              addr.municipality ||
+              addr.county ||
+              addr.state_district ||
+              "";
+
+            setNewAddress((prev) => ({
+              ...prev,
+              street: fullStreet || addr.display_name.split(",")[0], // Fallback to raw display name if parsing fails
+              city: city,
+              state: addr.state || "",
+              pincode: addr.postcode || "",
+              country: addr.country || "India",
+            }));
+
+            notify("success", "Location fetched successfully!");
+          } else {
+            notify("error", "Could not determine precise address");
+          }
+        } catch (error) {
+          notify("error", "Failed to fetch address details");
+        } finally {
+          setIsLocating(false);
+        }
+      },
+      (error) => {
+        setIsLocating(false);
+        notify("error", "Location access denied. Please enable GPS.");
+      },
+      options // Pass high accuracy options
+    );
+  };
+
+  // ================= ADDRESS HANDLERS =================
   const handleSetDefault = async (id) => {
     setOpenMenuId(null);
     try {
@@ -200,8 +285,6 @@ export default function Account() {
 
       if (res.ok) {
         setUser((prev) => ({ ...prev, addresses: updatedAddresses }));
-
-        // Update Profile Settings Form to reflect the new default address
         const newDefault = updatedAddresses.find((a) => a.isDefault);
         if (newDefault) {
           setFormData((prev) => ({
@@ -237,7 +320,6 @@ export default function Account() {
       return;
     }
 
-    // 👇 Prevent duplicate submissions
     setIsAddressSaving(true);
 
     try {
@@ -264,7 +346,6 @@ export default function Account() {
       if (res.ok) {
         setUser((prev) => ({ ...prev, addresses: updatedAddresses }));
 
-        // Check if we edited the default/primary address
         const primaryAddr =
           updatedAddresses.find((a) => a.isDefault) ||
           updatedAddresses[updatedAddresses.length - 1] ||
@@ -306,7 +387,6 @@ export default function Account() {
     } catch (err) {
       notify("error", "Network Error");
     } finally {
-      // 👇 Re-enable button
       setIsAddressSaving(false);
     }
   };
@@ -345,7 +425,6 @@ export default function Account() {
 
   const handleAddNewClick = () => {
     setEditingAddressId(null);
-    // Pre-fill Name/Phone from main profile but allow edits
     setNewAddress({
       name: user.name,
       phone: user.phone,
@@ -372,7 +451,6 @@ export default function Account() {
       const updatedAddresses = await res.json();
       if (res.ok) {
         setUser((prev) => ({ ...prev, addresses: updatedAddresses }));
-        // Recalculate profile address in case default was deleted
         const primaryAddr =
           updatedAddresses.find((a) => a.isDefault) ||
           updatedAddresses[updatedAddresses.length - 1] ||
@@ -403,12 +481,6 @@ export default function Account() {
   };
 
   // ================= PROFILE HANDLERS =================
-  const validate = () => {
-    let newErrors = {};
-    if (formData.name.trim().length < 2) newErrors.name = "Name is too short";
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     if (name === "addressName") {
@@ -446,7 +518,6 @@ export default function Account() {
   };
 
   const handleSave = async () => {
-    if (!validate()) return;
     setStatus("saving");
     try {
       const token = localStorage.getItem("token");
@@ -472,21 +543,20 @@ export default function Account() {
       if (res.ok) {
         setUser({
           ...formData,
-          avatar: data.profilePicture,
-          addresses: data.addresses,
+          avatar: data.user ? data.user.profilePicture : formData.avatar,
         });
-        // Sync form data with returned data to ensure consistency
         setFormData((prev) => ({
           ...prev,
           addresses: data.addresses,
           address: data.address,
         }));
+        setUser((prev) => ({ ...prev, addresses: data.addresses }));
 
         setIsEditing(false);
         notify("success", "Profile Updated Successfully!");
-        setTimeout(() => setStatus("idle"), 2000);
+        setStatus("idle");
       } else {
-        notify("error", data.message || "Save failed");
+        notify("error", "Save failed");
         setStatus("idle");
       }
     } catch (err) {
@@ -507,12 +577,14 @@ export default function Account() {
     <div className="min-h-screen bg-slate-50 dark:bg-[#030712] text-slate-900 dark:text-slate-100 transition-colors duration-300 font-sans">
       <Navbar />
 
-      <main className="max-w-6xl mx-auto px-6 py-12">
-        <div className="flex flex-col lg:flex-row gap-8">
-          {/* SIDEBAR */}
-          <aside className="w-full lg:w-80 space-y-6">
-            <div className="bg-white dark:bg-slate-900 rounded-3xl p-8 shadow-sm border border-slate-200 dark:border-slate-800 text-center transition-colors">
-              <div className="relative w-32 h-32 mx-auto mb-6">
+      {/* 👇 Reduced top/bottom padding from py-12 to py-8 */}
+      <main className="max-w-6xl mx-auto px-6 py-8">
+        {/* 👇 Reduced gap between sidebar and main content from gap-8 to gap-6 */}
+        <div className="flex flex-col lg:flex-row gap-6">
+          {/* SIDEBAR - Slightly tighter spacing */}
+          <aside className="w-full lg:w-80 space-y-4">
+            <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border border-slate-200 dark:border-slate-800 text-center transition-colors">
+              <div className="relative w-28 h-28 mx-auto mb-4">
                 <div
                   className={`w-full h-full rounded-full bg-slate-100 dark:bg-slate-800 border-4 shadow-md overflow-hidden flex items-center justify-center transition-all duration-300 ${
                     isEditing
@@ -529,9 +601,9 @@ export default function Account() {
                 {isEditing && (
                   <button
                     onClick={() => fileInputRef.current.click()}
-                    className="absolute bottom-1 right-1 bg-orange-600 text-white p-2.5 rounded-xl shadow-lg hover:bg-orange-500 transition-all active:scale-90 z-10"
+                    className="absolute bottom-1 right-1 bg-orange-600 text-white p-2 rounded-full shadow-lg hover:bg-orange-500 transition-all active:scale-90 z-10"
                   >
-                    <Pencil size={16} />
+                    <Pencil size={14} />
                   </button>
                 )}
                 <input
@@ -542,17 +614,17 @@ export default function Account() {
                   accept="image/*"
                 />
               </div>
-              <h2 className="text-xl font-bold">{user.name}</h2>
+              <h2 className="text-lg font-bold">{user.name}</h2>
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400 text-[10px] font-bold uppercase tracking-widest mt-2">
                 <ShieldCheck size={12} /> Verified Account
               </div>
             </div>
-            <nav className="bg-white dark:bg-slate-900 rounded-3xl p-4 shadow-sm border border-slate-200 dark:border-slate-800 transition-colors space-y-2">
+            <nav className="bg-white dark:bg-slate-900 rounded-3xl p-3 shadow-sm border border-slate-200 dark:border-slate-800 transition-colors space-y-1">
               {navItems.map((item) => (
                 <button
                   key={item.id}
                   onClick={() => setActiveTab(item.id)}
-                  className={`w-full flex items-center justify-between p-3.5 rounded-2xl transition-all duration-200 group ${
+                  className={`w-full flex items-center justify-between p-3 rounded-2xl transition-all duration-200 group ${
                     activeTab === item.id
                       ? "bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 ring-1 ring-orange-200 dark:ring-orange-900"
                       : "hover:bg-slate-50 dark:hover:bg-slate-800"
@@ -578,9 +650,10 @@ export default function Account() {
           <div className="flex-1">
             {/* 1. PROFILE SETTINGS */}
             {activeTab === "profile" && (
-              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden relative">
-                  <div className="px-8 py-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between sticky top-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm z-10">
+                  {/* Header */}
+                  <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between sticky top-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm z-10">
                     <div>
                       <h3 className="text-lg font-bold">Profile Settings</h3>
                       <p className="text-xs text-slate-500 mt-1">
@@ -592,29 +665,31 @@ export default function Account() {
                     {!isEditing ? (
                       <button
                         onClick={() => setIsEditing(true)}
-                        className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-sm bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:opacity-90 shadow-lg"
+                        className="flex items-center gap-2 px-5 py-2 rounded-xl font-bold text-xs bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:opacity-90 shadow-lg"
                       >
-                        <Edit2 size={16} /> Edit Profile
+                        <Edit2 size={14} /> Edit
                       </button>
                     ) : (
                       <button
                         onClick={handleSave}
                         disabled={status === "saving"}
-                        className="flex items-center gap-2 px-8 py-2.5 rounded-xl font-bold text-sm bg-orange-500 text-white shadow-lg hover:bg-orange-600 transition-all"
+                        className="flex items-center gap-2 px-6 py-2 rounded-xl font-bold text-xs bg-orange-500 text-white shadow-lg hover:bg-orange-600 transition-all"
                       >
                         {status === "saving" ? (
-                          <Loader2 className="animate-spin" size={16} />
+                          <Loader2 className="animate-spin" size={14} />
                         ) : (
-                          <Check size={18} />
+                          <Check size={16} />
                         )}{" "}
-                        Save Changes
+                        Save
                       </button>
                     )}
                   </div>
-                  <div className="p-8 space-y-10">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                  {/* Body - Compact */}
+                  <div className="p-6 space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <InputField
-                        label="Full Name (Account)"
+                        label="Full Name"
                         name="name"
                         value={formData.name}
                         onChange={handleInputChange}
@@ -622,7 +697,7 @@ export default function Account() {
                         icon={<User size={16} />}
                       />
                       <InputField
-                        label="Email (Account)"
+                        label="Email"
                         name="email"
                         value={formData.email}
                         onChange={handleInputChange}
@@ -631,7 +706,7 @@ export default function Account() {
                         readOnly={true}
                       />
                       <InputField
-                        label="Phone (Account)"
+                        label="Phone"
                         name="phone"
                         value={formData.phone}
                         onChange={handleInputChange}
@@ -640,23 +715,18 @@ export default function Account() {
                         readOnly={true}
                       />
                     </div>
-                    <div className="pt-4 space-y-6">
+                    <div className="pt-2 space-y-4">
                       <div className="flex items-center gap-3 pb-2 border-b border-slate-100 dark:border-slate-800">
                         <h4 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-2">
                           <MapPin size={14} /> Shipping Address
                         </h4>
                         {formData.address.type && (
                           <span className="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-[10px] font-bold px-2 py-0.5 rounded-[4px] uppercase border border-slate-200 dark:border-slate-700 flex items-center gap-1">
-                            {formData.address.type === "Home" ? (
-                              <Home size={10} />
-                            ) : (
-                              <Briefcase size={10} />
-                            )}
                             {formData.address.type}
                           </span>
                         )}
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <InputField
                           label="Receiver Name"
                           name="addressName"
@@ -666,14 +736,13 @@ export default function Account() {
                           icon={<User size={16} />}
                         />
                         <InputField
-                          label="Contact Number"
+                          label="Contact"
                           name="addressPhone"
                           value={formData.address.phone}
                           onChange={handleInputChange}
                           isEditing={isEditing}
                           icon={<Phone size={16} />}
                         />
-
                         <div className="md:col-span-2">
                           <InputField
                             label="Street Address"
@@ -727,9 +796,7 @@ export default function Account() {
                     Manage Addresses
                   </h3>
                 </div>
-
                 <div className="p-6">
-                  {/* ADD/EDIT FORM */}
                   {!showAddAddress ? (
                     <button
                       onClick={handleAddNewClick}
@@ -742,6 +809,22 @@ export default function Account() {
                       <h4 className="font-bold text-slate-700 dark:text-slate-300 mb-4 text-xs uppercase tracking-wider">
                         {editingAddressId ? "Edit Address" : "Add New Address"}
                       </h4>
+
+                      {/* 👇 "Use my current location" Button (Left Aligned & Compact) */}
+                      <button
+                        onClick={handleUseCurrentLocation}
+                        disabled={isLocating}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 font-bold text-sm mb-6 shadow-sm transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
+                      >
+                        {isLocating ? (
+                          <Loader2 className="animate-spin" size={18} />
+                        ) : (
+                          <LocateFixed size={18} />
+                        )}
+                        {isLocating
+                          ? "Fetching Location..."
+                          : "Use my current location"}
+                      </button>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                         <input
@@ -827,7 +910,7 @@ export default function Account() {
                       </div>
                       <div className="flex gap-4 mb-6">
                         <span className="text-xs font-bold text-slate-500 dark:text-slate-400 mt-2 uppercase">
-                          Address Type
+                          Type
                         </span>
                         <div className="flex gap-3">
                           <button
@@ -857,7 +940,6 @@ export default function Account() {
                         </div>
                       </div>
                       <div className="flex gap-3">
-                        {/* 👇 Save button now uses `isAddressSaving` to prevent double-clicks */}
                         <button
                           onClick={handleSaveAddress}
                           disabled={isAddressSaving}
@@ -890,11 +972,10 @@ export default function Account() {
                     {user.addresses && user.addresses.length > 0 ? (
                       user.addresses.map((addr, index) => {
                         if (editingAddressId === addr._id) return null;
-
                         return (
                           <div
                             key={addr._id || index}
-                            className={`border rounded-sm p-6 bg-white dark:bg-slate-900 relative hover:shadow-md transition-shadow ${
+                            className={`border rounded-sm p-5 bg-white dark:bg-slate-900 relative hover:shadow-md transition-shadow ${
                               addr.isDefault
                                 ? "border-green-500 dark:border-green-500 ring-1 ring-green-100 dark:ring-green-900/30"
                                 : "border-slate-200 dark:border-slate-700"
@@ -907,37 +988,34 @@ export default function Account() {
                               >
                                 <MoreVertical size={18} />
                               </button>
-
-                              {/* Kebab Dropdown */}
                               {openMenuId === addr._id && (
-                                <div className="absolute right-0 top-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl rounded-md overflow-hidden z-20 min-w-[160px] animate-in zoom-in-95 duration-100">
+                                <div className="absolute right-0 top-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl rounded-md overflow-hidden z-20 min-w-[140px] animate-in zoom-in-95 duration-100">
                                   <button
                                     onClick={() => handleEditClick(addr)}
-                                    className="w-full text-left px-4 py-2.5 text-sm font-medium text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 transition-colors"
+                                    className="w-full text-left px-4 py-2.5 text-xs font-medium text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 transition-colors"
                                   >
-                                    <Edit2 size={14} /> Edit
+                                    <Edit2 size={12} /> Edit
                                   </button>
                                   {!addr.isDefault && (
                                     <button
                                       onClick={() => handleSetDefault(addr._id)}
-                                      className="w-full text-left px-4 py-2.5 text-sm font-medium text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 transition-colors"
+                                      className="w-full text-left px-4 py-2.5 text-xs font-medium text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 transition-colors"
                                     >
-                                      <Star size={14} /> Set as Default
+                                      <Star size={12} /> Default
                                     </button>
                                   )}
                                   <button
                                     onClick={() =>
                                       handleDeleteAddress(addr._id)
                                     }
-                                    className="w-full text-left px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2 transition-colors"
+                                    className="w-full text-left px-4 py-2.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2 transition-colors"
                                   >
-                                    <Trash2 size={14} /> Delete
+                                    <Trash2 size={12} /> Delete
                                   </button>
                                 </div>
                               )}
                             </div>
-
-                            <div className="flex gap-2">
+                            <div className="flex gap-2 mb-2">
                               <span className="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-[10px] font-bold px-2 py-0.5 rounded-[3px] uppercase tracking-wide border border-slate-200 dark:border-slate-700">
                                 {addr.type || "Home"}
                               </span>
@@ -947,9 +1025,7 @@ export default function Account() {
                                 </span>
                               )}
                             </div>
-
-                            {/* Display Specific Address Name & Phone */}
-                            <div className="mt-3 flex items-center gap-4">
+                            <div className="flex items-center gap-3 mb-1">
                               <span className="font-bold text-slate-900 dark:text-white text-sm">
                                 {addr.fullName}
                               </span>
@@ -957,7 +1033,7 @@ export default function Account() {
                                 {addr.phone}
                               </span>
                             </div>
-                            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400 leading-relaxed max-w-2xl">
+                            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed max-w-xl">
                               {addr.addressLine}, {addr.city}, {addr.state} -{" "}
                               <span className="font-bold text-slate-900 dark:text-slate-200">
                                 {addr.pincode}
@@ -978,7 +1054,7 @@ export default function Account() {
               </div>
             )}
 
-            {/* Other Tabs */}
+            {/* Other Tabs... */}
             {activeTab === "orders" && (
               <PlaceholderTab
                 icon={<Package size={40} />}
@@ -1020,10 +1096,10 @@ function InputField({
   readOnly,
 }) {
   return (
-    <div className="space-y-2 group">
+    <div className="space-y-1.5 group">
       <div className="flex justify-between items-center ml-1">
         <label
-          className={`text-[11px] font-bold uppercase tracking-wider transition-colors ${
+          className={`text-[10px] font-bold uppercase tracking-wider transition-colors ${
             isEditing
               ? "text-slate-500 dark:text-slate-400"
               : "text-slate-400 dark:text-slate-600"
@@ -1057,9 +1133,9 @@ function InputField({
           onChange={onChange}
           disabled={!isEditing || readOnly}
           autoComplete="off"
-          className={`w-full transition-all duration-200 font-medium ${
+          className={`w-full transition-all duration-200 font-medium text-sm ${
             icon ? "pl-11" : "px-4"
-          } py-3.5 rounded-2xl outline-none ${
+          } py-3 rounded-xl outline-none ${
             !isEditing
               ? "bg-transparent border-transparent text-slate-700 dark:text-slate-300 cursor-default"
               : readOnly
