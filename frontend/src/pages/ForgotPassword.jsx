@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
-import toast from "react-hot-toast";
+import { showSuccess, showError } from "../utils/toast";
 
 export default function ForgotPassword() {
   const navigate = useNavigate();
@@ -21,7 +21,6 @@ export default function ForgotPassword() {
   const [timeLeft, setTimeLeft] = useState(30);
   const [canResend, setCanResend] = useState(false);
 
-  // Match the exact input style from your Signup/Login
   const inputBase = `w-full border px-4 py-2.5 rounded-lg outline-none transition-all duration-200 
     bg-white dark:bg-slate-800 text-slate-900 dark:text-white
     autofill:shadow-[inset_0_0_0px_1000px_#ffffff] dark:autofill:shadow-[inset_0_0_0px_1000px_#1e293b]
@@ -53,7 +52,7 @@ export default function ForgotPassword() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message);
 
-      toast.success(data.message || "OTP sent successfully!");
+      showSuccess(data.message || "OTP sent successfully!"); // Using showSuccess
 
       if (step === 2) {
         setCanResend(false);
@@ -62,7 +61,7 @@ export default function ForgotPassword() {
         setStep(2);
       }
     } catch (err) {
-      toast.error(err.message || "Failed to send OTP");
+      showError(err.message || "Failed to send OTP"); // Using showError
     } finally {
       setLoading(false);
     }
@@ -77,11 +76,11 @@ export default function ForgotPassword() {
     e.preventDefault();
 
     if (password !== confirmPassword) {
-      return toast.error("Passwords do not match");
+      return showError("Passwords do not match"); // Using showError
     }
 
     if (!validatePassword(password)) {
-      return toast.error("Password must be 8+ chars with uppercase, lowercase, number & symbol.");
+      return showError("Password must be 8+ chars with uppercase, lowercase, number & symbol."); // Using showError
     }
 
     setLoading(true);
@@ -95,17 +94,17 @@ export default function ForgotPassword() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message);
 
-      toast.success("Password Reset Successful!");
+      showSuccess("Password Reset Successful!"); // Using showSuccess
       setTimeout(() => navigate("/login"), 2000);
     } catch (err) {
-      toast.error(err.message || "Reset failed. Check your OTP.");
+      showError(err.message || "Reset failed. Check your OTP."); // Using showError
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-[#030712] flex flex-col transition-colors duration-300">
+    <div className="min-h-screen bg-gray-50 dark:bg-[#030712] flex flex-col transition-colors duration-300 font-sans">
       <Navbar />
       <div className="flex-grow flex items-center justify-center p-4">
         <div className="bg-white dark:bg-slate-900 p-8 rounded-2xl shadow-xl w-full max-w-md border dark:border-slate-800">
@@ -191,7 +190,11 @@ export default function ForgotPassword() {
                 disabled={loading}
                 className="w-full bg-orange-500 text-white py-3 rounded-lg hover:bg-orange-600 disabled:opacity-50 transition-all font-bold shadow-lg shadow-orange-500/20 active:scale-[0.98]"
               >
-                {loading ? "Updating..." : "Reset Password"}
+                {loading ? (
+                   <span className="flex items-center justify-center gap-2">
+                   <Loader2 className="animate-spin" size={20} /> Updating...
+                 </span>
+                ) : "Reset Password"}
               </button>
 
               <div className="text-center mt-4">
