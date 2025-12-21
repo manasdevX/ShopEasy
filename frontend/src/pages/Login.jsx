@@ -5,6 +5,7 @@ import AuthFooter from "../components/AuthFooter";
 import { useGoogleLogin } from "@react-oauth/google";
 import { Eye, EyeOff, Loader2 } from "lucide-react"; // Added Loader2 for consistency
 import toast from "react-hot-toast";
+import { showSuccess, showError } from "../utils/toast";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -21,9 +22,6 @@ export default function Login() {
     bg-white dark:bg-slate-800 text-slate-900 dark:text-white
     autofill:shadow-[inset_0_0_0px_1000px_#ffffff] dark:autofill:shadow-[inset_0_0_0px_1000px_#1e293b]
     autofill:text-fill-slate-900 dark:autofill:text-fill-white border-gray-300 dark:border-slate-700`;
-
-  const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  const isValidPhone = (phone) => /^[6-9]\d{9}$/.test(phone);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -61,16 +59,16 @@ export default function Login() {
 
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data.message || "Login failed");
+        showError(data.message || "Login failed");
         return;
       }
 
       localStorage.setItem("token", data.token);
       localStorage.setItem("user", JSON.stringify(data));
-      toast.success("Login successful!");
+      showSuccess("Login successful!");
       navigate("/");
     } catch {
-      toast.error("Server error. Please try again.");
+      showError("Server error. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -92,12 +90,12 @@ export default function Login() {
           } else {
             localStorage.setItem("token", data.token);
             localStorage.setItem("user", JSON.stringify(data.user));
-            toast.success("Welcome back!");
+            showSuccess("Login successful!");
             navigate("/");
           }
         }
       } catch {
-        toast.error("Google Login Failed");
+        showError("Google Login Failed");
       }
     },
   });

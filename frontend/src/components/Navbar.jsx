@@ -91,7 +91,7 @@ export default function Navbar() {
             <div className="relative group">
               <button className="flex items-center gap-1 hover:text-orange-500 transition-colors">
                 <User size={18} />
-                <span>{user?.name || "Account"}</span>
+                <span>{user?.name.split(' ')[0] || "Account"}</span>
                 <ChevronDown size={14} />
               </button>
 
