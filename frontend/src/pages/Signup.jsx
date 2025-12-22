@@ -216,9 +216,25 @@ export default function Signup() {
     }
   };
 
-  // --- FINAL SUBMIT ---
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // 1. Password Verification Logic
+    const password = formData.password;
+    const isValidPassword = (pass) =>
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/.test(
+        pass
+      );
+
+    if (!password) {
+      return showError("Password is required");
+    }
+
+    if (!isValidPassword(password)) {
+      return showError(
+        "Password must be 8+ characters with uppercase, lowercase, a number, and a special character (@$!%*?&)"
+      );
+    }
 
     // TOAST: Logic to check what is missing before allowing submit
     if (!isEmailVerified)
