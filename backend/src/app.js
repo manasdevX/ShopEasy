@@ -13,7 +13,8 @@ const app = express();
 // --- MIDDLEWARE ---
 app.use(
   cors({
-    origin: "http://localhost:5173", // Make sure this matches your Frontend URL
+    origin: ["http://localhost:5173", // Make sure this matches your Frontend URL
+    "https://shop-easy-livid.vercel.app"],
     credentials: true,
   })
 );
