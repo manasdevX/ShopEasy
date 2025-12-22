@@ -124,3 +124,43 @@ export const updateOrderItemStatus = async (req, res) => {
     res.status(404).json({ message: "Order not found" });
   }
 };
+
+// @desc    Update Order Item Status (Seller Only)
+// @route   PUT /api/orders/:id/status
+// @access  Private (Seller)
+// @desc    Update Order Item Status (Seller Only)
+// @route   PUT /api/orders/:id/status
+// @access  Private (Seller)
+export const updateOrderStatus = async (req, res) => {
+  try {
+    const { status } = req.body;
+    const order = await Order.findById(req.params.id);
+
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    // SAFE COMPARISON: Handles both String and ObjectId formats
+    const item = order.orderItems.find((item) => {
+      const itemSellerId = item.seller._id
+        ? item.seller._id.toString()
+        : item.seller.toString();
+      const currentSellerId = req.seller._id.toString();
+      return itemSellerId === currentSellerId;
+    });
+
+    if (item) {
+      item.itemStatus = status;
+      if (status === "Delivered") {
+        item.deliveredAt = Date.now();
+      }
+
+      await order.save();
+      res.json({ message: "Order status updated", status: item.itemStatus });
+    } else {
+      res.status(404).json({ message: "Item not found or not authorized" });
+    }
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
