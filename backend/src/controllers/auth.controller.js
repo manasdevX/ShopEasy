@@ -4,7 +4,7 @@ import generateToken from "../utils/generateToken.js";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import axios from "axios";
-import sendEmail from "../utils/sendEmail.js";
+import sendEmail from "../utils/emailHelper.js";
 import sendSMS from "../utils/sendSMS.js";
 import { OAuth2Client } from "google-auth-library";
 
