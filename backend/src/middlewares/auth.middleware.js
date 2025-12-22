@@ -1,45 +1,115 @@
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
+import Seller from "../models/seller.js"; // ✅ Import Seller Model
 
+// ======================================================
+// 1. PROTECT (For Customers & Admins)
+//    - Verifies token against 'User' collection
+// ======================================================
 export const protect = async (req, res, next) => {
   let token;
 
-  // 1. Check for token in Authorization header
   if (
     req.headers.authorization &&
     req.headers.authorization.startsWith("Bearer")
   ) {
-    token = req.headers.authorization.split(" ")[1];
+    try {
+      token = req.headers.authorization.split(" ")[1];
+
+      // Verify Token
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+      // Fetch User (Customers/Admins)
+      req.user = await User.findById(decoded.id).select("-password");
+
+      if (!req.user) {
+        return res
+          .status(401)
+          .json({ message: "Not authorized, user not found" });
+      }
+
+      if (req.user.isBlocked) {
+        return res
+          .status(403)
+          .json({ message: "Account blocked. Contact support." });
+      }
+
+      next();
+    } catch (error) {
+      console.error("Auth Middleware Error:", error.message);
+      if (error.name === "TokenExpiredError") {
+        return res
+          .status(401)
+          .json({ message: "Session expired, please login again" });
+      }
+      return res.status(401).json({ message: "Not authorized, token failed" });
+    }
   }
 
-  // 2. Reject if no token found
   if (!token) {
     return res.status(401).json({ message: "Not authorized, no token" });
   }
+};
 
-  try {
-    // 3. Verify Token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+// ======================================================
+// 2. PROTECT SELLER (For Vendors Only)
+//    - Verifies token against 'Seller' collection
+// ======================================================
+export const protectSeller = async (req, res, next) => {
+  let token;
 
-    // 4. Find User (Exclude password)
-    const user = await User.findById(decoded.id).select("-password");
+  if (
+    req.headers.authorization &&
+    req.headers.authorization.startsWith("Bearer")
+  ) {
+    try {
+      token = req.headers.authorization.split(" ")[1];
 
-    if (!user) {
-      return res.status(401).json({ message: "User not found" });
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+      // Fetch Seller
+      // We use 'req.seller' so it doesn't conflict with 'req.user'
+      req.seller = await Seller.findById(decoded.id).select("-password");
+
+      if (!req.seller) {
+        return res
+          .status(401)
+          .json({ message: "Not authorized, seller not found" });
+      }
+
+      if (!req.seller.isActive) {
+        return res
+          .status(403)
+          .json({ message: "Seller account is inactive/suspended." });
+      }
+
+      next();
+    } catch (error) {
+      console.error("Seller Auth Error:", error.message);
+      if (error.name === "TokenExpiredError") {
+        return res
+          .status(401)
+          .json({ message: "Session expired, please login again" });
+      }
+      return res.status(401).json({ message: "Not authorized, token failed" });
     }
+  }
 
-    // 5. Security Check: Is user blocked?
-    if (user.isBlocked) {
-      return res
-        .status(403)
-        .json({ message: "User is blocked. Contact support." });
-    }
+  if (!token) {
+    return res
+      .status(401)
+      .json({ message: "Not authorized as seller, no token" });
+  }
+};
 
-    // 6. Attach user to request object
-    req.user = user;
+// ======================================================
+// 3. ADMIN (Role Check)
+//    - Must be placed AFTER 'protect'
+// ======================================================
+export const admin = (req, res, next) => {
+  if (req.user && req.user.isAdmin) {
     next();
-  } catch (error) {
-    console.error("Auth Middleware Error:", error.message);
-    return res.status(401).json({ message: "Not authorized, token failed" });
+  } else {
+    res.status(403).json({ message: "Not authorized as an admin" });
   }
 };

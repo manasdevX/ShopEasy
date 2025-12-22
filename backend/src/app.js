@@ -5,6 +5,8 @@ import cors from "cors";
 import productRoutes from "./routes/product.routes.js";
 import authRoutes from "./routes/auth.routes.js";
 import userRoutes from "./routes/user.routes.js"; // ✅ Import User Routes
+import sellerRoutes from "./routes/sellerRoutes.js";
+import orderRoutes from "./routes/order.routes.js";
 
 const app = express();
 
@@ -24,5 +26,7 @@ app.use("/api/auth", authRoutes);
 
 // ✅ Connect User Routes (Singular '/api/user' is better for profile actions)
 app.use("/api/user", userRoutes);
+app.use("/api/seller", sellerRoutes);
+app.use("/api/orders", orderRoutes);
 
 export default app;
