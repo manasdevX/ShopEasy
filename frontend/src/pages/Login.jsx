@@ -29,22 +29,49 @@ export default function Login() {
     setIdentifierError("");
     setPasswordError("");
 
+    setIdentifierError("");
+    setPasswordError("");
+
+    // 1. Helper Regex Patterns
+    const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    const isValidPhone = (phone) => /^[0-9]{10}$/.test(phone);
+    // Password: 8+ chars, 1 Uppercase, 1 Lowercase, 1 Number
+    const isValidPassword = (pass) =>
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/.test(
+        pass
+      );
+
+    // 2. IDENTIFIER VERIFICATION (Email or Phone)
     if (!identifier) {
-      setIdentifierError("Email or phone is required");
-      isValid = false;
-    } else if (identifier.includes("@")) {
-      if (!isValidEmail(identifier)) {
-        setIdentifierError("Invalid email address");
-        isValid = false;
-      }
-    } else if (!isValidPhone(identifier)) {
-      setIdentifierError("Invalid phone number");
-      isValid = false;
+      showError("Email or phone is required");
+      return;
     }
 
+    if (identifier.includes("@")) {
+      if (!isValidEmail(identifier)) {
+        showError("Please enter a valid email address");
+        return;
+      }
+    } else {
+      // Strip everything except numbers to check 10-digit validity
+      const cleanPhone = identifier.replace(/\D/g, "");
+      if (!isValidPhone(cleanPhone)) {
+        showError("Phone number must be exactly 10 digits");
+        return;
+      }
+    }
+
+    // 3. PASSWORD VERIFICATION
     if (!password) {
-      setPasswordError("Password is required");
-      isValid = false;
+      showError("Password is required");
+      return;
+    }
+
+    if (!isValidPassword(password)) {
+      showError(
+        "Password must be 8+ characters with uppercase, lowercase, a number, and a special character (@$!%*?&)"
+      );
+      return;
     }
 
     if (!isValid) return;
@@ -86,7 +113,13 @@ export default function Login() {
 
         if (res.ok) {
           if (data.isNewUser) {
-            navigate("/signup", { state: { name: data.name, email: data.email, googleId: data.googleId } });
+            navigate("/signup", {
+              state: {
+                name: data.name,
+                email: data.email,
+                googleId: data.googleId,
+              },
+            });
           } else {
             localStorage.setItem("token", data.token);
             localStorage.setItem("user", JSON.stringify(data.user));
@@ -109,7 +142,9 @@ export default function Login() {
           <h1 className="text-4xl font-black text-center text-orange-500 mb-2 tracking-tight">
             ShopEasy
           </h1>
-          <p className="text-center text-gray-500 dark:text-slate-400 mb-8 font-medium">Login to your account</p>
+          <p className="text-center text-gray-500 dark:text-slate-400 mb-8 font-medium">
+            Login to your account
+          </p>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* IDENTIFIER */}
@@ -118,10 +153,21 @@ export default function Login() {
                 type="text"
                 placeholder="Email or Phone Number"
                 value={identifier}
-                onChange={(e) => { setIdentifier(e.target.value); setIdentifierError(""); }}
-                className={`${inputBase} ${identifierError ? 'border-red-500' : 'focus:ring-2 focus:ring-orange-400'}`}
+                onChange={(e) => {
+                  setIdentifier(e.target.value);
+                  setIdentifierError("");
+                }}
+                className={`${inputBase} ${
+                  identifierError
+                    ? "border-red-500"
+                    : "focus:ring-2 focus:ring-orange-400"
+                }`}
               />
-              {identifierError && <p className="text-red-500 text-xs mt-1 ml-1">{identifierError}</p>}
+              {identifierError && (
+                <p className="text-red-500 text-xs mt-1 ml-1">
+                  {identifierError}
+                </p>
+              )}
             </div>
 
             {/* PASSWORD */}
@@ -130,8 +176,15 @@ export default function Login() {
                 type={showPassword ? "text" : "password"}
                 placeholder="Password"
                 value={password}
-                onChange={(e) => { setPassword(e.target.value); setPasswordError(""); }}
-                className={`${inputBase} pr-12 ${passwordError ? 'border-red-500' : 'focus:ring-2 focus:ring-orange-400'}`}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setPasswordError("");
+                }}
+                className={`${inputBase} pr-12 ${
+                  passwordError
+                    ? "border-red-500"
+                    : "focus:ring-2 focus:ring-orange-400"
+                }`}
               />
               <button
                 type="button"
@@ -140,11 +193,19 @@ export default function Login() {
               >
                 {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
               </button>
-              {passwordError && <p className="text-red-500 text-xs mt-1 ml-1">{passwordError}</p>}
+              {passwordError && (
+                <p className="text-red-500 text-xs mt-1 ml-1">
+                  {passwordError}
+                </p>
+              )}
             </div>
 
             <div className="text-right">
-              <Link to="/forgot-password" size="sm" className="text-xs font-bold text-orange-500 hover:text-orange-600 transition-colors uppercase tracking-wider">
+              <Link
+                to="/forgot-password"
+                size="sm"
+                className="text-xs font-bold text-orange-500 hover:text-orange-600 transition-colors uppercase tracking-wider"
+              >
                 Forgot password?
               </Link>
             </div>
@@ -167,7 +228,9 @@ export default function Login() {
 
           <div className="flex items-center my-6">
             <div className="flex-grow h-px bg-gray-300 dark:bg-slate-700" />
-            <span className="px-3 text-sm text-gray-500 dark:text-slate-500 font-medium">OR</span>
+            <span className="px-3 text-sm text-gray-500 dark:text-slate-500 font-medium">
+              OR
+            </span>
             <div className="flex-grow h-px bg-gray-300 dark:bg-slate-700" />
           </div>
 
@@ -191,7 +254,10 @@ export default function Login() {
 
           <p className="mt-8 text-center text-sm text-gray-500 dark:text-slate-400">
             New to ShopEasy?{" "}
-            <Link to="/signup" className="text-orange-500 hover:text-orange-600 font-bold transition-colors">
+            <Link
+              to="/signup"
+              className="text-orange-500 hover:text-orange-600 font-bold transition-colors"
+            >
               Create an account
             </Link>
           </p>

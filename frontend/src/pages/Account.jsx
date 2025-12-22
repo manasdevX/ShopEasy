@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import Navbar from "../components/Navbar";
+import { showSuccess, showError } from "../utils/toast";
 import Footer from "../components/Footer";
 import {
   User,
@@ -28,48 +29,6 @@ import {
   LocateFixed,
 } from "lucide-react";
 import toast from "react-hot-toast";
-
-// 1. CUSTOM PREMIUM TOAST COMPONENT
-const notify = (type, message) => {
-  toast.custom((t) => (
-    <div
-      className={`${t.visible ? "animate-enter" : "animate-leave"} 
-      max-w-sm w-full bg-white dark:bg-[#1e293b] shadow-2xl rounded-2xl pointer-events-auto flex ring-1 ring-black ring-opacity-5 dark:ring-white/10 overflow-hidden transform transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)]`}
-    >
-      <div className="flex-1 w-0 p-4">
-        <div className="flex items-start">
-          <div className="flex-shrink-0 pt-0.5">
-            {type === "success" ? (
-              <div className="h-10 w-10 rounded-full bg-green-500/10 flex items-center justify-center">
-                <Check className="h-5 w-5 text-green-500" strokeWidth={3} />
-              </div>
-            ) : (
-              <div className="h-10 w-10 rounded-full bg-red-500/10 flex items-center justify-center">
-                <AlertCircle className="h-5 w-5 text-red-500" strokeWidth={3} />
-              </div>
-            )}
-          </div>
-          <div className="ml-4 flex-1">
-            <p className="text-sm font-bold text-slate-900 dark:text-white">
-              {type === "success" ? "Success" : "Attention"}
-            </p>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400 font-medium">
-              {message}
-            </p>
-          </div>
-        </div>
-      </div>
-      <div className="flex border-l border-slate-100 dark:border-slate-700">
-        <button
-          onClick={() => toast.dismiss(t.id)}
-          className="w-full border border-transparent rounded-none rounded-r-lg p-4 flex items-center justify-center text-slate-400 hover:text-slate-600 focus:outline-none transition-colors"
-        >
-          <X size={18} />
-        </button>
-      </div>
-    </div>
-  ));
-};
 
 export default function Account() {
   const fileInputRef = useRef(null);
@@ -153,7 +112,7 @@ export default function Account() {
           const userData = {
             name: data.name || "",
             email: data.email || "",
-            phone: data.phone || "",
+            phone: (data.phone || "").replace(/^\+91/, ""),
             avatar:
               data.profilePicture ||
               `https://ui-avatars.com/api/?name=${encodeURIComponent(
@@ -162,7 +121,7 @@ export default function Account() {
             addresses: allAddresses,
             address: {
               name: data.address?.name || primaryAddr.fullName || data.name,
-              phone: data.address?.phone || primaryAddr.phone || data.phone,
+              phone: (data.address?.phone || primaryAddr.phone || data.phone || "").replace(/^\+91/, ""),
               street: data.address?.street || primaryAddr.addressLine || "",
               city: data.address?.city || primaryAddr.city || "",
               state: data.address?.state || primaryAddr.state || "",
@@ -186,7 +145,7 @@ export default function Account() {
   // ================= GEOLOCATION HANDLER (HIGH ACCURACY) =================
   const handleUseCurrentLocation = () => {
     if (!navigator.geolocation) {
-      notify("error", "Geolocation is not supported by your browser");
+      showError("Geolocation is not supported by your browser");
       return;
     }
 
@@ -249,19 +208,19 @@ export default function Account() {
               country: addr.country || "India",
             }));
 
-            notify("success", "Location fetched successfully!");
+            showSuccess("Location fetched successfully!");
           } else {
-            notify("error", "Could not determine precise address");
+            showError("Could not determine precise address");
           }
         } catch (error) {
-          notify("error", "Failed to fetch address details");
+          showError("Failed to fetch address details");
         } finally {
           setIsLocating(false);
         }
       },
       (error) => {
         setIsLocating(false);
-        notify("error", "Location access denied. Please enable GPS.");
+        showError("Location access denied. Please enable GPS.");
       },
       options // Pass high accuracy options
     );
@@ -300,14 +259,16 @@ export default function Account() {
             },
           }));
         }
-        notify("success", "Default Address Updated");
+        showSuccess("Default Address Updated");
       }
     } catch (err) {
-      notify("error", "Failed to update default address");
+      showError("Failed to update default address");
     }
   };
 
   const handleSaveAddress = async () => {
+    const phoneRegex = /^[0-9]{10}$/;
+    const pincodeRegex = /^[0-9]{6}$/;
     if (
       !newAddress.name ||
       !newAddress.phone ||
@@ -315,9 +276,27 @@ export default function Account() {
       !newAddress.city ||
       !newAddress.pincode
     ) {
-      notify("error", "Please fill all required fields");
+      showError("Please fill all required fields");
       return;
     }
+
+    // Validate Phone Number
+    if (!phoneRegex.test(newAddress.phone)) {
+      showError("Enter a valid 10-digit phone number");
+      return;
+    }
+
+    // Validate Pincode
+    if (!pincodeRegex.test(newAddress.pincode)) {
+      showError("Enter a valid 6-digit pincode");
+      return;
+    }
+
+    // Validate Street Address Length
+    // if (newAddress.street.trim().length < 5) {
+    //   showError("Street address is too short");
+    //   return;
+    // }
 
     setIsAddressSaving(true);
 
@@ -376,15 +355,12 @@ export default function Account() {
           country: "India",
           type: "Home",
         });
-        notify(
-          "success",
-          editingAddressId ? "Address Updated!" : "Address Added!"
-        );
+        showSuccess(editingAddressId ? "Address Updated!" : "Address Added!");
       } else {
-        notify("error", updatedAddresses.message || "Failed to save address");
+        showError("Failed to save address");
       }
     } catch (err) {
-      notify("error", "Network Error");
+      showError("Network Error");
     } finally {
       setIsAddressSaving(false);
     }
@@ -467,10 +443,10 @@ export default function Account() {
             type: primaryAddr.type,
           },
         }));
-        notify("success", "Address Deleted");
+        showSuccess("Address Deleted");
       }
     } catch (err) {
-      notify("error", "Failed to delete");
+      showError("Failed to delete");
     }
   };
 
@@ -518,6 +494,28 @@ export default function Account() {
 
   // 👇 UPDATED: Handle QuotaExceededError
   const handleSave = async () => {
+    // 1. --- VALIDATION LOGIC ---
+    const phoneRegex = /^[0-9]{10}$/;
+    const pincodeRegex = /^[0-9]{6}$/;
+
+    // Validate Main Profile Phone (without +91)
+    if (!phoneRegex.test(formData.phone)) {
+      showError("Please enter a valid 10-digit profile phone number");
+      return;
+    }
+
+    // Validate Address Phone (if address exists)
+    if (formData.address.phone && !phoneRegex.test(formData.address.phone)) {
+      showError("Please enter a valid 10-digit address phone number");
+      return;
+    }
+
+    // Validate Pincode
+    if (formData.address.pincode && !pincodeRegex.test(formData.address.pincode)) {
+      showError("Please enter a valid 6-digit pincode");
+      return;
+    }
+    
     setStatus("saving");
     try {
       const token = localStorage.getItem("token");
@@ -584,15 +582,15 @@ export default function Account() {
         window.dispatchEvent(new Event("storage"));
 
         setIsEditing(false);
-        notify("success", "Profile Updated Successfully!");
+        showSuccess("Profile Updated Successfully!");
         setStatus("idle");
       } else {
-        notify("error", data.message || "Save failed");
+        showError("Save failed");
         setStatus("idle");
       }
     } catch (err) {
       console.error(err);
-      notify("error", "Server Error");
+      showError("Server Error");
       setStatus("idle");
     }
   };
