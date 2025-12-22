@@ -3,7 +3,6 @@ import bcrypt from "bcryptjs";
 
 /* ======================================================
    1. ADDRESS SCHEMA (Sub-document)
-   ✅ Updated to include 'type' (Home/Work)
 ====================================================== */
 const addressSchema = new mongoose.Schema(
   {
@@ -14,17 +13,14 @@ const addressSchema = new mongoose.Schema(
     state: { type: String, required: true },
     country: { type: String, default: "India" },
     addressLine: { type: String, required: true },
-
-    // 👇 NEW FIELD: Address Type
     type: {
       type: String,
       enum: ["Home", "Work"],
       default: "Home",
     },
-
     isDefault: { type: Boolean, default: false },
   },
-  { _id: true } // Keep _id to easily update/delete specific addresses
+  { _id: true }
 );
 
 /* ======================================================
@@ -42,6 +38,8 @@ const cartItemSchema = new mongoose.Schema(
       required: true,
       min: 1,
     },
+    // Optional: store price at time of adding to cart if needed
+    price: { type: Number },
   },
   { _id: false }
 );
@@ -70,9 +68,8 @@ const userSchema = new mongoose.Schema(
     },
     phone: {
       type: String,
-      required: true,
       unique: true,
-      sparse: true, // Allows multiple null values (if phone not provided via Google)
+      sparse: true, // Allows null/duplicate nulls
     },
 
     // --- PROFILE PICTURE ---
@@ -84,19 +81,23 @@ const userSchema = new mongoose.Schema(
 
     // --- AUTH PROVIDERS ---
     googleId: {
-      type: String, // Stores the ID from Google OAuth
+      type: String,
       unique: true,
       sparse: true,
     },
 
+    // --- ROLES & PERMISSIONS ---
     role: {
       type: String,
-      enum: ["user", "admin"],
+      enum: ["user", "admin", "seller"], // ✅ Added 'seller' role here
       default: "user",
     },
     isBlocked: {
       type: Boolean,
       default: false,
+    },
+    passwordChangedAt: {
+      type: Date, // Tracks when password was last changed for security invalidation
     },
 
     /* =========================
@@ -125,7 +126,7 @@ const userSchema = new mongoose.Schema(
     /* =========================
        📦 USER DATA
     ========================= */
-    addresses: [addressSchema], // Array of addresses
+    addresses: [addressSchema],
 
     cart: [cartItemSchema],
 
@@ -143,16 +144,38 @@ const userSchema = new mongoose.Schema(
       },
     ],
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    toJSON: { virtuals: true }, // Ensure virtuals are included when converting to JSON
+    toObject: { virtuals: true },
+  }
 );
 
 /* ======================================================
-   4. MIDDLEWARE & METHODS
+   4. VIRTUALS
+====================================================== */
+// Creates a fake 'isAdmin' field that matches your middleware check
+userSchema.virtual("isAdmin").get(function () {
+  return this.role === "admin";
+});
+
+// Optional: Creates a fake 'isSeller' field for easier frontend checks
+userSchema.virtual("isSeller").get(function () {
+  return this.role === "seller";
+});
+
+/* ======================================================
+   5. MIDDLEWARE & METHODS
 ====================================================== */
 
 // Encrypt password before saving
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
+
+  // If password is modified, update the timestamp (but skip for new users)
+  if (!this.isNew) {
+    this.passwordChangedAt = Date.now() - 1000;
+  }
 
   const salt = await bcrypt.genSalt(12);
   this.password = await bcrypt.hash(this.password, salt);
@@ -162,6 +185,19 @@ userSchema.pre("save", async function (next) {
 // Method to compare passwords
 userSchema.methods.matchPassword = async function (enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
+};
+
+// Method to check if password changed AFTER token was issued
+userSchema.methods.changedPasswordAfter = function (JWTTimestamp) {
+  if (this.passwordChangedAt) {
+    const changedTimestamp = parseInt(
+      this.passwordChangedAt.getTime() / 1000,
+      10
+    );
+    return JWTTimestamp < changedTimestamp;
+  }
+  // False means password NOT changed
+  return false;
 };
 
 export default mongoose.model("User", userSchema);
