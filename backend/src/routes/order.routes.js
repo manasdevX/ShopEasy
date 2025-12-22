@@ -5,6 +5,7 @@ import {
   getMyOrders,
   getSellerOrders,
   updateOrderItemStatus,
+  updateOrderStatus,
 } from "../controllers/order.controller.js";
 import { protect, protectSeller } from "../middlewares/auth.middleware.js";
 
@@ -21,5 +22,6 @@ router.route("/:id/status").put(protectSeller, updateOrderItemStatus);
 // --- General Routes ---
 // Put this last so it doesn't catch 'myorders' or 'seller-orders' as an ID
 router.route("/:id").get(protect, getOrderById);
+router.route("/:id/status").put(protectSeller, updateOrderStatus);
 
 export default router;
