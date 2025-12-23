@@ -4,7 +4,6 @@ import Navbar from "../components/Navbar";
 import AuthFooter from "../components/AuthFooter";
 import { useGoogleLogin } from "@react-oauth/google";
 import { Eye, EyeOff, CheckCircle, Loader2 } from "lucide-react";
-import toast from "react-hot-toast";
 import { showSuccess, showError } from "../utils/toast";
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -42,7 +41,6 @@ export default function Signup() {
 
   const hasShownToast = useRef(false);
 
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const phoneRegex = /^[6-9]\d{9}$/; // Indian standard: starts with 6-9, 10 digits
 
   // ================= AUTOFILL LOGIC =================
@@ -55,7 +53,6 @@ export default function Signup() {
         setFormData((prev) => ({ ...prev, name, email }));
         setGoogleId(googleId);
         setIsEmailVerified(true);
-        // TOAST: Triggered only on Google Redirect
         showSuccess("Email Verified!");
 
         window.history.replaceState({}, document.title);
@@ -121,7 +118,6 @@ export default function Signup() {
       if (res.ok) {
         setIsEmailSent(true);
         setEmailTimer(30);
-        // TOAST: Dynamic message for Resend vs First Send
         showSuccess(
           isEmailSent ? "OTP Resent to Email!" : "OTP sent to Email!"
         );
@@ -145,7 +141,6 @@ export default function Signup() {
       });
       if (res.ok) {
         setIsEmailVerified(true);
-        // TOAST: Confirmation
         showSuccess("Email Verified!");
       } else {
         showError("Invalid Email OTP");
@@ -157,13 +152,11 @@ export default function Signup() {
 
   // --- MOBILE FLOW ---
   const sendMobileOtp = async () => {
-    const emailRegex = /^[6-9]\d{9}$/;
     if (!phoneRegex.test(formData.phone))
       return showError("Invalid phone number");
 
     if (!formData.phone) return showError("Please enter phone first");
 
-    // LOGIC: Check if already verified (safety check)
     if (isMobileVerified) return showSuccess("Phone already verified!");
 
     setVerifyingMobile(true);
@@ -180,7 +173,6 @@ export default function Signup() {
       if (res.ok) {
         setIsMobileSent(true);
         setMobileTimer(30);
-        // TOAST: Dynamic message
         showSuccess(
           isMobileSent ? "OTP Resent to Mobile!" : "OTP sent to Mobile!"
         );
@@ -204,7 +196,6 @@ export default function Signup() {
       });
       if (res.ok) {
         setIsMobileVerified(true);
-        // TOAST: Confirmation
         showSuccess("Mobile Verified!");
       } else {
         showError("Invalid Mobile OTP");
@@ -214,6 +205,7 @@ export default function Signup() {
     }
   };
 
+  // ================= SUBMIT HANDLER (UPDATED) =================
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -234,7 +226,6 @@ export default function Signup() {
       );
     }
 
-    // TOAST: Logic to check what is missing before allowing submit
     if (!isEmailVerified)
       return showError("Please verify your email address first");
     if (!isMobileVerified)
@@ -256,10 +247,14 @@ export default function Signup() {
 
       if (res.ok) {
         localStorage.setItem("token", data.token);
-        localStorage.setItem("user", JSON.stringify(data));
-        // TOAST: Success
+
+        // ✅ CRITICAL FIX: Save only the user object, not the whole response
+        localStorage.setItem("user", JSON.stringify(data.user));
+
         showSuccess("Welcome to ShopEasy! Registration complete.");
-        navigate("/");
+
+        // ✅ CRITICAL FIX: Use window.location to force Navbar update
+        window.location.href = "/";
       } else {
         showError(data.message || "Registration failed");
       }
@@ -290,13 +285,13 @@ export default function Signup() {
             }));
             setGoogleId(data.googleId);
             setIsEmailVerified(true);
-            // TOAST: Specific Google Signup message
             showSuccess("Email Verified!");
           } else {
             localStorage.setItem("token", data.token);
             localStorage.setItem("user", JSON.stringify(data.user));
             showSuccess("Login successful!");
-            navigate("/");
+            // ✅ Updated to window.location for consistency
+            window.location.href = "/";
           }
         } else {
           showError(data.message);
