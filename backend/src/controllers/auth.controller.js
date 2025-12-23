@@ -1,7 +1,6 @@
 import User from "../models/User.js";
 import Otp from "../models/Otp.js";
 import generateToken from "../utils/generateToken.js";
-import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import axios from "axios";
 import sendEmail from "../utils/emailHelper.js";
@@ -11,9 +10,6 @@ import { OAuth2Client } from "google-auth-library";
 // Initialize Google Client
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
-/* ======================================================
-   1. SEND EMAIL OTP (Inline Verification)
-====================================================== */
 /* ======================================================
    1. SEND EMAIL OTP (Updated: Case-Insensitive Check)
 ====================================================== */
@@ -30,9 +26,7 @@ export const sendEmailOtp = async (req, res) => {
     const existingUser = await User.findOne({ email: normalizedEmail });
 
     if (existingUser) {
-      return res
-        .status(400)
-        .json({ message: "Email already registered." });
+      return res.status(400).json({ message: "Email already registered." });
     }
 
     // 3. Generate OTP
@@ -61,9 +55,6 @@ export const sendEmailOtp = async (req, res) => {
 };
 
 /* ======================================================
-   2. SEND MOBILE OTP (Inline Verification)
-====================================================== */
-/* ======================================================
    2. SEND MOBILE OTP (Updated: Smarter Duplicate Check)
 ====================================================== */
 export const sendMobileOtp = async (req, res) => {
@@ -81,28 +72,22 @@ export const sendMobileOtp = async (req, res) => {
 
     // Check if it's just digits (e.g. 9690886564)
     if (/^[0-9]+$/.test(cleaned)) {
-      // Search raw (9690...) AND formatted (+919690...)
       searchCriteria.push({ phone: cleaned });
       searchCriteria.push({ phone: "+91" + cleaned });
-      // Set formattedPhone for OTP sending later
       if (cleaned.length === 10) formattedPhone = "+91" + cleaned;
     }
     // Check if it already has + (e.g. +919690...)
     else if (cleaned.startsWith("+")) {
-      // Search as-is
       searchCriteria.push({ phone: cleaned });
-      // Also try searching without the +91 prefix just in case DB has raw
-      // (Assuming standard +91 length of 13 chars)
       if (cleaned.startsWith("+91") && cleaned.length === 13) {
-        searchCriteria.push({ phone: cleaned.slice(3) }); // Remove +91
+        searchCriteria.push({ phone: cleaned.slice(3) });
       }
       formattedPhone = cleaned;
     } else {
-      // Fallback
       searchCriteria.push({ phone: cleaned });
     }
 
-    // 3. Check for Existing User (Using OR logic)
+    // 3. Check for Existing User
     const existingUser = await User.findOne({ $or: searchCriteria });
 
     if (existingUser) {
@@ -111,7 +96,7 @@ export const sendMobileOtp = async (req, res) => {
         .json({ message: "Phone number already registered" });
     }
 
-    // 4. Generate & Save OTP (Use the formatted phone for consistency)
+    // 4. Generate & Save OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
     await Otp.findOneAndUpdate(
@@ -194,10 +179,7 @@ export const registerVerifiedUser = async (req, res) => {
     }
 
     // 1. EMAIL VERIFICATION CHECK
-    if (googleId) {
-      // ✅ IF GOOGLE: Skip Email OTP check
-    } else {
-      // 🔒 IF MANUAL: Verify Email OTP is required
+    if (!googleId) {
       if (!emailOtp)
         return res.status(400).json({ message: "Email OTP is required" });
       const validEmailOtp = await Otp.findOne({
@@ -232,10 +214,14 @@ export const registerVerifiedUser = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      _id: newUser._id,
-      name: newUser.name,
-      email: newUser.email,
       token: generateToken(newUser._id),
+      // ✅ FIX: Wrapped in 'user' object so frontend works
+      user: {
+        _id: newUser._id,
+        name: newUser.name,
+        email: newUser.email,
+        phone: newUser.phone,
+      },
       message: "Account created successfully!",
     });
   } catch (error) {
@@ -247,7 +233,7 @@ export const registerVerifiedUser = async (req, res) => {
 };
 
 /* ======================================================
-   5. LOGIN USER
+   5. LOGIN USER (CRITICAL FIX APPLIED HERE)
 ====================================================== */
 export const loginUser = async (req, res) => {
   try {
@@ -282,12 +268,18 @@ export const loginUser = async (req, res) => {
     if (!isMatch)
       return res.status(401).json({ message: "Invalid credentials" });
 
+    // ✅ FIX: Structuring the response correctly
+    // Frontend expects data.user.name, so we MUST send a 'user' object.
     res.status(200).json({
-      _id: user._id,
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
+      success: true,
       token: generateToken(user._id),
+      user: {
+        _id: user._id,
+        name: user.name, // <--- This will fix the "Name missing" issue
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+      },
     });
   } catch (error) {
     console.error("LOGIN ERROR 👉", error);
@@ -459,4 +451,3 @@ export const resetPasswordWithOTP = async (req, res) => {
     res.status(500).json({ message: "Server Error" });
   }
 };
-
