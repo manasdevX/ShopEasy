@@ -1,27 +1,42 @@
-import nodemailer from "nodemailer";
+import axios from "axios";
 
 const sendEmail = async (options) => {
-  const transporter = nodemailer.createTransport({
-    service: "gmail", // <--- The "Magic" setting. No host/port needed.
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-  });
+  const brevoUrl = "https://api.brevo.com/v3/smtp/email";
 
-  const message = {
-    from: `${process.env.FROM_NAME} <${process.env.FROM_EMAIL}>`,
-    to: options.email,
+  const data = {
+    sender: {
+      name: process.env.FROM_NAME || "ShopEasy Support",
+      email: process.env.FROM_EMAIL, // MUST match your Brevo login email
+    },
+    to: [
+      {
+        email: options.email,
+        name: options.email,
+      },
+    ],
     subject: options.subject,
-    text: options.message,
+    htmlContent: `<p>${options.message.replace(/\n/g, "<br>")}</p>`, // HTML version
+    textContent: options.message, // Plain text fallback
+  };
+
+  const config = {
+    headers: {
+      "api-key": process.env.BREVO_API_KEY, // We will add this to Render next
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
   };
 
   try {
-    const info = await transporter.sendMail(message);
-    console.log("✅ Email sent: ", info.messageId);
+    const response = await axios.post(brevoUrl, data, config);
+    console.log("✅ Email sent via Brevo! ID:", response.data.messageId);
+    return response.data;
   } catch (error) {
-    console.error("❌ NODEMAILER ERROR:", error);
-    throw error;
+    console.error(
+      "❌ BREVO ERROR:",
+      error.response ? error.response.data : error.message
+    );
+    throw new Error("Email could not be sent");
   }
 };
 
