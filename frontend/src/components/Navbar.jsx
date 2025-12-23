@@ -16,8 +16,18 @@ const CATEGORY_DATA = {
   "Mobiles & Tablets": ["Smartphones", "Tablets", "Accessories", "Power Banks"],
   Fashion: ["Men", "Women", "Kids", "Footwear", "Accessories"],
   Electronics: ["Laptops", "Headphones", "Cameras", "Gaming", "Wearables"],
-  "TVs & Appliances": ["Televisions", "Refrigerators", "Washing Machines", "Air Conditioners"],
-  "Home & Furniture": ["Furniture", "Home Decor", "Lighting", "Kitchen & Dining"],
+  "TVs & Appliances": [
+    "Televisions",
+    "Refrigerators",
+    "Washing Machines",
+    "Air Conditioners",
+  ],
+  "Home & Furniture": [
+    "Furniture",
+    "Home Decor",
+    "Lighting",
+    "Kitchen & Dining",
+  ],
   "Beauty, Food & More": ["Makeup", "Skincare", "Nutrition", "Personal Care"],
   Grocery: ["Fruits & Vegetables", "Snacks", "Staples", "Household Essentials"],
 };
@@ -54,7 +64,10 @@ export default function Navbar() {
     <header className="relative w-full z-50 transition-colors duration-300">
       {/* 🔹 TOP NAVBAR */}
       <div className="bg-white dark:bg-[#030712] border-b border-gray-100 dark:border-gray-800 px-6 py-3 flex items-center gap-6">
-        <Link to="/" className="text-orange-500 text-2xl font-bold tracking-tighter">
+        <Link
+          to="/"
+          className="text-orange-500 text-2xl font-bold tracking-tighter"
+        >
           ShopEasy
         </Link>
 
@@ -83,7 +96,10 @@ export default function Navbar() {
 
           {/* LOGIN / ACCOUNT */}
           {!isLoggedIn ? (
-            <Link to="/login" className="flex items-center gap-1 hover:text-orange-500 transition-colors">
+            <Link
+              to="/login"
+              className="flex items-center gap-1 hover:text-orange-500 transition-colors"
+            >
               <User size={18} />
               <span>Login</span>
             </Link>
@@ -91,13 +107,16 @@ export default function Navbar() {
             <div className="relative group">
               <button className="flex items-center gap-1 hover:text-orange-500 transition-colors">
                 <User size={18} />
-                <span>{user?.name.split(' ')[0] || "Account"}</span>
+                <span>{user?.name ? user.name.split(" ")[0] : "Account"}</span>
                 <ChevronDown size={14} />
               </button>
 
               {/* ACCOUNT DROPDOWN */}
               <div className="absolute top-full left-1/2 -translate-x-1/2 w-52 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 rounded-xl overflow-hidden shadow-xl border border-gray-100 dark:border-gray-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
-                <Link to="/account" className="block px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                <Link
+                  to="/account"
+                  className="block px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+                >
                   My Profile
                 </Link>
                 <div className="border-t border-gray-100 dark:border-gray-700" />
@@ -112,7 +131,10 @@ export default function Navbar() {
             </div>
           )}
 
-          <Link to="/cart" className="flex items-center gap-1 hover:text-orange-500 transition-colors">
+          <Link
+            to="/cart"
+            className="flex items-center gap-1 hover:text-orange-500 transition-colors"
+          >
             <ShoppingCart size={18} />
             Cart
           </Link>
@@ -131,8 +153,10 @@ export default function Navbar() {
       <div className="bg-white dark:bg-[#030712] border-b border-gray-200 dark:border-gray-800 px-6 py-3 hidden md:flex justify-between text-sm font-medium">
         {Object.keys(CATEGORY_DATA).map((category) => {
           let positionClass = "left-1/2 -translate-x-1/2";
-          if (category === "Mobiles & Tablets") positionClass = "left-0 translate-x-0";
-          else if (category === "Grocery") positionClass = "right-0 translate-x-0";
+          if (category === "Mobiles & Tablets")
+            positionClass = "left-0 translate-x-0";
+          else if (category === "Grocery")
+            positionClass = "right-0 translate-x-0";
 
           return (
             <div
@@ -142,10 +166,17 @@ export default function Navbar() {
               onMouseLeave={() => setActiveCategory(null)}
             >
               <span>{category}</span>
-              <ChevronDown size={14} className={`transition-transform duration-200 ${activeCategory === category ? 'rotate-180' : ''}`} />
+              <ChevronDown
+                size={14}
+                className={`transition-transform duration-200 ${
+                  activeCategory === category ? "rotate-180" : ""
+                }`}
+              />
 
               {activeCategory === category && (
-                <div className={`absolute top-full ${positionClass} w-60 bg-white dark:bg-gray-800 shadow-2xl border border-gray-100 dark:border-gray-700 rounded-xl z-50 overflow-hidden`}>
+                <div
+                  className={`absolute top-full ${positionClass} w-60 bg-white dark:bg-gray-800 shadow-2xl border border-gray-100 dark:border-gray-700 rounded-xl z-50 overflow-hidden`}
+                >
                   <div className="p-3 grid gap-1">
                     {CATEGORY_DATA[category].map((item) => (
                       <div
