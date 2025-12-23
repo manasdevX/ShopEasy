@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import Navbar from "../components/Navbar";
 import { showSuccess, showError } from "../utils/toast";
 import Footer from "../components/Footer";
+const API_URL = import.meta.env.VITE_API_URL;
 import {
   User,
   Mail,
@@ -87,7 +88,7 @@ export default function Account() {
           return;
         }
 
-        const res = await fetch("http://localhost:5000/api/user/profile", {
+        const res = await fetch(`${API_URL}/api/user/profile`, {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
@@ -231,13 +232,10 @@ export default function Account() {
     setOpenMenuId(null);
     try {
       const token = localStorage.getItem("token");
-      const res = await fetch(
-        `http://localhost:5000/api/user/address/${id}/default`,
-        {
-          method: "PUT",
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+      const res = await fetch(`${API_URL}/api/user/address/${id}/default`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
       const updatedAddresses = await res.json();
 
@@ -302,11 +300,11 @@ export default function Account() {
 
     try {
       const token = localStorage.getItem("token");
-      let url = "http://localhost:5000/api/user/address";
+      let url = `${API_URL}/api/user/address`;
       let method = "POST";
 
       if (editingAddressId) {
-        url = `http://localhost:5000/api/user/address/${editingAddressId}`;
+        url = `${API_URL}/api/user/address/${editingAddressId}`;
         method = "PUT";
       }
 
@@ -419,7 +417,7 @@ export default function Account() {
       return;
     try {
       const token = localStorage.getItem("token");
-      const res = await fetch(`http://localhost:5000/api/user/address/${id}`, {
+      const res = await fetch(`${API_URL}/api/user/address/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -529,7 +527,7 @@ export default function Account() {
           phone: formData.address.phone,
         },
       };
-      const res = await fetch("http://localhost:5000/api/user/profile", {
+      const res = await fetch(`${API_URL}/api/user/profile`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
