@@ -6,6 +6,7 @@ import { useGoogleLogin } from "@react-oauth/google";
 import { Eye, EyeOff, CheckCircle, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { showSuccess, showError } from "../utils/toast";
+const API_URL = import.meta.env.VITE_API_URL;
 
 export default function Signup() {
   const navigate = useNavigate();
@@ -110,7 +111,7 @@ export default function Signup() {
     setEmailError("");
 
     try {
-      const res = await fetch("http://localhost:5000/api/auth/send-email-otp", {
+      const res = await fetch(`${API_URL}/api/auth/send-email-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: formData.email }),
@@ -137,7 +138,7 @@ export default function Signup() {
 
   const verifyEmailOtp = async () => {
     try {
-      const res = await fetch("http://localhost:5000/api/auth/check-otp", {
+      const res = await fetch(`${API_URL}/api/auth/check-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ identifier: formData.email, otp: emailOtp }),
@@ -169,14 +170,11 @@ export default function Signup() {
     setPhoneError("");
 
     try {
-      const res = await fetch(
-        "http://localhost:5000/api/auth/send-mobile-otp",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ phone: formData.phone }),
-        }
-      );
+      const res = await fetch(`${API_URL}/api/auth/send-mobile-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: formData.phone }),
+      });
       const data = await res.json();
 
       if (res.ok) {
@@ -199,7 +197,7 @@ export default function Signup() {
 
   const verifyMobileOtp = async () => {
     try {
-      const res = await fetch("http://localhost:5000/api/auth/check-otp", {
+      const res = await fetch(`${API_URL}/api/auth/check-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ identifier: formData.phone, otp: mobileOtp }),
@@ -244,7 +242,7 @@ export default function Signup() {
 
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:5000/api/auth/register", {
+      const res = await fetch(`${API_URL}/api/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -276,7 +274,7 @@ export default function Signup() {
   const googleLogin = useGoogleLogin({
     onSuccess: async (tokenResponse) => {
       try {
-        const res = await fetch("http://localhost:5000/api/auth/google", {
+        const res = await fetch(`${API_URL}/api/auth/google`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ token: tokenResponse.access_token }),

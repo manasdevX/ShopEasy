@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { showSuccess, showError } from "../utils/toast";
+const API_URL = import.meta.env.VITE_API_URL;
 
 export default function ForgotPassword() {
   const navigate = useNavigate();
@@ -43,7 +44,7 @@ export default function ForgotPassword() {
   const sendOtpApi = async () => {
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:5000/api/auth/forgot-password", {
+      const res = await fetch(`${API_URL}/api/auth/forgot-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ identifier }),
@@ -85,7 +86,7 @@ export default function ForgotPassword() {
 
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:5000/api/auth/reset-password", {
+      const res = await fetch(`${API_URL}/api/auth/reset-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ identifier, otp, password }),
