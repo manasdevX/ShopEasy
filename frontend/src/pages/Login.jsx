@@ -11,7 +11,6 @@ const API_URL = import.meta.env.VITE_API_URL;
 export default function Login() {
   const navigate = useNavigate();
 
-  // ✅ FIXED: Renamed 'identifier' to 'email' to match your Backend
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -31,7 +30,7 @@ export default function Login() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email, // ✅ SENDING 'email' key fixes the 400 Error
+          email,
           password,
         }),
       });
@@ -39,16 +38,17 @@ export default function Login() {
       const data = await res.json();
 
       if (!res.ok) {
-        // Handle specific backend error messages
         return showError(data.message || "Login failed");
       }
 
-      // Save user data
+      // ✅ CRITICAL: Save Token & User Data
       localStorage.setItem("token", data.token);
       localStorage.setItem("user", JSON.stringify(data.user));
 
       showSuccess("Login successful!");
-      navigate("/");
+
+      // ✅ CRITICAL FIX: Force Hard Refresh so Navbar updates immediately
+      window.location.href = "/";
     } catch (err) {
       console.error("Login Error:", err);
       showError("Server error. Please try again.");
@@ -70,6 +70,7 @@ export default function Login() {
         const data = await res.json();
 
         if (data.isNewUser) {
+          // If new user, go to Signup to finish registration
           navigate("/signup", {
             state: {
               name: data.name,
@@ -78,10 +79,14 @@ export default function Login() {
             },
           });
         } else {
+          // If existing user, Log them in
           localStorage.setItem("token", data.token);
           localStorage.setItem("user", JSON.stringify(data.user));
+
           showSuccess("Login successful!");
-          navigate("/");
+
+          // ✅ CRITICAL FIX: Force Hard Refresh here too
+          window.location.href = "/";
         }
       } catch (err) {
         console.error("Google Login Error:", err);
@@ -111,9 +116,9 @@ export default function Login() {
             {/* Email Input */}
             <input
               type="text"
-              name="email" // ✅ Added name attribute
+              name="email"
               placeholder="Email or Phone"
-              value={email} // ✅ Bound to email state
+              value={email}
               onChange={(e) => setEmail(e.target.value)}
               className={inputBase}
             />
