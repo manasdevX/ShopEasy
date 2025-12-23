@@ -2,15 +2,10 @@ import nodemailer from "nodemailer";
 
 const sendEmail = async (options) => {
   const transporter = nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 587, // <--- CHANGED: Use 587 instead of 465
-    secure: false, // <--- CHANGED: Must be false for port 587
+    service: "gmail", // <--- The "Magic" setting. No host/port needed.
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,
-    },
-    tls: {
-      rejectUnauthorized: false, // <--- ADDED: Helps prevent SSL errors on Render
     },
   });
 
@@ -23,9 +18,9 @@ const sendEmail = async (options) => {
 
   try {
     const info = await transporter.sendMail(message);
-    console.log("Email sent successfully: ", info.messageId);
+    console.log("✅ Email sent: ", info.messageId);
   } catch (error) {
-    console.error("NODEMAILER ERROR:", error);
+    console.error("❌ NODEMAILER ERROR:", error);
     throw error;
   }
 };
