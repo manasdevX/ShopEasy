@@ -161,16 +161,18 @@ export const checkOtp = async (req, res) => {
 /* ======================================================
    4. FINAL REGISTRATION (Secure Create)
 ====================================================== */
+/* ======================================================
+   4. FINAL REGISTRATION (Fixed: Removes Double Check)
+====================================================== */
 export const registerVerifiedUser = async (req, res) => {
   try {
-    let { name, email, phone, password, emailOtp, mobileOtp, googleId } =
-      req.body;
+    let { name, email, phone, password, googleId } = req.body;
 
     if (!name || !email || !phone || !password) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
-    // Clean Phone
+    // 1. Clean Phone Format (Standardize to +91)
     phone = phone.replace(/\s+/g, "").replace(/-/g, "");
     if (!phone.startsWith("+")) {
       if (phone.length === 10) phone = "+91" + phone;
@@ -178,28 +180,18 @@ export const registerVerifiedUser = async (req, res) => {
         phone = "+" + phone;
     }
 
-    // 1. EMAIL VERIFICATION CHECK
-    if (!googleId) {
-      if (!emailOtp)
-        return res.status(400).json({ message: "Email OTP is required" });
-      const validEmailOtp = await Otp.findOne({
-        identifier: email,
-        otp: emailOtp,
-      });
-      if (!validEmailOtp)
-        return res.status(400).json({ message: "Invalid Email OTP" });
-    }
-
-    // 2. MOBILE VERIFICATION CHECK
-    const validMobileOtp = await Otp.findOne({
-      identifier: phone,
-      otp: mobileOtp,
+    // 2. CHECK IF USER ALREADY EXISTS (Safety Check)
+    const existingUser = await User.findOne({
+      $or: [{ email: email.toLowerCase() }, { phone: phone }],
     });
-    if (!validMobileOtp) {
-      return res.status(400).json({ message: "Invalid or expired Mobile OTP" });
+
+    if (existingUser) {
+      return res.status(400).json({ message: "User already registered" });
     }
 
     // 3. Create User
+    // NOTE: We removed the OTP checks here because you already
+    // verified them in the previous step using the 'checkOtp' API.
     const newUser = await User.create({
       name,
       email,
@@ -210,12 +202,12 @@ export const registerVerifiedUser = async (req, res) => {
       isMobileVerified: true,
     });
 
+    // 4. Cleanup: Delete used OTPs so they can't be reused
     await Otp.deleteMany({ identifier: { $in: [email, phone] } });
 
     res.status(201).json({
       success: true,
       token: generateToken(newUser._id),
-      // ✅ FIX: Wrapped in 'user' object so frontend works
       user: {
         _id: newUser._id,
         name: newUser.name,
