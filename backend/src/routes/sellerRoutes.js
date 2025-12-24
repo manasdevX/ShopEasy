@@ -3,18 +3,35 @@ import {
   registerSeller,
   loginSeller,
   getSellerProfile,
-} from "../controllers/sellerController.js"; // 👈 Ensure this matches your file name (e.g. seller.controller.js or sellerController.js)
+  addBankDetails, // <--- Import the new bank details controller
+} from "../controllers/sellerController.js";
 
+// Import the Seller Middleware
+// Make sure this path matches your actual file name (auth.middleware.js vs authMiddleware.js)
 import { protectSeller } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
-// Public Routes (No Token Required)
+/* =========================================
+   PUBLIC ROUTES (No Token Required)
+========================================= */
+
+// Matches: POST /api/sellers/register
 router.post("/register", registerSeller);
+
+// Matches: POST /api/sellers/login
 router.post("/login", loginSeller);
 
-// Private Routes (Token Required)
-// This route is useful to verify if the 'protectSeller' middleware is working
+/* =========================================
+   PRIVATE ROUTES (Token Required)
+   (Seller must be logged in to access these)
+========================================= */
+
+// Matches: GET /api/sellers/profile
 router.get("/profile", protectSeller, getSellerProfile);
+
+// Matches: POST /api/sellers/bank-details
+// This handles the form submission from your Bank Verification page
+router.post("/bank-details", protectSeller, addBankDetails);
 
 export default router;

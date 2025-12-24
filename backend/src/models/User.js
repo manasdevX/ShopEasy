@@ -89,7 +89,7 @@ const userSchema = new mongoose.Schema(
     // --- ROLES & PERMISSIONS ---
     role: {
       type: String,
-      enum: ["user", "admin", "seller"], // ✅ Added 'seller' role here
+      enum: ["user", "admin", "seller"],
       default: "user",
     },
     isBlocked: {
@@ -200,4 +200,8 @@ userSchema.methods.changedPasswordAfter = function (JWTTimestamp) {
   return false;
 };
 
-export default mongoose.model("User", userSchema);
+// === CRITICAL FIX: PREVENT OVERWRITE ERROR ===
+// If mongoose.models.User exists, use it. Otherwise, create it.
+const User = mongoose.models.User || mongoose.model("User", userSchema);
+
+export default User;

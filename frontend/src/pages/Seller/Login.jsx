@@ -3,9 +3,10 @@ import { useState } from "react";
 import SellerNavbar from "../../components/Seller/SellerNavbar";
 import SellerFooter from "../../components/Seller/SellerFooter";
 import { useGoogleLogin } from "@react-oauth/google";
-import { Eye, EyeOff, Loader2 } from "lucide-react"; // Added Loader2 for consistency
-import toast from "react-hot-toast";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { showSuccess, showError } from "../../utils/toast";
+
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -17,7 +18,6 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // Use the exact same base style as Signup.jsx
   const inputBase = `w-full border px-4 py-2.5 rounded-lg outline-none transition-all duration-200 
     bg-white dark:bg-slate-800 text-slate-900 dark:text-white
     autofill:shadow-[inset_0_0_0px_1000px_#ffffff] dark:autofill:shadow-[inset_0_0_0px_1000px_#1e293b]
@@ -27,11 +27,10 @@ export default function Login() {
     e.preventDefault();
     let isValid = true;
 
-    // 1. Helper Regex Patterns
+    // Validation Logic
     const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
     const isValidPhone = (phone) => /^[0-9]{10}$/.test(phone);
-    
-    // 2. IDENTIFIER VERIFICATION (Email or Phone)
+
     if (!identifier) {
       showError("Email or phone is required");
       return;
@@ -43,7 +42,6 @@ export default function Login() {
         return;
       }
     } else {
-      // Strip everything except numbers to check 10-digit validity
       const cleanPhone = identifier.replace(/\D/g, "");
       if (!isValidPhone(cleanPhone)) {
         showError("Phone number must be exactly 10 digits");
@@ -55,7 +53,8 @@ export default function Login() {
 
     try {
       setLoading(true);
-      const res = await fetch("http://localhost:5000/api/auth/login", {
+
+      const res = await fetch(`${API_URL}/api/sellers/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: identifier, password }),
@@ -67,11 +66,14 @@ export default function Login() {
         return;
       }
 
-      localStorage.setItem("token", data.token);
-      localStorage.setItem("user", JSON.stringify(data));
+      // === SELLER-SPECIFIC KEYS ===
+      localStorage.setItem("sellerToken", data.token);
+      localStorage.setItem("sellerUser", JSON.stringify(data));
+
       showSuccess("Login successful!");
-      navigate("/Seller/register");
-    } catch {
+      navigate("/Seller/Dashboard");
+    } catch (error) {
+      console.error("Login Error:", error);
       showError("Server error. Please try again.");
     } finally {
       setLoading(false);
@@ -81,15 +83,20 @@ export default function Login() {
   const googleLogin = useGoogleLogin({
     onSuccess: async (tokenResponse) => {
       try {
-        const res = await fetch("http://localhost:5000/api/auth/google", {
+        const res = await fetch(`${API_URL}/api/auth/google`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token: tokenResponse.access_token }),
+          // === CRITICAL FIX: Add role: "seller" ===
+          body: JSON.stringify({
+            token: tokenResponse.access_token,
+            role: "seller",
+          }),
         });
         const data = await res.json();
 
         if (res.ok) {
           if (data.isNewUser) {
+            // New user flow: Send to Signup page with pre-filled data
             navigate("/Seller/signup", {
               state: {
                 name: data.name,
@@ -98,21 +105,29 @@ export default function Login() {
               },
             });
           } else {
-            localStorage.setItem("token", data.token);
-            localStorage.setItem("user", JSON.stringify(data.user));
+            // Existing user flow: Save token and redirect
+            localStorage.setItem("sellerToken", data.token);
+            // Ensure we save the user object correctly (some backends return it inside .user, others at root)
+            localStorage.setItem(
+              "sellerUser",
+              JSON.stringify(data.user || data)
+            );
+
             showSuccess("Login successful!");
             navigate("/Seller/Dashboard");
           }
+        } else {
+          showError(data.message || "Google Login Failed");
         }
       } catch {
-        showError("Google Login Failed");
+        showError("Google Login Connection Failed");
       }
     },
   });
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-[#030712] transition-colors duration-300 font-sans">
-      <SellerNavbar isLoggedIn={!!localStorage.getItem("token")} />
+      <SellerNavbar />
 
       <div className="flex-grow flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-xl p-8 border dark:border-slate-800">
@@ -124,7 +139,6 @@ export default function Login() {
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* IDENTIFIER */}
             <div>
               <input
                 type="text"
@@ -147,7 +161,6 @@ export default function Login() {
               )}
             </div>
 
-            {/* PASSWORD */}
             <div className="relative">
               <input
                 type={showPassword ? "text" : "password"}
@@ -170,24 +183,17 @@ export default function Login() {
               >
                 {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
               </button>
-              {passwordError && (
-                <p className="text-red-500 text-xs mt-1 ml-1">
-                  {passwordError}
-                </p>
-              )}
             </div>
 
             <div className="text-right">
               <Link
                 to="/Seller/forgot-password"
-                size="sm"
                 className="text-xs font-bold text-orange-500 hover:text-orange-600 transition-colors uppercase tracking-wider"
               >
                 Forgot password?
               </Link>
             </div>
 
-            {/* MAIN LOGIN BUTTON */}
             <button
               type="submit"
               disabled={loading}

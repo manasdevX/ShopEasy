@@ -30,6 +30,13 @@ const sellerSchema = new mongoose.Schema(
       required: [true, "Please enter your phone number"],
     },
 
+    // === GOOGLE AUTH FIELD (New) ===
+    googleId: {
+      type: String,
+      unique: true,
+      sparse: true, // Allows null values (for sellers who don't use Google)
+    },
+
     // --- BUSINESS DETAILS ---
     businessName: {
       type: String,
@@ -39,7 +46,7 @@ const sellerSchema = new mongoose.Schema(
     },
     businessType: {
       type: String,
-      required: [true, "Please select business type"], // e.g., "Private Limited", "Proprietorship"
+      required: [true, "Please select business type"],
       enum: [
         "Proprietorship",
         "Partnership",
@@ -50,15 +57,24 @@ const sellerSchema = new mongoose.Schema(
     },
     gstin: {
       type: String,
+      required: [true, "GSTIN is required"],
       unique: true,
-      sparse: true, // Allows nulls if GST is not applicable yet
+      uppercase: true,
+      trim: true,
     },
     address: {
-      street: { type: String, required: true },
-      city: { type: String, required: true },
-      state: { type: String, required: true },
-      pincode: { type: String, required: true },
-      country: { type: String, default: "India" },
+      type: String,
+      required: [true, "Address is required"],
+    },
+
+    // --- BANK DETAILS ---
+    bankDetails: {
+      accountHolder: { type: String },
+      accountNumber: { type: String },
+      ifscCode: { type: String },
+      bankName: { type: String },
+      branchName: { type: String },
+      isVerified: { type: Boolean, default: false },
     },
 
     // --- STATUS & ROLES ---
@@ -109,4 +125,7 @@ sellerSchema.methods.matchPassword = async function (enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };
 
-export default mongoose.model("Seller", sellerSchema);
+// Check if "Seller" is already defined; if so, use it. If not, define it.
+const Seller = mongoose.models.Seller || mongoose.model("Seller", sellerSchema);
+
+export default Seller;
