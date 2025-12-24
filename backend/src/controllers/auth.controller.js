@@ -1,6 +1,6 @@
 import User from "../models/User.js"; // ✅ Fixed Casing (Capital U)
 import Seller from "../models/seller.js"; // ✅ Import Seller Model
-import Otp from "../models/otp.js";
+import Otp from "../models/Otp.js";
 import generateToken from "../utils/generateToken.js";
 import crypto from "crypto";
 import axios from "axios";
