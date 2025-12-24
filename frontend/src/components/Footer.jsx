@@ -66,11 +66,11 @@ export default function Footer() {
               
               <div className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-400 pl-1">
                 <Phone size={16} className="text-orange-500" />
-                <span>+1 (234) 567-890</span>
+                <span>+91 9201630063</span>
               </div>
               <div className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-400 pl-1">
                 <MapPin size={16} className="text-orange-500" />
-                <span>New York, NY 10001</span>
+                <span>Prayagraj , UP</span>
               </div>
             </div>
           </div>
