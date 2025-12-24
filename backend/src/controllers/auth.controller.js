@@ -1,45 +1,50 @@
-import User from "../models/User.js";
-import Otp from "../models/Otp.js";
+import User from "../models/User.js"; // ✅ Fixed Casing (Capital U)
+import Seller from "../models/seller.js"; // ✅ Import Seller Model
+import Otp from "../models/otp.js";
 import generateToken from "../utils/generateToken.js";
 import crypto from "crypto";
 import axios from "axios";
 import sendEmail from "../utils/emailHelper.js";
 import sendSMS from "../utils/sendSMS.js";
-import { OAuth2Client } from "google-auth-library";
-
-// Initialize Google Client
-const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 /* ======================================================
-   1. SEND EMAIL OTP (Updated: Case-Insensitive Check)
+   1. SEND EMAIL OTP (Role-Based Check)
 ====================================================== */
 export const sendEmailOtp = async (req, res) => {
   try {
-    const { email } = req.body;
+    const { email, type } = req.body; // 'type' can be 'seller' or 'user' (default)
 
     if (!email) return res.status(400).json({ message: "Email is required" });
 
-    // 1. Normalize Email (Lowercase) for search
     const normalizedEmail = email.toLowerCase();
 
-    // 2. Check if Email is already registered
-    const existingUser = await User.findOne({ email: normalizedEmail });
-
-    if (existingUser) {
-      return res.status(400).json({ message: "Email already registered." });
+    // --- SEPARATION LOGIC ---
+    // If checking for a SELLER, look in Seller DB.
+    // If checking for a USER, look in User DB.
+    if (type === "seller") {
+      const existingSeller = await Seller.findOne({ email: normalizedEmail });
+      if (existingSeller) {
+        return res
+          .status(400)
+          .json({ message: "Email already registered as Seller." });
+      }
+    } else {
+      const existingUser = await User.findOne({ email: normalizedEmail });
+      if (existingUser) {
+        return res.status(400).json({ message: "Email already registered." });
+      }
     }
 
-    // 3. Generate OTP
+    // Generate & Save OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // 4. Save OTP
     await Otp.findOneAndUpdate(
-      { identifier: email }, // Keep original casing for OTP identifier if you prefer
+      { identifier: email },
       { otp: otp, type: "email" },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
-    // 5. Send Email
+    // Send Email
     const message = `Your ShopEasy verification code is: ${otp}\n\nThis code expires in 5 minutes.`;
     await sendEmail({
       email: email,
@@ -55,29 +60,27 @@ export const sendEmailOtp = async (req, res) => {
 };
 
 /* ======================================================
-   2. SEND MOBILE OTP (Updated: Smarter Duplicate Check)
+   2. SEND MOBILE OTP (Role-Based Check)
 ====================================================== */
 export const sendMobileOtp = async (req, res) => {
   try {
-    let { phone } = req.body;
+    let { phone, type } = req.body; // 'type' can be 'seller' or 'user'
+
     if (!phone)
       return res.status(400).json({ message: "Phone number required" });
 
-    // 1. Clean the input first
+    // 1. Clean the input
     const cleaned = phone.replace(/\s+/g, "").replace(/-/g, "");
 
     // 2. Determine Formats to Search
     let searchCriteria = [];
     let formattedPhone = cleaned;
 
-    // Check if it's just digits (e.g. 9690886564)
     if (/^[0-9]+$/.test(cleaned)) {
       searchCriteria.push({ phone: cleaned });
       searchCriteria.push({ phone: "+91" + cleaned });
       if (cleaned.length === 10) formattedPhone = "+91" + cleaned;
-    }
-    // Check if it already has + (e.g. +919690...)
-    else if (cleaned.startsWith("+")) {
+    } else if (cleaned.startsWith("+")) {
       searchCriteria.push({ phone: cleaned });
       if (cleaned.startsWith("+91") && cleaned.length === 13) {
         searchCriteria.push({ phone: cleaned.slice(3) });
@@ -87,13 +90,21 @@ export const sendMobileOtp = async (req, res) => {
       searchCriteria.push({ phone: cleaned });
     }
 
-    // 3. Check for Existing User
-    const existingUser = await User.findOne({ $or: searchCriteria });
-
-    if (existingUser) {
-      return res
-        .status(400)
-        .json({ message: "Phone number already registered" });
+    // 3. CHECK FOR EXISTING (Role Based)
+    if (type === "seller") {
+      const existingSeller = await Seller.findOne({ $or: searchCriteria });
+      if (existingSeller) {
+        return res
+          .status(400)
+          .json({ message: "Phone already registered as Seller" });
+      }
+    } else {
+      const existingUser = await User.findOne({ $or: searchCriteria });
+      if (existingUser) {
+        return res
+          .status(400)
+          .json({ message: "Phone number already registered" });
+      }
     }
 
     // 4. Generate & Save OTP
@@ -129,7 +140,7 @@ export const sendMobileOtp = async (req, res) => {
 };
 
 /* ======================================================
-   3. CHECK OTP (For UI Validation Only)
+   3. CHECK OTP (Generic)
 ====================================================== */
 export const checkOtp = async (req, res) => {
   try {
@@ -159,10 +170,8 @@ export const checkOtp = async (req, res) => {
 };
 
 /* ======================================================
-   4. FINAL REGISTRATION (Secure Create)
-====================================================== */
-/* ======================================================
-   4. FINAL REGISTRATION (Fixed: Removes Double Check)
+   4. FINAL REGISTRATION (For CUSTOMERS/USERS)
+   (Seller registration is in sellerController.js)
 ====================================================== */
 export const registerVerifiedUser = async (req, res) => {
   try {
@@ -180,7 +189,7 @@ export const registerVerifiedUser = async (req, res) => {
         phone = "+" + phone;
     }
 
-    // 2. CHECK IF USER ALREADY EXISTS (Safety Check)
+    // 2. CHECK IF USER ALREADY EXISTS (Double Check)
     const existingUser = await User.findOne({
       $or: [{ email: email.toLowerCase() }, { phone: phone }],
     });
@@ -190,8 +199,6 @@ export const registerVerifiedUser = async (req, res) => {
     }
 
     // 3. Create User
-    // NOTE: We removed the OTP checks here because you already
-    // verified them in the previous step using the 'checkOtp' API.
     const newUser = await User.create({
       name,
       email,
@@ -202,7 +209,7 @@ export const registerVerifiedUser = async (req, res) => {
       isMobileVerified: true,
     });
 
-    // 4. Cleanup: Delete used OTPs so they can't be reused
+    // 4. Cleanup OTPs
     await Otp.deleteMany({ identifier: { $in: [email, phone] } });
 
     res.status(201).json({
@@ -225,7 +232,7 @@ export const registerVerifiedUser = async (req, res) => {
 };
 
 /* ======================================================
-   5. LOGIN USER (CRITICAL FIX APPLIED HERE)
+   5. LOGIN USER (For CUSTOMERS/USERS)
 ====================================================== */
 export const loginUser = async (req, res) => {
   try {
@@ -260,14 +267,12 @@ export const loginUser = async (req, res) => {
     if (!isMatch)
       return res.status(401).json({ message: "Invalid credentials" });
 
-    // ✅ FIX: Structuring the response correctly
-    // Frontend expects data.user.name, so we MUST send a 'user' object.
     res.status(200).json({
       success: true,
       token: generateToken(user._id),
       user: {
         _id: user._id,
-        name: user.name, // <--- This will fix the "Name missing" issue
+        name: user.name,
         email: user.email,
         phone: user.phone,
         role: user.role,
@@ -280,26 +285,38 @@ export const loginUser = async (req, res) => {
 };
 
 /* ======================================================
-   6. GOOGLE AUTH (Fixed: Uses Access Token)
+   6. GOOGLE AUTH (For USERS & SELLERS)
 ====================================================== */
 export const googleAuth = async (req, res) => {
   try {
-    const { token } = req.body; // Access Token
+    const { token, role } = req.body; // <--- Extract Role
 
+    // Verify Token
     const googleRes = await axios.get(
       "https://www.googleapis.com/oauth2/v3/userinfo",
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
+      { headers: { Authorization: `Bearer ${token}` } }
     );
 
-    const { sub: googleId, name, email } = googleRes.data;
+    const { sub: googleId, name, email, picture } = googleRes.data;
 
-    let user = await User.findOne({ email });
+    // === CRITICAL FIX: SELECT CORRECT MODEL ===
+    let Model = User;
+    if (role === "seller") {
+      Model = Seller;
+    }
+
+    // Check DB
+    let user = await Model.findOne({ email });
 
     if (user) {
+      // Login Existing User/Seller
+
+      // Optional: Link GoogleID if not linked
+      if (!user.googleId) {
+        user.googleId = googleId;
+        await user.save();
+      }
+
       return res.status(200).json({
         success: true,
         token: generateToken(user._id),
@@ -308,10 +325,12 @@ export const googleAuth = async (req, res) => {
           name: user.name,
           email: user.email,
           phone: user.phone,
+          role: user.role,
         },
         isNewUser: false,
       });
     } else {
+      // New User - Send back details for Signup Form
       return res.status(200).json({
         success: true,
         isNewUser: true,
@@ -328,7 +347,7 @@ export const googleAuth = async (req, res) => {
 };
 
 /* ======================================================
-   7. FORGOT PASSWORD (Email OR Phone)
+   7. FORGOT PASSWORD (For CUSTOMERS)
 ====================================================== */
 export const sendForgotPasswordOTP = async (req, res) => {
   try {
@@ -338,7 +357,6 @@ export const sendForgotPasswordOTP = async (req, res) => {
       return res.status(400).json({ message: "Email or Phone is required" });
     }
 
-    // 1. DETECT TYPE (Email or Phone)
     const isNumber = /^[0-9]+$/.test(identifier);
     let query = {};
     let isPhone = false;
@@ -353,21 +371,18 @@ export const sendForgotPasswordOTP = async (req, res) => {
       query = { email: identifier };
     }
 
-    // 2. FIND USER
     const user = await User.findOne(query);
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    // 3. GENERATE OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
     user.resetPasswordOtp = crypto
       .createHash("sha256")
       .update(otp)
       .digest("hex");
-    user.resetPasswordExpire = Date.now() + 10 * 60 * 1000; // 10 mins
+    user.resetPasswordExpire = Date.now() + 10 * 60 * 1000;
     await user.save({ validateBeforeSave: false });
 
-    // 4. SEND OTP
     if (isPhone) {
       try {
         if (process.env.TWILIO_SID) {
@@ -411,7 +426,6 @@ export const resetPasswordWithOTP = async (req, res) => {
   try {
     const hashedOtp = crypto.createHash("sha256").update(otp).digest("hex");
 
-    // Smart search logic again
     const isNumber = /^[0-9]+$/.test(identifier);
     let query = {};
     if (isNumber) {

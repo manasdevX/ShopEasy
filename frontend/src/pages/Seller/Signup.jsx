@@ -2,10 +2,11 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
 import { useGoogleLogin } from "@react-oauth/google";
 import { Eye, EyeOff, CheckCircle, Loader2 } from "lucide-react";
-import toast from "react-hot-toast";
 import { showSuccess, showError } from "../../utils/toast";
 import SellerFooter from "../../components/Seller/SellerFooter";
 import SellerNavbar from "../../components/Seller/SellerNavbar";
+
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export default function Signup() {
   const navigate = useNavigate();
@@ -102,7 +103,6 @@ export default function Signup() {
 
   // --- EMAIL FLOW ---
   const sendEmailOtp = async () => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(formData.email))
       return showError("Invalid email address");
 
@@ -110,17 +110,17 @@ export default function Signup() {
     setEmailError("");
 
     try {
-      const res = await fetch("http://localhost:5000/api/auth/send-email-otp", {
+      const res = await fetch(`${API_URL}/api/auth/send-email-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: formData.email }),
+        // UPDATED: Added type: 'seller' to isolate from User DB
+        body: JSON.stringify({ email: formData.email, type: "seller" }),
       });
       const data = await res.json();
 
       if (res.ok) {
         setIsEmailSent(true);
         setEmailTimer(30);
-        // TOAST: Dynamic message for Resend vs First Send
         showSuccess(
           isEmailSent ? "OTP Resent to Email!" : "OTP sent to Email!"
         );
@@ -137,14 +137,13 @@ export default function Signup() {
 
   const verifyEmailOtp = async () => {
     try {
-      const res = await fetch("http://localhost:5000/api/auth/check-otp", {
+      const res = await fetch(`${API_URL}/api/auth/check-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ identifier: formData.email, otp: emailOtp }),
       });
       if (res.ok) {
         setIsEmailVerified(true);
-        // TOAST: Confirmation
         showSuccess("Email Verified!");
       } else {
         showError("Invalid Email OTP");
@@ -156,33 +155,28 @@ export default function Signup() {
 
   // --- MOBILE FLOW ---
   const sendMobileOtp = async () => {
-    const emailRegex = /^[6-9]\d{9}$/;
     if (!phoneRegex.test(formData.phone))
       return showError("Invalid phone number");
 
     if (!formData.phone) return showError("Please enter phone first");
 
-    // LOGIC: Check if already verified (safety check)
     if (isMobileVerified) return showSuccess("Phone already verified!");
 
     setVerifyingMobile(true);
     setPhoneError("");
 
     try {
-      const res = await fetch(
-        "http://localhost:5000/api/auth/send-mobile-otp",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ phone: formData.phone }),
-        }
-      );
+      const res = await fetch(`${API_URL}/api/auth/send-mobile-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // UPDATED: Added type: 'seller' to isolate from User DB
+        body: JSON.stringify({ phone: formData.phone, type: "seller" }),
+      });
       const data = await res.json();
 
       if (res.ok) {
         setIsMobileSent(true);
         setMobileTimer(30);
-        // TOAST: Dynamic message
         showSuccess(
           isMobileSent ? "OTP Resent to Mobile!" : "OTP sent to Mobile!"
         );
@@ -199,14 +193,13 @@ export default function Signup() {
 
   const verifyMobileOtp = async () => {
     try {
-      const res = await fetch("http://localhost:5000/api/auth/check-otp", {
+      const res = await fetch(`${API_URL}/api/auth/check-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ identifier: formData.phone, otp: mobileOtp }),
       });
       if (res.ok) {
         setIsMobileVerified(true);
-        // TOAST: Confirmation
         showSuccess("Mobile Verified!");
       } else {
         showError("Invalid Mobile OTP");
@@ -216,70 +209,49 @@ export default function Signup() {
     }
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
 
-    // 1. Password Verification Logic
+    // 1. Password Validation
     const password = formData.password;
     const isValidPassword = (pass) =>
       /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/.test(
         pass
       );
 
-    if (!password) {
-      return showError("Password is required");
-    }
-
     if (!isValidPassword(password)) {
       return showError(
-        "Password must be 8+ characters with uppercase, lowercase, a number, and a special character (@$!%*?&)"
+        "Password must be 8+ chars (Uppercase, Lowercase, Number, Special Char)"
       );
     }
 
-    // TOAST: Logic to check what is missing before allowing submit
+    // 2. OTP Validation
     if (!isEmailVerified)
       return showError("Please verify your email address first");
     if (!isMobileVerified)
       return showError("Please verify your phone number first");
 
-    setLoading(true);
-    try {
-      const res = await fetch("http://localhost:5000/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...formData,
-          emailOtp,
-          mobileOtp,
-          googleId,
-        }),
-      });
-      const data = await res.json();
-
-      if (res.ok) {
-        localStorage.setItem("token", data.token);
-        localStorage.setItem("user", JSON.stringify(data));
-        // TOAST: Success
-        showSuccess("Welcome to ShopEasy! Registration complete.");
-        navigate("/Seller/Dashboard");
-      } else {
-        showError(data.message || "Registration failed");
-      }
-    } catch {
-      showError("Network Error: Registration Failed");
-    } finally {
-      setLoading(false);
-    }
+    // 3. Move to Step 2 (Don't call API yet)
+    navigate("/Seller/register", {
+      state: {
+        ...formData,
+        googleId,
+      },
+    });
   };
 
   // --- GOOGLE LOGIN ---
   const googleLogin = useGoogleLogin({
     onSuccess: async (tokenResponse) => {
       try {
-        const res = await fetch("http://localhost:5000/api/auth/google", {
+        const res = await fetch(`${API_URL}/api/auth/google`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token: tokenResponse.access_token }),
+          // === CRITICAL FIX: Add role: "seller" ===
+          body: JSON.stringify({
+            token: tokenResponse.access_token,
+            role: "seller",
+          }),
         });
         const data = await res.json();
 
@@ -292,13 +264,17 @@ export default function Signup() {
             }));
             setGoogleId(data.googleId);
             setIsEmailVerified(true);
-            // TOAST: Specific Google Signup message
             showSuccess("Email Verified!");
           } else {
-            localStorage.setItem("token", data.token);
-            localStorage.setItem("user", JSON.stringify(data.user));
+            // Existing seller login via Google
+            localStorage.setItem("sellerToken", data.token);
+            // Ensure we save the user object correctly (handles both wrapped and unwrapped responses)
+            localStorage.setItem(
+              "sellerUser",
+              JSON.stringify(data.user || data)
+            );
             showSuccess("Login successful!");
-            navigate("/Seller/register");
+            navigate("/Seller/Dashboard");
           }
         } else {
           showError(data.message);
@@ -337,6 +313,7 @@ export default function Signup() {
               required
             />
 
+            {/* EMAIL INPUT */}
             <div className="space-y-3">
               <div className="relative flex items-center">
                 <input
@@ -350,7 +327,7 @@ export default function Signup() {
                     isEmailVerified
                       ? "border-green-500 ring-1 ring-green-500/20"
                       : "focus:ring-2 focus:ring-orange-400"
-                  }`}
+                  } ${emailError ? "border-red-500" : ""}`}
                   required
                 />
                 <div className="absolute right-2 flex items-center">
@@ -376,11 +353,13 @@ export default function Signup() {
                   )}
                 </div>
               </div>
+              {/* Error Message */}
               {emailError && (
                 <p className="text-red-500 text-xs font-medium ml-1">
                   {emailError}
                 </p>
               )}
+              {/* OTP Input */}
               {isEmailSent && !isEmailVerified && !googleId && (
                 <div className="flex gap-2 p-2 bg-gray-50 dark:bg-slate-800/50 rounded-lg border border-dashed dark:border-slate-700 animate-in zoom-in-95">
                   <input
@@ -401,6 +380,7 @@ export default function Signup() {
               )}
             </div>
 
+            {/* PHONE INPUT */}
             <div className="space-y-3">
               <div className="relative flex items-center">
                 <input
@@ -414,7 +394,7 @@ export default function Signup() {
                     isMobileVerified
                       ? "border-green-500 ring-1 ring-green-500/20"
                       : "focus:ring-2 focus:ring-orange-400"
-                  }`}
+                  } ${phoneError ? "border-red-500" : ""}`}
                   required
                 />
                 <div className="absolute right-2 flex items-center">
@@ -465,6 +445,7 @@ export default function Signup() {
               )}
             </div>
 
+            {/* PASSWORD INPUT */}
             <div className="relative">
               <input
                 type={showPassword ? "text" : "password"}

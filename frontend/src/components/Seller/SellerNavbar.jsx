@@ -11,16 +11,17 @@ import {
   ListOrdered,
   LogOut,
   Settings,
-  User, // <--- Ensure this is imported for the menu
+  User,
 } from "lucide-react";
 
 export default function SellerNavbar({ isLoggedIn }) {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // 1. Get user data safely
-  const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
-  const user = storedUser;
+  // 1. Get SELLER data safely (Fixed key: sellerUser)
+  const storedUser = JSON.parse(localStorage.getItem("sellerUser") || "{}");
+  // If the stored data has a 'user' object inside (common in some auth responses), use that, otherwise use the root
+  const user = storedUser.user || storedUser;
 
   const [isDark, setIsDark] = useState(
     document.documentElement.classList.contains("dark")
@@ -31,11 +32,11 @@ export default function SellerNavbar({ isLoggedIn }) {
     setIsDark(!isDark);
   };
 
-  // 2. Define handleLogout
+  // 2. Define handleLogout (Fixed keys: sellerToken, sellerUser)
   const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    window.location.href = "/login"; // Force refresh to clear states
+    localStorage.removeItem("sellerToken");
+    localStorage.removeItem("sellerUser");
+    navigate("/Seller/Landing"); // Redirect to Seller Landing page
   };
 
   const navLinks = [
@@ -54,11 +55,12 @@ export default function SellerNavbar({ isLoggedIn }) {
   ].includes(location.pathname);
 
   const steps = [
-    { name: "EMAIL & PASSWORD", path: "/Seller/register" },
-    { name: "BUSINESS DETAILS", path: "/Seller/business-details" },
+    { name: "EMAIL & PASSWORD", path: "/Seller/register" }, // Note: This mapping depends on your route logic
+    { name: "BUSINESS DETAILS", path: "/Seller/register" },
     { name: "BANK VERIFICATION", path: "/Seller/bank-details" },
   ];
 
+  // Simple logic to highlight current step based on path
   const currentStepIndex = steps.findIndex((s) => s.path === location.pathname);
 
   return (
@@ -90,7 +92,7 @@ export default function SellerNavbar({ isLoggedIn }) {
                 {steps.map((step, index) => (
                   <React.Fragment key={step.name}>
                     <div className="flex items-center gap-3">
-                      {/* Step Icon (Circle with Check or Index) */}
+                      {/* Step Icon */}
                       <div
                         className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
                           index <= currentStepIndex
@@ -146,7 +148,7 @@ export default function SellerNavbar({ isLoggedIn }) {
                 ))}
               </div>
             ) : (
-              /* DEFAULT SEARCH BAR (Visible on Dashboard/Inventory/etc) */
+              /* DEFAULT SEARCH BAR */
               !["/Seller/login", "/login"].includes(location.pathname) && (
                 <div className="w-full relative group">
                   <Search
@@ -185,10 +187,9 @@ export default function SellerNavbar({ isLoggedIn }) {
             {isLoggedIn ? (
               <div className="relative group">
                 <button className="flex items-center gap-1 hover:text-orange-500 transition-colors">
-                  {/* Full User Name in Avatar Style */}
-                  <div className="flex items-center gap-1 hover:text-orange-500 transition-colors">
+                  <div className="flex items-center gap-1 hover:text-orange-500 transition-colors font-bold text-sm text-slate-700 dark:text-slate-200">
                     <User size={18} />
-                    {user?.name?.split(" ")[0] || "Account"}
+                    {user?.name?.split(" ")[0] || "Seller"}
                   </div>
                   <ChevronDown
                     size={16}
@@ -200,24 +201,26 @@ export default function SellerNavbar({ isLoggedIn }) {
                 <div className="absolute top-full left-1/2 -translate-x-1/2 w-52 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 rounded-xl overflow-hidden shadow-xl border border-gray-100 dark:border-gray-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
                   <Link
                     to="/Seller/Dashboard"
-                    className="block px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+                    className="block px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700 transition font-medium"
                   >
                     My Profile
                   </Link>
                   <div className="border-t border-gray-100 dark:border-gray-700" />
-                  <Link
-                    to="/Seller/Landing"
-                    className="w-full text-left px-4 py-2.5 hover:bg-red-50 dark:hover:bg-red-900/20 transition flex items-center gap-2 text-red-500"
+
+                  {/* Logout Button */}
+                  <button
+                    onClick={handleLogout}
+                    className="w-full text-left px-4 py-2.5 hover:bg-red-50 dark:hover:bg-red-900/20 transition flex items-center gap-2 text-red-500 font-medium"
                   >
                     <LogOut size={16} />
                     Logout
-                  </Link>
+                  </button>
                 </div>
               </div>
             ) : (
               <Link
                 to="/Seller/login"
-                className="flex items-center gap-1 hover:text-orange-500 transition-colors"
+                className="flex items-center gap-1 hover:text-orange-500 transition-colors font-bold text-sm"
               >
                 <User size={18} />
                 Login

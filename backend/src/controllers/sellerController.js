@@ -1,4 +1,4 @@
-import Seller from "../models/seller.js"; // Ensure file name matches your model (Capital S usually)
+import Seller from "../models/seller.js";
 import jwt from "jsonwebtoken";
 
 // --- Helper: Generate JWT ---
@@ -17,11 +17,12 @@ export const registerSeller = async (req, res) => {
       name,
       email,
       password,
-      businessName,
       phone,
+      businessName,
       businessType,
       gstin,
       address,
+      googleId, // <--- 1. Extract googleId from request
     } = req.body;
 
     // 1. Validation
@@ -32,6 +33,7 @@ export const registerSeller = async (req, res) => {
       !businessName ||
       !phone ||
       !businessType ||
+      !gstin ||
       !address
     ) {
       return res
@@ -45,7 +47,7 @@ export const registerSeller = async (req, res) => {
       return res.status(400).json({ message: "Seller email already exists" });
     }
 
-    // 3. Check if Business Name is taken (Optional but recommended)
+    // 3. Check if Business Name is taken
     const businessExists = await Seller.findOne({ businessName });
     if (businessExists) {
       return res
@@ -54,7 +56,6 @@ export const registerSeller = async (req, res) => {
     }
 
     // 4. Create Seller
-    // NOTE: We pass the 'password' directly. The Seller Model's pre('save') hook handles the hashing.
     const seller = await Seller.create({
       name,
       email,
@@ -64,6 +65,7 @@ export const registerSeller = async (req, res) => {
       businessType,
       gstin,
       address,
+      googleId, // <--- 2. Save googleId to database
     });
 
     if (seller) {
@@ -79,6 +81,7 @@ export const registerSeller = async (req, res) => {
       res.status(400).json({ message: "Invalid seller data" });
     }
   } catch (error) {
+    console.error("REGISTER ERROR:", error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -87,34 +90,62 @@ export const registerSeller = async (req, res) => {
 // @route   POST /api/sellers/login
 // @access  Public
 export const loginSeller = async (req, res) => {
+  console.log("👉 Login Attempt:", req.body);
+
   try {
-    const { email, password } = req.body;
+    const { email: identifier, password } = req.body;
 
-    // 1. Find Seller & explicitly select password (since it's hidden by default)
-    const seller = await Seller.findOne({ email }).select("+password");
-
-    // 2. Check if seller exists & Match Password
-    // We use the method defined in the Seller model
-    if (seller && (await seller.matchPassword(password))) {
-      // 3. Check if account is active (Optional security)
-      if (!seller.isActive) {
-        return res
-          .status(403)
-          .json({ message: "Account is suspended/inactive" });
-      }
-
-      res.json({
-        _id: seller._id,
-        name: seller.name,
-        email: seller.email,
-        businessName: seller.businessName,
-        role: seller.role,
-        token: generateToken(seller._id),
-      });
-    } else {
-      res.status(401).json({ message: "Invalid email or password" });
+    if (!identifier || !password) {
+      return res
+        .status(400)
+        .json({ message: "Please enter email/phone and password" });
     }
+
+    // 1. Find Seller
+    console.log("🔍 Searching DB for:", identifier);
+    const seller = await Seller.findOne({
+      $or: [{ email: identifier }, { phone: identifier }],
+    }).select("+password");
+
+    if (!seller) {
+      console.log("❌ Seller not found.");
+      return res
+        .status(401)
+        .json({ message: "Invalid email/phone or password" });
+    }
+    console.log("✅ Seller found:", seller.email);
+
+    // 2. Match Password
+    console.log("🔐 Checking Password...");
+    const isMatch = await seller.matchPassword(password);
+
+    if (!isMatch) {
+      console.log("❌ Password incorrect.");
+      return res
+        .status(401)
+        .json({ message: "Invalid email/phone or password" });
+    }
+    console.log("✅ Password Matched!");
+
+    // 3. Generate Token
+    console.log("🎟️ Generating Token...");
+    if (!process.env.JWT_SECRET) {
+      throw new Error("JWT_SECRET is missing in .env file");
+    }
+
+    const token = generateToken(seller._id);
+
+    res.json({
+      _id: seller._id,
+      name: seller.name,
+      email: seller.email,
+      businessName: seller.businessName,
+      role: seller.role,
+      token: token,
+    });
+    console.log("🚀 Login Successful. Response sent.");
   } catch (error) {
+    console.error("🔥 LOGIN CRASH ERROR:", error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -125,6 +156,12 @@ export const loginSeller = async (req, res) => {
 export const getSellerProfile = async (req, res) => {
   try {
     // req.seller is set by the 'protectSeller' middleware
+    if (!req.seller) {
+      return res
+        .status(401)
+        .json({ message: "Not authorized, no seller data found" });
+    }
+
     const seller = await Seller.findById(req.seller._id);
 
     if (seller) {
@@ -137,11 +174,55 @@ export const getSellerProfile = async (req, res) => {
         phone: seller.phone,
         role: seller.role,
         isVerified: seller.isVerified,
+        bankDetails: seller.bankDetails, // Return bank details in profile
       });
     } else {
       res.status(404).json({ message: "Seller not found" });
     }
   } catch (error) {
+    console.error("PROFILE ERROR:", error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Add/Update Bank Details
+// @route   POST /api/sellers/bank-details
+// @access  Private (Seller)
+export const addBankDetails = async (req, res) => {
+  try {
+    const { accountHolder, accountNumber, ifscCode, bankName, branchName } =
+      req.body;
+
+    if (!accountHolder || !accountNumber || !ifscCode) {
+      return res
+        .status(400)
+        .json({ message: "Please provide all bank details" });
+    }
+
+    // req.seller is set by the middleware
+    const seller = await Seller.findById(req.seller._id);
+
+    if (seller) {
+      seller.bankDetails = {
+        accountHolder,
+        accountNumber,
+        ifscCode,
+        bankName: bankName || "",
+        branchName: branchName || "",
+        isVerified: true, // Assuming instant verification for now
+      };
+
+      await seller.save();
+
+      res.status(200).json({
+        message: "Bank details updated successfully",
+        bankDetails: seller.bankDetails,
+      });
+    } else {
+      res.status(404).json({ message: "Seller not found" });
+    }
+  } catch (error) {
+    console.error("BANK DETAILS ERROR:", error);
     res.status(500).json({ message: error.message });
   }
 };

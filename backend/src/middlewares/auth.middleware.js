@@ -1,11 +1,12 @@
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
-import Seller from "../models/seller.js"; // ✅ Import Seller Model
+import Seller from "../models/seller.js";
 
-// ======================================================
-// 1. PROTECT (For Customers & Admins)
-//    - Verifies token against 'User' collection
-// ======================================================
+/* ======================================================
+   1. PROTECT (For Customers & Admins)
+      - Verifies token against 'User' collection
+      - Checks if user exists and is not blocked
+====================================================== */
 export const protect = async (req, res, next) => {
   let token;
 
@@ -51,10 +52,11 @@ export const protect = async (req, res, next) => {
   }
 };
 
-// ======================================================
-// 2. PROTECT SELLER (For Vendors Only)
-//    - Verifies token against 'Seller' collection
-// ======================================================
+/* ======================================================
+   2. PROTECT SELLER (For Vendors Only)
+      - Verifies token against 'Seller' collection
+      - Checks if seller exists and is active
+====================================================== */
 export const protectSeller = async (req, res, next) => {
   let token;
 
@@ -80,7 +82,7 @@ export const protectSeller = async (req, res, next) => {
       if (!req.seller.isActive) {
         return res
           .status(403)
-          .json({ message: "Seller account is inactive/suspended." });
+          .json({ message: "Seller account is inactive or suspended." });
       }
 
       next();
@@ -102,12 +104,13 @@ export const protectSeller = async (req, res, next) => {
   }
 };
 
-// ======================================================
-// 3. ADMIN (Role Check)
-//    - Must be placed AFTER 'protect'
-// ======================================================
+/* ======================================================
+   3. ADMIN (Role Check)
+      - Must be placed AFTER 'protect' middleware
+====================================================== */
 export const admin = (req, res, next) => {
-  if (req.user && req.user.isAdmin) {
+  // Check against the role string, as "isAdmin" virtual might not be available in lean queries
+  if (req.user && (req.user.role === 'admin' || req.user.isAdmin)) {
     next();
   } else {
     res.status(403).json({ message: "Not authorized as an admin" });
