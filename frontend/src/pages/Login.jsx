@@ -16,7 +16,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // ================= LOGIN =================
+  /* ================= EMAIL / PASSWORD LOGIN ================= */
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -29,10 +29,7 @@ export default function Login() {
       const res = await fetch(`${API_URL}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          password,
-        }),
+        body: JSON.stringify({ email, password }),
       });
 
       const data = await res.json();
@@ -41,13 +38,10 @@ export default function Login() {
         return showError(data.message || "Login failed");
       }
 
-      // ✅ CRITICAL: Save Token & User Data
       localStorage.setItem("token", data.token);
       localStorage.setItem("user", JSON.stringify(data.user));
 
       showSuccess("Login successful!");
-
-      // ✅ CRITICAL FIX: Force Hard Refresh so Navbar updates immediately
       window.location.href = "/";
     } catch (err) {
       console.error("Login Error:", err);
@@ -57,20 +51,27 @@ export default function Login() {
     }
   };
 
-  // ================= GOOGLE LOGIN =================
+  /* ================= GOOGLE LOGIN (FIXED) ================= */
   const googleLogin = useGoogleLogin({
+    flow: "implicit", // 🔥 CRITICAL FIX (NO redirect)
+    scope: "openid profile email",
     onSuccess: async (tokenResponse) => {
       try {
         const res = await fetch(`${API_URL}/api/auth/google`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token: tokenResponse.access_token }),
+          body: JSON.stringify({
+            token: tokenResponse.access_token, // ✅ ACCESS TOKEN ONLY
+          }),
         });
 
         const data = await res.json();
 
+        if (!res.ok) {
+          return showError(data.message || "Google login failed");
+        }
+
         if (data.isNewUser) {
-          // If new user, go to Signup to finish registration
           navigate("/signup", {
             state: {
               name: data.name,
@@ -79,13 +80,10 @@ export default function Login() {
             },
           });
         } else {
-          // If existing user, Log them in
           localStorage.setItem("token", data.token);
           localStorage.setItem("user", JSON.stringify(data.user));
 
           showSuccess("Login successful!");
-
-          // ✅ CRITICAL FIX: Force Hard Refresh here too
           window.location.href = "/";
         }
       } catch (err) {
@@ -113,17 +111,14 @@ export default function Login() {
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Email Input */}
             <input
               type="text"
-              name="email"
               placeholder="Email or Phone"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className={inputBase}
             />
 
-            {/* Password Input */}
             <div className="relative">
               <input
                 type={showPassword ? "text" : "password"}
@@ -174,11 +169,7 @@ export default function Login() {
           <button
             onClick={() => googleLogin()}
             disabled={loading}
-            className={`w-full flex items-center justify-center gap-3 
-              bg-[#e8f0fe] dark:bg-slate-800 hover:bg-[#dfe9fd] dark:hover:bg-slate-700
-              text-[#1a73e8] dark:text-blue-400 font-medium 
-              py-3 rounded-lg transition
-              ${loading ? "opacity-60 cursor-not-allowed" : ""}`}
+            className="w-full flex items-center justify-center gap-3 bg-[#e8f0fe] hover:bg-[#dfe9fd] text-[#1a73e8] font-medium py-3 rounded-lg transition"
           >
             <img
               src="https://developers.google.com/identity/images/g-logo.png"
