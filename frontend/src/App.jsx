@@ -15,7 +15,7 @@ import Products from "./pages/Seller/Products";       // List of seller items
 import AddProduct from "./pages/Seller/AddProduct";   // Add new product form
 import EditProduct from "./pages/Seller/EditProduct"; // Edit existing product form
 import SellerLogin from "./pages/Seller/Login";       // Seller Login 
-import SellerRegister from "./pages/Seller/register"; // Seller-specific Register
+import SellerRegister from "./pages/Seller/Register"; // Seller-specific Register
 import SellerSignup from "./pages/Seller/Signup"; // Seller Signup
 import SellerForgotPassword from "./pages/Seller/ForgotPassword"; // Seller Forgot Password
 import BankDetails from "./pages/Seller/BankDetails"; // Seller Bank Details Verification
