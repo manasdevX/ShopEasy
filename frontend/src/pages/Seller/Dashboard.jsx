@@ -29,45 +29,44 @@ export default function Dashboard() {
     seller: { name: "", businessName: "My Store", rating: 0 },
     stats: { totalRevenue: 0, activeOrders: 0, totalProducts: 0 },
     recentProducts: [],
+    trends: { revenue: "0%", revenueIsUp: true, products: "Active" },
   });
 
   // --- FETCH DATA FROM API ---
-  useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        const token = localStorage.getItem("sellerToken");
+  const fetchDashboardData = async () => {
+    try {
+      const token = localStorage.getItem("sellerToken");
 
-        // Redirect if no token found
-        if (!token) {
-          toast.error("Please login first");
-          navigate("/Seller/login");
-          return;
-        }
-
-        const res = await fetch(`${API_URL}/api/sellers/dashboard`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        const result = await res.json();
-
-        if (res.ok) {
-          setData(result);
-        } else {
-          // Handle expired token
-          if (res.status === 401) {
-            localStorage.removeItem("sellerToken");
-            navigate("/Seller/login");
-          }
-        }
-      } catch (error) {
-        console.error("Dashboard Fetch Error:", error);
-      } finally {
-        setLoading(false);
+      if (!token) {
+        toast.error("Please login first");
+        navigate("/Seller/login");
+        return;
       }
-    };
 
+      const res = await fetch(`${API_URL}/api/sellers/dashboard`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const result = await res.json();
+
+      if (res.ok) {
+        setData(result);
+      } else {
+        if (res.status === 401) {
+          localStorage.removeItem("sellerToken");
+          navigate("/Seller/login");
+        }
+      }
+    } catch (error) {
+      console.error("Dashboard Fetch Error:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchDashboardData();
   }, [navigate]);
 
@@ -83,12 +82,10 @@ export default function Dashboard() {
   // --- HELPER: Get Next Friday (For Payout Date) ---
   const getNextPayoutDate = () => {
     const today = new Date();
-    const dayOfWeek = today.getDay(); // 0 (Sun) to 6 (Sat)
-    const daysUntilFriday = (5 - dayOfWeek + 7) % 7 || 7; // 5 is Friday
-
+    const dayOfWeek = today.getDay();
+    const daysUntilFriday = (5 - dayOfWeek + 7) % 7 || 7;
     const nextFriday = new Date(today);
     nextFriday.setDate(today.getDate() + daysUntilFriday);
-
     return nextFriday.toLocaleDateString("en-US", {
       weekday: "long",
       day: "numeric",
@@ -96,11 +93,34 @@ export default function Dashboard() {
     });
   };
 
-  const handleRemoveProduct = (id) => {
-    toast.success(`Product removed from view`);
+  // --- REAL BACKEND DELETE ---
+  const handleRemoveProduct = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this product?"))
+      return;
+
+    try {
+      const token = localStorage.getItem("sellerToken");
+      const res = await fetch(`${API_URL}/api/products/${id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (res.ok) {
+        toast.success(`Product deleted successfully`);
+        // Refresh dashboard data to update stats and list
+        fetchDashboardData();
+      } else {
+        const result = await res.json();
+        toast.error(result.message || "Failed to delete product");
+      }
+    } catch (error) {
+      toast.error("Server error. Please try again.");
+    }
   };
 
-  // --- DYNAMIC STATS (Connected to 'data' state) ---
+  // --- DYNAMIC STATS ---
   const stats = [
     {
       title: "Total Revenue",
@@ -108,28 +128,24 @@ export default function Dashboard() {
       trend: loading ? "..." : data.trends?.revenue || "0%",
       trendUp: data.trends?.revenueIsUp,
       icon: BarChart3,
-      color: "orange",
     },
     {
       title: "Active Orders",
       value: loading ? "..." : data.stats.activeOrders,
       trend: "Pending",
       icon: ShoppingBag,
-      color: "blue",
     },
     {
       title: "Total Products",
       value: loading ? "..." : data.stats.totalProducts,
       trend: loading ? "..." : data.trends?.products || "Active",
       icon: Package,
-      color: "emerald",
     },
     {
       title: "Store Rating",
       value: loading ? "..." : data.seller.rating || "N/A",
       trend: "Live",
       icon: CheckCircle2,
-      color: "purple",
     },
   ];
 
@@ -178,9 +194,7 @@ export default function Dashboard() {
               className="bg-slate-50 dark:bg-slate-900/40 p-8 rounded-[2.5rem] border border-transparent dark:border-slate-800 hover:border-orange-500/20 transition-all group"
             >
               <div className="flex justify-between items-start mb-6">
-                <div
-                  className={`p-4 bg-white dark:bg-slate-800 rounded-2xl shadow-sm text-orange-500 group-hover:rotate-6 transition-transform`}
-                >
+                <div className="p-4 bg-white dark:bg-slate-800 rounded-2xl shadow-sm text-orange-500 group-hover:rotate-6 transition-transform">
                   <stat.icon size={26} />
                 </div>
                 <span className="text-[10px] font-black text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded-lg flex items-center gap-1">
@@ -284,10 +298,9 @@ export default function Dashboard() {
                   Inventory Manager
                 </button>
               </div>
-              <div className="absolute top-[-20px] right-[-20px] w-32 h-32 bg-white/10 rounded-full blur-3xl"></div>
             </div>
 
-            <div className="bg-slate-900 dark:bg-slate-800 p-8 rounded-[2.5rem] border border-slate-800 text-white relative group cursor-pointer">
+            <div className="bg-slate-900 dark:bg-slate-800 p-8 rounded-[2.5rem] border border-slate-800 text-white relative">
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-lg font-black flex items-center gap-2">
                   <Clock className="text-orange-500" size={20} /> Store Hours
