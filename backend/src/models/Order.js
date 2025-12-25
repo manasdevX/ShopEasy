@@ -2,11 +2,14 @@ import mongoose from "mongoose";
 
 const orderSchema = new mongoose.Schema(
   {
+    // The Customer who placed the order
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
+
+    // Array of items in the order
     orderItems: [
       {
         name: { type: String, required: true },
@@ -18,29 +21,32 @@ const orderSchema = new mongoose.Schema(
           ref: "Product",
           required: true,
         },
-        // 👇 CORRECTED: Refers to User (who has role: 'seller')
+        // === CRITICAL FIX: Reference the 'Seller' Model ===
         seller: {
           type: mongoose.Schema.Types.ObjectId,
-          ref: "User",
+          ref: "Seller", // Points to the 'sellers' collection
           required: true,
         },
-        // Optional: Track status per item if sellers ship separately
+        // Track status per item (useful if one order has items from multiple sellers)
         itemStatus: {
           type: String,
-          default: "Processing",
+          default: "Processing", // Processing, Shipped, Delivered, Cancelled
         },
       },
     ],
+
     shippingAddress: {
       address: { type: String, required: true },
       city: { type: String, required: true },
       postalCode: { type: String, required: true },
       country: { type: String, required: true },
     },
+
     paymentMethod: {
       type: String,
       required: true,
     },
+
     paymentResult: {
       id: { type: String },
       status: { type: String },
@@ -80,7 +86,7 @@ const orderSchema = new mongoose.Schema(
       type: Date,
     },
 
-    // 🔹 Fulfillment Status (Global)
+    // 🔹 Fulfillment Status (Global for the whole order)
     isDelivered: {
       type: Boolean,
       required: true,
@@ -92,7 +98,7 @@ const orderSchema = new mongoose.Schema(
     status: {
       type: String,
       required: true,
-      default: "Processing", // Options: Processing, Shipped, Delivered, Cancelled
+      default: "Processing",
     },
   },
   {
