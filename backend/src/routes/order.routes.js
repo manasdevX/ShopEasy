@@ -4,24 +4,40 @@ import {
   getOrderById,
   getMyOrders,
   getSellerOrders,
-  updateOrderItemStatus,
   updateOrderStatus,
 } from "../controllers/order.controller.js";
 import { protect, protectSeller } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
-// --- Customer Routes ---
-router.route("/").post(protect, addOrderItems);
-router.route("/myorders").get(protect, getMyOrders);
+/* =========================================
+   CUSTOMER ROUTES
+========================================= */
 
-// --- Seller Routes ---
-router.route("/seller-orders").get(protectSeller, getSellerOrders);
-router.route("/:id/status").put(protectSeller, updateOrderItemStatus);
+// Matches: POST /api/orders
+router.post("/", protect, addOrderItems);
 
-// --- General Routes ---
-// Put this last so it doesn't catch 'myorders' or 'seller-orders' as an ID
-router.route("/:id").get(protect, getOrderById);
-router.route("/:id/status").put(protectSeller, updateOrderStatus);
+// Matches: GET /api/orders/myorders
+router.get("/myorders", protect, getMyOrders);
+
+/* =========================================
+   SELLER ROUTES
+   Note: Specialized routes MUST come before /:id
+========================================= */
+
+// Matches: GET /api/orders/seller-orders
+router.get("/seller-orders", protectSeller, getSellerOrders);
+
+// Matches: PUT /api/orders/:id/status
+// We use updateOrderStatus which handles the multi-vendor logic
+router.put("/:id/status", protectSeller, updateOrderStatus);
+
+/* =========================================
+   GENERAL ROUTES
+========================================= */
+
+// Matches: GET /api/orders/:id
+// Keep this at the bottom to avoid catching 'myorders' or 'seller-orders'
+router.get("/:id", protect, getOrderById);
 
 export default router;
