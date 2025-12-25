@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import SellerNavbar from "../../components/Seller/SellerNavbar";
 import SellerFooter from "../../components/Seller/SellerFooter";
-import { ArrowLeft, Plus, Upload, Tag, Loader2 } from "lucide-react"; // Added Loader2
+import { ArrowLeft, Plus, Upload, Tag, Loader2, X } from "lucide-react";
 import toast from "react-hot-toast";
 
 // API URL Environment Variable
@@ -55,7 +55,6 @@ export default function AddProduct() {
       setPreviews({ ...previews, thumbnail: URL.createObjectURL(file) });
       // 2. Set Actual File
       setFiles({ ...files, thumbnail: file });
-      toast.success("Thumbnail selected");
     }
   };
 
@@ -74,6 +73,23 @@ export default function AddProduct() {
     setFiles((prev) => ({
       ...prev,
       images: [...prev.images, ...selectedFiles].slice(0, 5),
+    }));
+  };
+
+  // --- THESE FUNCTIONS MUST BE OUTSIDE handleGallery ---
+  const removeThumbnail = () => {
+    setPreviews((prev) => ({ ...prev, thumbnail: "" }));
+    setFiles((prev) => ({ ...prev, thumbnail: null }));
+  };
+
+  const removeGalleryImage = (index) => {
+    setPreviews((prev) => ({
+      ...prev,
+      images: prev.images.filter((_, i) => i !== index),
+    }));
+    setFiles((prev) => ({
+      ...prev,
+      images: prev.images.filter((_, i) => i !== index),
     }));
   };
 
@@ -158,11 +174,25 @@ export default function AddProduct() {
               <label className={labelStyle}>Main Thumbnail *</label>
               <div className="relative group aspect-square bg-slate-200 dark:bg-slate-800 rounded-3xl overflow-hidden mb-4 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-orange-500 transition-colors">
                 {previews.thumbnail ? (
-                  <img
-                    src={previews.thumbnail}
-                    className="w-full h-full object-cover"
-                    alt="thumb"
-                  />
+                  <div className="relative h-full w-full">
+                    <img
+                      src={previews.thumbnail}
+                      className="w-full h-full object-cover"
+                      alt="thumb"
+                    />
+                    <button
+                      type="button"
+                      // Added z-50 to ensure it stays above the hidden file input
+                      className="absolute top-3 right-3 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors shadow-lg z-50"
+                      onClick={(e) => {
+                        e.preventDefault(); // Prevent any default behavior
+                        e.stopPropagation(); // Stop the click from bubbling to the input
+                        removeThumbnail();
+                      }}
+                    >
+                      <X size={15} />
+                    </button>
+                  </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full text-slate-400 pointer-events-none">
                     <Upload size={32} className="mb-2" />
@@ -184,13 +214,20 @@ export default function AddProduct() {
                 {previews.images.map((img, i) => (
                   <div
                     key={i}
-                    className="aspect-square rounded-xl overflow-hidden border dark:border-slate-700"
+                    className="relative aspect-square rounded-xl overflow-hidden border dark:border-slate-700 group"
                   >
                     <img
                       src={img}
                       className="w-full h-full object-cover"
                       alt="gallery"
                     />
+                    <button
+                      type="button"
+                      onClick={() => removeGalleryImage(i)}
+                      className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X size={12} />
+                    </button>
                   </div>
                 ))}
                 {previews.images.length < 5 && (
