@@ -9,13 +9,16 @@
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
+    "cloudinary": "^2.8.0",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
     "express": "^4.22.1",
     "google-auth-library": "^10.5.0",
     "mongoose": "^8.20.3",
+    "multer": "^2.0.2",
     "nodemailer": "^7.0.11",
     "react-hot-toast": "^2.6.0",
+    "streamifier": "^0.1.1",
     "twilio": "^5.11.1"
   },
   "devDependencies": {

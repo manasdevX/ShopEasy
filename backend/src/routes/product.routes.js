@@ -1,37 +1,65 @@
 import express from "express";
+import multer from "multer";
 import {
   getAllProducts,
   getProductById,
   createProduct,
   updateProduct,
   deleteProduct,
-  createProductReview, // Optional: If you have a review system
+  createProductReview,
 } from "../controllers/product.controller.js";
 
-// 👇 Import the auth middleware
-import {
-  protect,
-  protectSeller,
-  admin,
-} from "../middlewares/auth.middleware.js";
+// Import Auth Middlewares
+import { protect, protectSeller } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
-// --- 1. General Routes ---
-router
-  .route("/")
-  .get(getAllProducts) // Public: Anyone can see products
-  .post(protectSeller, createProduct); // 🔒 Seller Only: Add new product
+// --- Multer Configuration (Memory Storage) ---
+// We store files in memory temporarily so the Controller can stream them to Cloudinary
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
 
-// --- 2. Specific Product Routes (ID) ---
-router
-  .route("/:id")
-  .get(getProductById) // Public: View single product details
-  .put(protectSeller, updateProduct) // 🔒 Seller Only: Update their product
-  .delete(protectSeller, deleteProduct); // 🔒 Seller Only: Remove their product
+/* =========================================
+   PUBLIC ROUTES (View Products)
+========================================= */
 
-// --- 3. Review Route (Optional) ---
-// Only logged-in customers (Users) can review, not necessarily sellers
-router.route("/:id/reviews").post(protect, createProductReview);
+// Matches: GET /api/products
+router.get("/", getAllProducts);
+
+// Matches: GET /api/products/:id
+router.get("/:id", getProductById);
+
+/* =========================================
+   SELLER ROUTES (Manage Products)
+========================================= */
+
+// Matches: POST /api/products/add
+// Middleware Order:
+// 1. protectSeller: Ensures user is logged in as a Seller
+// 2. upload.fields: Processes the 'thumbnail' and 'images' files from FormData
+// 3. createProduct: Your controller that uploads to Cloudinary and saves to DB
+router.post(
+  "/add",
+  protectSeller,
+  upload.fields([
+    { name: "thumbnail", maxCount: 1 },
+    { name: "images", maxCount: 5 },
+  ]),
+  createProduct
+);
+
+// Matches: PUT /api/products/:id
+router.put("/:id", protectSeller, updateProduct);
+
+// Matches: DELETE /api/products/:id
+router.delete("/:id", protectSeller, deleteProduct);
+
+/* =========================================
+   CUSTOMER ROUTES (Reviews)
+========================================= */
+
+// Matches: POST /api/products/:id/reviews
+// Only logged-in users (customers) can leave reviews
+router.post("/:id/reviews", protect, createProductReview);
 
 export default router;
