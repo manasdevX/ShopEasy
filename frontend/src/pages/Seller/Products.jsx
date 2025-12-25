@@ -4,6 +4,7 @@ import SellerNavbar from "../../components/Seller/SellerNavbar";
 import SellerFooter from "../../components/Seller/SellerFooter";
 import { Plus, Search, Edit3, Trash2, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
+import { showError, showSuccess } from "../../utils/toast";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -25,7 +26,7 @@ export default function Products() {
       if (!res.ok) throw new Error(data.message);
       setProducts(data);
     } catch (err) {
-      toast.error(err.message || "Failed to load products");
+      showError(err.message || "Failed to load products");
     } finally {
       setLoading(false);
     }
@@ -37,9 +38,6 @@ export default function Products() {
 
   // --- Delete Product ---
   const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this product?"))
-      return;
-
     try {
       const token = localStorage.getItem("sellerToken");
       const res = await fetch(`${API_URL}/api/products/${id}`, {
@@ -48,14 +46,14 @@ export default function Products() {
       });
 
       if (res.ok) {
-        toast.success("Product deleted");
+        showSuccess("Product deleted");
         setProducts(products.filter((p) => p._id !== id));
       } else {
         const data = await res.json();
         throw new Error(data.message);
       }
     } catch (err) {
-      toast.error(err.message);
+      showError(err.message);
     }
   };
 
@@ -161,7 +159,7 @@ export default function Products() {
                   <div className="flex gap-2">
                     <button
                       onClick={() =>
-                        navigate(`/Seller/edit-product/${product._id}`)
+                        navigate(`/Seller/edit-product`)
                       }
                       className="p-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-xl hover:bg-orange-500 hover:text-white transition-all"
                     >

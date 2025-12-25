@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import SellerNavbar from "../../components/Seller/SellerNavbar";
 import SellerFooter from "../../components/Seller/SellerFooter";
+import { showError , showSuccess } from "../../utils/toast";
 import {
   ArrowLeft,
   Plus,
@@ -108,7 +109,7 @@ export default function AddProduct() {
     try {
       const token = localStorage.getItem("sellerToken");
       if (!token) {
-        toast.error("Please login first");
+        showError("Please login first");
         navigate("/Seller/login");
         return;
       }
@@ -143,11 +144,11 @@ export default function AddProduct() {
 
       if (!res.ok) throw new Error(result.message || "Failed to add product");
 
-      toast.success("Product Listed Successfully! 🎉");
+      showSuccess("Product Listed Successfully! 🎉");
       navigate("/Seller/dashboard");
     } catch (error) {
       console.error(error);
-      toast.error(error.message);
+      showError(error.message);
     } finally {
       setLoading(false);
     }

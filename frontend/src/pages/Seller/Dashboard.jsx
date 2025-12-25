@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import SellerNavbar from "../../components/Seller/SellerNavbar";
 import SellerFooter from "../../components/Seller/SellerFooter";
+import { showSuccess , showError } from "../../utils/toast";
 import {
   BarChart3,
   ShoppingBag,
@@ -38,7 +39,7 @@ export default function Dashboard() {
       const token = localStorage.getItem("sellerToken");
 
       if (!token) {
-        toast.error("Please login first");
+        showError("Please login first");
         navigate("/Seller/login");
         return;
       }
@@ -95,9 +96,6 @@ export default function Dashboard() {
 
   // --- REAL BACKEND DELETE ---
   const handleRemoveProduct = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this product?"))
-      return;
-
     try {
       const token = localStorage.getItem("sellerToken");
       const res = await fetch(`${API_URL}/api/products/${id}`, {
@@ -108,15 +106,15 @@ export default function Dashboard() {
       });
 
       if (res.ok) {
-        toast.success(`Product deleted successfully`);
+        showSuccess(`Product deleted successfully`);
         // Refresh dashboard data to update stats and list
         fetchDashboardData();
       } else {
         const result = await res.json();
-        toast.error(result.message || "Failed to delete product");
+        showError(result.message || "Failed to delete product");
       }
     } catch (error) {
-      toast.error("Server error. Please try again.");
+      showError("Server error. Please try again.");
     }
   };
 
