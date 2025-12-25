@@ -3,13 +3,15 @@ import cloudinary from "cloudinary";
 import streamifier from "streamifier";
 import dotenv from "dotenv";
 
-// 1. Load environment variables immediately
+// Load environment variables
 dotenv.config();
 
-// --- Helper: Upload Buffer to Cloudinary ---
+/**
+ * Helper: Upload Buffer to Cloudinary
+ * Configured inside the function to ensure process.env variables are loaded
+ */
 const uploadToCloudinary = (buffer) => {
   return new Promise((resolve, reject) => {
-    // 2. Configure Cloudinary Just-In-Time (Ensures keys are loaded)
     cloudinary.v2.config({
       cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
       api_key: process.env.CLOUDINARY_API_KEY,
@@ -36,7 +38,7 @@ const uploadToCloudinary = (buffer) => {
 // @access  Public
 export const getAllProducts = async (req, res) => {
   try {
-    const products = await Product.find({});
+    const products = await Product.find({}).sort({ createdAt: -1 });
     res.json(products);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -66,6 +68,20 @@ export const getProductById = async (req, res) => {
 /* =========================================
    SELLER ROUTES (Protected)
 ========================================= */
+
+// @desc    Get all products for a specific seller
+// @route   GET /api/products/seller/all
+// @access  Private (Seller Only)
+export const getSellerProducts = async (req, res) => {
+  try {
+    const products = await Product.find({ seller: req.seller._id }).sort({
+      createdAt: -1,
+    });
+    res.json(products);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
 
 // @desc    Create a product (With Image Upload)
 // @route   POST /api/products/add
@@ -115,8 +131,8 @@ export const createProduct = async (req, res) => {
       thumbnail,
       images,
       tags: tags ? tags.split(",").map((t) => t.trim()) : [],
-      isFeatured: isFeatured === "true",
-      isBestSeller: isBestSeller === "true",
+      isFeatured: isFeatured === "true" || isFeatured === true,
+      isBestSeller: isBestSeller === "true" || isBestSeller === true,
     });
 
     res.status(201).json(product);
@@ -147,6 +163,8 @@ export const updateProduct = async (req, res) => {
       product.brand = req.body.brand || product.brand;
       product.category = req.body.category || product.category;
       product.stock = req.body.stock || product.stock;
+      product.isFeatured = req.body.isFeatured ?? product.isFeatured;
+      product.isBestSeller = req.body.isBestSeller ?? product.isBestSeller;
 
       const updatedProduct = await product.save();
       res.json(updatedProduct);
@@ -218,16 +236,5 @@ export const createProductReview = async (req, res) => {
     res.status(201).json({ message: "Review added" });
   } else {
     res.status(404).json({ message: "Product not found" });
-  }
-};
-// @desc    Get all products for a specific seller
-// @route   GET /api/products/seller/all
-// @access  Private (Seller Only)
-export const getSellerProducts = async (req, res) => {
-  try {
-    const products = await Product.find({ seller: req.seller._id }).sort({ createdAt: -1 });
-    res.json(products);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
   }
 };
