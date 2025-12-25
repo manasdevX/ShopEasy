@@ -7,7 +7,7 @@ const reviewSchema = new mongoose.Schema(
   {
     user: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
+      ref: "User", // Reviews are left by Customers (Users)
       required: true,
     },
     name: {
@@ -33,19 +33,19 @@ const reviewSchema = new mongoose.Schema(
 ====================================================== */
 const productSchema = new mongoose.Schema(
   {
-    // 🔗 LINK TO USER (The account owner)
+    // 🔗 LINK TO SELLER (The account owner)
+    // === CRITICAL FIX: Reference the 'Seller' Model ===
     seller: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User", // ✅ Corrected: Refers to the User model
+      ref: "Seller", // Points to 'sellers' collection
       required: true,
     },
 
-    // 🔗 LINK TO STORE (The business profile)
-    // Useful for grouping products by "Brand" or "Shop"
+    // 🔗 LINK TO STORE (Optional: For future multi-store features)
     store: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Store",
-      // required: true, // Uncomment if you enforce every seller to have a created Store
+      // required: true,
     },
 
     // 🔹 Basic Info
@@ -73,11 +73,11 @@ const productSchema = new mongoose.Schema(
 
     // 🔹 Pricing
     price: {
-      type: Number,
+      type: Number, // This is usually the Selling Price
       required: true,
     },
     mrp: {
-      type: Number,
+      type: Number, // Maximum Retail Price (Crossed out price)
       required: true,
     },
     discountPercentage: {
@@ -137,7 +137,6 @@ const productSchema = new mongoose.Schema(
 );
 
 // --- Virtual: Calculate Final Discounted Price (Optional Helper) ---
-// This ensures you don't have to manually calculate it on the frontend every time
 productSchema.virtual("finalPrice").get(function () {
   if (this.discountPercentage > 0) {
     return this.price - this.price * (this.discountPercentage / 100);
