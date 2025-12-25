@@ -7,37 +7,25 @@ import {
   updateProduct,
   deleteProduct,
   createProductReview,
+  getSellerProducts,
 } from "../controllers/product.controller.js";
 
-// Import Auth Middlewares
 import { protect, protectSeller } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
-// --- Multer Configuration (Memory Storage) ---
-// We store files in memory temporarily so the Controller can stream them to Cloudinary
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
 /* =========================================
-   PUBLIC ROUTES (View Products)
-========================================= */
-
-// Matches: GET /api/products
-router.get("/", getAllProducts);
-
-// Matches: GET /api/products/:id
-router.get("/:id", getProductById);
-
-/* =========================================
    SELLER ROUTES (Manage Products)
+   NOTE: Defined FIRST to prevent conflict with /:id
 ========================================= */
 
-// Matches: POST /api/products/add
-// Middleware Order:
-// 1. protectSeller: Ensures user is logged in as a Seller
-// 2. upload.fields: Processes the 'thumbnail' and 'images' files from FormData
-// 3. createProduct: Your controller that uploads to Cloudinary and saves to DB
+// GET /api/products/seller/all
+router.get("/seller/all", protectSeller, getSellerProducts);
+
+// POST /api/products/add
 router.post(
   "/add",
   protectSeller,
@@ -48,18 +36,22 @@ router.post(
   createProduct
 );
 
-// Matches: PUT /api/products/:id
-router.put("/:id", protectSeller, updateProduct);
-
-// Matches: DELETE /api/products/:id
-router.delete("/:id", protectSeller, deleteProduct);
-
 /* =========================================
-   CUSTOMER ROUTES (Reviews)
+   PUBLIC ROUTES
 ========================================= */
 
-// Matches: POST /api/products/:id/reviews
-// Only logged-in users (customers) can leave reviews
+// GET /api/products
+router.get("/", getAllProducts);
+
+// GET /api/products/:id (STAY AT BOTTOM)
+router.get("/:id", getProductById);
+
+/* =========================================
+   PROTECTED ACTIONS
+========================================= */
+
+router.put("/:id", protectSeller, updateProduct);
+router.delete("/:id", protectSeller, deleteProduct);
 router.post("/:id/reviews", protect, createProductReview);
 
 export default router;

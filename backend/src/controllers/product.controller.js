@@ -220,3 +220,14 @@ export const createProductReview = async (req, res) => {
     res.status(404).json({ message: "Product not found" });
   }
 };
+// @desc    Get all products for a specific seller
+// @route   GET /api/products/seller/all
+// @access  Private (Seller Only)
+export const getSellerProducts = async (req, res) => {
+  try {
+    const products = await Product.find({ seller: req.seller._id }).sort({ createdAt: -1 });
+    res.json(products);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
