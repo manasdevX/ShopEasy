@@ -2,7 +2,7 @@ import Navbar from "../../components/Seller/SellerNavbar";
 import Footer from "../../components/Seller/SellerFooter";
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Loader2 } from "lucide-react";
+import { Loader2, LocateFixed } from "lucide-react";
 import { showError, showSuccess } from "../../utils/toast";
 
 // Fallback if env variable is missing
@@ -11,6 +11,7 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 export default function SellerRegister() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [isLocating, setIsLocating] = useState(false);
 
   // 1. GET DATA FROM STEP 1
   const stepOneData = location.state;
@@ -101,7 +102,13 @@ export default function SellerRegister() {
     const gstRegex =
       /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
     if (!gstRegex.test(gstin.toUpperCase())) {
-      return showError("Invalid GST Format (e.g., 22AAAAA0000A1Z5)");
+      return showError("Invalid GST Format.");
+    }
+
+    // --- ADDED PINCODE VALIDATION ---
+    const pincodeRegex = /^[1-9][0-9]{5}$/; 
+    if (!pincodeRegex.test(pincode)) {
+      return showError("Invalid Pincode.");
     }
 
     if (!agree) {
@@ -149,6 +156,85 @@ export default function SellerRegister() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // ================= GEOLOCATION HANDLER (FIXED) =================
+  const handleUseCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      showError("Geolocation is not supported by your browser");
+      return;
+    }
+
+    setIsLocating(true);
+
+    const options = {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 0,
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`
+          );
+          const data = await res.json();
+
+          if (data && data.address) {
+            const addr = data.address;
+
+            const streetComponents = [
+              addr.house_number,
+              addr.building,
+              addr.apartment,
+              addr.residential,
+              addr.hamlet,
+              addr.village,
+              addr.road,
+              addr.street,
+              addr.suburb,
+              addr.neighbourhood,
+              addr.city_district,
+            ].filter((part) => part);
+
+            const uniqueStreetComponents = [...new Set(streetComponents)];
+            const fullStreet = uniqueStreetComponents.join(", ");
+
+            const cityFallback =
+              addr.city ||
+              addr.town ||
+              addr.municipality ||
+              addr.county ||
+              addr.state_district ||
+              "";
+
+            // FIXED: Using setForm instead of setNewAddress
+            setForm((prev) => ({
+              ...prev,
+              street: fullStreet || addr.display_name.split(",")[0],
+              city: cityFallback,
+              state: addr.state || "",
+              pincode: addr.postcode || "",
+            }));
+
+            showSuccess("Location fetched successfully!");
+          } else {
+            showError("Could not determine precise address");
+          }
+        } catch (error) {
+          showError("Failed to fetch address details");
+        } finally {
+          setIsLocating(false);
+        }
+      },
+      (error) => {
+        setIsLocating(false);
+        showError("Location access denied. Please enable GPS.");
+      },
+      options
+    );
   };
 
   const inputStyles = `w-full border px-4 py-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-400 
@@ -258,6 +344,21 @@ export default function SellerRegister() {
               <h3 className="text-xl font-black mb-6 text-slate-900 dark:text-white tracking-tight">
                 Pickup Address
               </h3>
+              {/* 👇 "Use my current location" Button (Left Aligned & Compact) */}
+              <button
+                onClick={handleUseCurrentLocation}
+                disabled={isLocating}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 font-bold text-sm mb-6 shadow-sm transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
+              >
+                {isLocating ? (
+                  <Loader2 className="animate-spin" size={18} />
+                ) : (
+                  <LocateFixed size={18} />
+                )}
+                {isLocating
+                  ? "Fetching Location..."
+                  : "Use my current location"}
+              </button>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Pincode */}
                 <div className="md:col-span-2">
