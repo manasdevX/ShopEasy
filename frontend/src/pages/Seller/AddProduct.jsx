@@ -2,7 +2,15 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import SellerNavbar from "../../components/Seller/SellerNavbar";
 import SellerFooter from "../../components/Seller/SellerFooter";
-import { ArrowLeft, Plus, Upload, Tag, Loader2, X } from "lucide-react";
+import {
+  ArrowLeft,
+  Plus,
+  Upload,
+  Tag,
+  Loader2,
+  X,
+  ChevronDown,
+} from "lucide-react";
 import toast from "react-hot-toast";
 
 // API URL Environment Variable
@@ -308,18 +316,28 @@ export default function AddProduct() {
               </div>
               <div>
                 <label className={labelStyle}>Category *</label>
-                <select
-                  name="category"
-                  value={formData.category}
-                  onChange={handleChange}
-                  className={inputStyle}
-                >
-                  <option>Electronics</option>
-                  <option>Fashion</option>
-                  <option>Home</option>
-                  <option>Beauty</option>
-                  <option>Sports</option>
-                </select>
+                {/* 1. Wrapper must be relative */}
+                <div className="relative group">
+                  <select
+                    name="category"
+                    value={formData.category}
+                    onChange={handleChange}
+                    // 2. appearance-none removes the old arrow.
+                    // 3. pr-12 adds space so text doesn't hit the new arrow.
+                    className={`${inputStyle} appearance-none pr-12 cursor-pointer`}
+                  >
+                    <option>Electronics</option>
+                    <option>Fashion</option>
+                    <option>Home</option>
+                    <option>Beauty</option>
+                    <option>Sports</option>
+                  </select>
+
+                  {/* 4. This is your new arrow. Adjust 'right-5' to move it further left or right */}
+                  <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-orange-500 transition-colors">
+                    <ChevronDown size={18} strokeWidth={3} />
+                  </div>
+                </div>
               </div>
               <div>
                 <label className={labelStyle}>Sub-Category</label>
