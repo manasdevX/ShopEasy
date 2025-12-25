@@ -14,11 +14,12 @@ import Dashboard from "./pages/Seller/Dashboard"; // Seller control center
 import Products from "./pages/Seller/Products"; // List of seller items
 import AddProduct from "./pages/Seller/AddProduct"; // Add new product form
 import EditProduct from "./pages/Seller/EditProduct"; // Edit existing product form
-import SellerLogin from "./pages/Seller/Login"; // Seller Login
-import SellerRegister from "./pages/Seller/Register"; // Step 2: Business Details (Ensure filename matches!)
-import SellerSignup from "./pages/Seller/Signup"; // Step 1: Verification
-import SellerForgotPassword from "./pages/Seller/ForgotPassword";
-import BankDetails from "./pages/Seller/BankDetails"; // Step 3: Bank Verification
+import SellerLogin from "./pages/Seller/Login";       // Seller Login 
+import SellerRegister from "./pages/Seller/Register"; // Seller-specific Register
+import SellerOrders from "./pages/Seller/Orders"; // Seller Orders Management
+import SellerSignup from "./pages/Seller/Signup"; // Seller Signup
+import SellerForgotPassword from "./pages/Seller/ForgotPassword"; // Seller Forgot Password
+import BankDetails from "./pages/Seller/BankDetails"; // Seller Bank Details Verification
 
 export default function App() {
   return (
@@ -50,6 +51,7 @@ export default function App() {
         <Route path="/Seller/Dashboard" element={<Dashboard />} />
         {/* Product Management */}
         <Route path="/Seller/products" element={<Products />} />
+        <Route path="/Seller/orders" element={<SellerOrders />} />
         <Route path="/Seller/add-product" element={<AddProduct />} />
         <Route path="/Seller/edit-product/:id" element={<EditProduct />} />
         {/* Seller Auth Flow */}
