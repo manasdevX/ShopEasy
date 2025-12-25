@@ -57,7 +57,7 @@ export default function Navbar() {
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
-    navigate("/login");
+    navigate("/");
   };
 
   return (
@@ -107,7 +107,13 @@ export default function Navbar() {
             <div className="relative group">
               <button className="flex items-center gap-1 hover:text-orange-500 transition-colors">
                 <User size={18} />
-                <span>{user?.name ? user.name.split(" ")[0] : "Account"}</span>
+                <span>
+                  {user?.name
+                    ? user.name.split(" ")[0]
+                    : JSON.parse(localStorage.getItem("user"))?.name?.split(
+                        " "
+                      )[0] || "Account"}
+                </span>
                 <ChevronDown size={14} />
               </button>
 
@@ -150,49 +156,51 @@ export default function Navbar() {
       </div>
 
       {/* 🔹 CATEGORY BAR */}
-      <div className="bg-white dark:bg-[#030712] border-b border-gray-200 dark:border-gray-800 px-6 py-3 hidden md:flex justify-between text-sm font-medium">
-        {Object.keys(CATEGORY_DATA).map((category) => {
-          let positionClass = "left-1/2 -translate-x-1/2";
-          if (category === "Mobiles & Tablets")
-            positionClass = "left-0 translate-x-0";
-          else if (category === "Grocery")
-            positionClass = "right-0 translate-x-0";
+      {isLoggedIn ? (
+        <div className="bg-white dark:bg-[#030712] border-b border-gray-200 dark:border-gray-800 px-6 py-3 hidden md:flex justify-between text-sm font-medium">
+          {Object.keys(CATEGORY_DATA).map((category) => {
+            let positionClass = "left-1/2 -translate-x-1/2";
+            if (category === "Mobiles & Tablets")
+              positionClass = "left-0 translate-x-0";
+            else if (category === "Grocery")
+              positionClass = "right-0 translate-x-0";
 
-          return (
-            <div
-              key={category}
-              className="relative flex items-center gap-1 cursor-pointer text-gray-600 dark:text-gray-300 hover:text-orange-500 dark:hover:text-orange-400 transition-colors"
-              onMouseEnter={() => setActiveCategory(category)}
-              onMouseLeave={() => setActiveCategory(null)}
-            >
-              <span>{category}</span>
-              <ChevronDown
-                size={14}
-                className={`transition-transform duration-200 ${
-                  activeCategory === category ? "rotate-180" : ""
-                }`}
-              />
+            return (
+              <div
+                key={category}
+                className="relative flex items-center gap-1 cursor-pointer text-gray-600 dark:text-gray-300 hover:text-orange-500 dark:hover:text-orange-400 transition-colors"
+                onMouseEnter={() => setActiveCategory(category)}
+                onMouseLeave={() => setActiveCategory(null)}
+              >
+                <span>{category}</span>
+                <ChevronDown
+                  size={14}
+                  className={`transition-transform duration-200 ${
+                    activeCategory === category ? "rotate-180" : ""
+                  }`}
+                />
 
-              {activeCategory === category && (
-                <div
-                  className={`absolute top-full ${positionClass} w-60 bg-white dark:bg-gray-800 shadow-2xl border border-gray-100 dark:border-gray-700 rounded-xl z-50 overflow-hidden`}
-                >
-                  <div className="p-3 grid gap-1">
-                    {CATEGORY_DATA[category].map((item) => (
-                      <div
-                        key={item}
-                        className="px-3 py-2 text-gray-700 dark:text-gray-200 hover:bg-orange-50 dark:hover:bg-gray-700 hover:text-orange-600 dark:hover:text-orange-400 rounded-lg transition-colors"
-                      >
-                        {item}
-                      </div>
-                    ))}
+                {activeCategory === category && (
+                  <div
+                    className={`absolute top-full ${positionClass} w-60 bg-white dark:bg-gray-800 shadow-2xl border border-gray-100 dark:border-gray-700 rounded-xl z-50 overflow-hidden`}
+                  >
+                    <div className="p-3 grid gap-1">
+                      {CATEGORY_DATA[category].map((item) => (
+                        <div
+                          key={item}
+                          className="px-3 py-2 text-gray-700 dark:text-gray-200 hover:bg-orange-50 dark:hover:bg-gray-700 hover:text-orange-600 dark:hover:text-orange-400 rounded-lg transition-colors"
+                        >
+                          {item}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
     </header>
   );
 }

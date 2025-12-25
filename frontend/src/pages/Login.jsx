@@ -169,7 +169,11 @@ export default function Login() {
           <button
             onClick={() => googleLogin()}
             disabled={loading}
-            className="w-full flex items-center justify-center gap-3 bg-[#e8f0fe] hover:bg-[#dfe9fd] text-[#1a73e8] font-medium py-3 rounded-lg transition"
+            className={`w-full flex items-center justify-center gap-3 
+              bg-[#e8f0fe] dark:bg-slate-800 hover:bg-[#dfe9fd] dark:hover:bg-slate-700
+              text-[#1a73e8] dark:text-blue-400 font-medium 
+              py-3 rounded-lg transition
+              ${loading ? "opacity-60 cursor-not-allowed" : ""}`}
           >
             <img
               src="https://developers.google.com/identity/images/g-logo.png"
