@@ -7,7 +7,7 @@ import authRoutes from "./routes/auth.routes.js";
 import userRoutes from "./routes/user.routes.js";
 import sellerRoutes from "./routes/sellerRoutes.js";
 import orderRoutes from "./routes/order.routes.js";
-import cartRoutes from "./routes/cart.routes.js"; // ✅ New Production Cart Routes
+import cartRoutes from "./routes/cartRoutes.js"; // ✅ New Production Cart Routes
 
 const app = express();
 
