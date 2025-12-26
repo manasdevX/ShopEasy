@@ -1,267 +1,173 @@
-import React, { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
-import Navbar from "../components/Navbar";
-import {
-  Trash2,
-  Minus,
-  Plus,
-  ShoppingBag,
-  ArrowRight,
-  Loader2,
+import React, { useState } from "react";
+import { 
+  Trash2, 
+  Plus, 
+  Minus, 
+  ShoppingBag, 
+  ArrowRight, 
+  ChevronLeft 
 } from "lucide-react";
-import toast from "react-hot-toast";
-
-const API_URL = import.meta.env.VITE_API_URL;
+import { Link } from "react-router-dom";
+import Navbar from "../components/Navbar";
+import Footer from "../components/Footer";
 
 export default function Cart() {
-  const [cartItems, setCartItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const navigate = useNavigate();
-
-  const token = localStorage.getItem("token");
-  const isLoggedIn = !!token;
-
-  // --- Fetch Cart Data ---
-  const fetchCart = async () => {
-    setLoading(true);
-    try {
-      if (isLoggedIn) {
-        // PRODUCTION: Fetch from MongoDB
-        const res = await fetch(`${API_URL}/api/cart`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await res.json();
-        if (res.ok) {
-          // Flatten items for easier UI rendering
-          const items = data.items.map((item) => ({
-            ...item.product,
-            quantity: item.quantity,
-          }));
-          setCartItems(items);
-        }
-      } else {
-        // GUEST: Fetch from LocalStorage
-        const savedCart = JSON.parse(localStorage.getItem("cart")) || [];
-        setCartItems(savedCart);
-      }
-    } catch (err) {
-      toast.error("Failed to load cart");
-    } finally {
-      setLoading(false);
+  // 1. DUMMY DATA
+  const [cartItems, setCartItems] = useState([
+    {
+      id: 1,
+      name: "Premium Wireless Headphones",
+      price: 299.99,
+      quantity: 1,
+      image: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=200&q=80",
+      category: "Electronics"
+    },
+    {
+      id: 2,
+      name: "Minimalist Leather Watch",
+      price: 150.00,
+      quantity: 2,
+      image: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=200&q=80",
+      category: "Accessories"
     }
+  ]);
+
+  // 2. LOGIC HANDLERS
+  const updateQuantity = (id, delta) => {
+    setCartItems(prev => prev.map(item => 
+      item.id === id ? { ...item, quantity: Math.max(1, item.quantity + delta) } : item
+    ));
   };
 
-  useEffect(() => {
-    fetchCart();
-  }, [isLoggedIn]);
-
-  // --- Update Quantity ---
-  const updateQuantity = async (productId, delta) => {
-    // Optimistic UI update
-    const updatedItems = cartItems.map((item) => {
-      if (item._id === productId) {
-        return { ...item, quantity: Math.max(1, item.quantity + delta) };
-      }
-      return item;
-    });
-    setCartItems(updatedItems);
-
-    if (isLoggedIn) {
-      try {
-        // PRODUCTION: Sync with MongoDB
-        const newQty = updatedItems.find((i) => i._id === productId).quantity;
-        await fetch(`${API_URL}/api/cart/sync`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            localItems: [{ product: productId, quantity: newQty }],
-          }),
-        });
-      } catch (err) {
-        console.error("Failed to sync quantity to server");
-      }
-    } else {
-      // GUEST: Update LocalStorage
-      localStorage.setItem("cart", JSON.stringify(updatedItems));
-      // Dispatch event to update Navbar count in real-time
-      window.dispatchEvent(new Event("storage"));
-    }
+  const removeItem = (id) => {
+    setCartItems(prev => prev.filter(item => item.id !== id));
   };
 
-  // --- Remove Item ---
-  const removeItem = async (productId) => {
-    const updatedItems = cartItems.filter((item) => item._id !== productId);
-    setCartItems(updatedItems);
-
-    if (isLoggedIn) {
-      try {
-        // PRODUCTION: Call DELETE endpoint (Ensure your backend has this)
-        await fetch(`${API_URL}/api/cart/${productId}`, {
-          method: "DELETE",
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        toast.success("Item removed");
-      } catch (err) {
-        toast.error("Failed to remove item from server");
-      }
-    } else {
-      // GUEST: Update LocalStorage
-      localStorage.setItem("cart", JSON.stringify(updatedItems));
-      window.dispatchEvent(new Event("storage"));
-      toast.error("Item removed from cart");
-    }
-  };
-
-  const subtotal = cartItems.reduce(
-    (acc, item) => acc + item.price * item.quantity,
-    0
-  );
+  const subtotal = cartItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+  const shipping = subtotal > 500 ? 0 : 15.00;
+  const total = subtotal + shipping;
 
   return (
-    <div className="bg-slate-50 min-h-screen font-sans transition-colors duration-300">
+    <div className="min-h-screen bg-slate-50 dark:bg-[#030712] transition-colors duration-300 flex flex-col">
       <Navbar />
-      <main className="max-w-7xl mx-auto px-6 py-12">
-        <div className="flex items-center justify-between mb-10">
-          <h1 className="text-4xl font-black text-slate-900 tracking-tighter">
-            Your <span className="text-orange-500">Cart.</span>
-          </h1>
-          <span className="bg-orange-500/10 text-orange-500 px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest">
-            {cartItems.length} Items
-          </span>
+
+      <main className="flex-grow max-w-7xl mx-auto w-full px-6 py-12">
+        {/* HEADER */}
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-3xl font-black tracking-tighter text-slate-900 dark:text-white">
+              YOUR CART
+            </h1>
+            <p className="text-slate-500 text-sm font-medium mt-1">
+              {cartItems.length} items in your bag
+            </p>
+          </div>
+          <Link to="/" className="text-sm font-bold text-orange-500 flex items-center gap-2 hover:underline">
+            <ChevronLeft size={16} /> Continue Shopping
+          </Link>
         </div>
 
-        {loading ? (
-          <div className="flex flex-col items-center justify-center py-20">
-            <Loader2 className="animate-spin text-orange-500 mb-4" size={40} />
-            <p className="text-slate-400 font-bold uppercase tracking-tighter text-xs">
-              Loading your bag...
-            </p>
-          </div>
-        ) : cartItems.length === 0 ? (
-          <div className="text-center py-24 bg-white rounded-[3rem] border border-dashed border-slate-200">
-            <ShoppingBag className="mx-auto text-slate-200 mb-6" size={80} />
-            <h3 className="text-2xl font-black text-slate-800">
-              Your bag is empty.
-            </h3>
-            <p className="text-slate-400 mb-8 font-medium">
-              Looks like you haven't added anything yet.
-            </p>
-            <Link
-              to="/search?q="
-              className="bg-slate-900 text-white px-10 py-4 rounded-2xl font-black hover:bg-orange-500 transition-all shadow-xl shadow-slate-900/10"
-            >
-              Start Shopping
-            </Link>
-          </div>
-        ) : (
-          <div className="grid lg:grid-cols-3 gap-12">
-            {/* ITEM LIST */}
-            <div className="lg:col-span-2 space-y-6">
+        {cartItems.length > 0 ? (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+            
+            {/* ITEM LIST (Left) */}
+            <div className="lg:col-span-2 space-y-4">
               {cartItems.map((item) => (
-                <div
-                  key={item._id}
-                  className="bg-white p-6 rounded-[2.5rem] flex flex-col sm:flex-row items-center gap-6 shadow-sm border border-slate-100 hover:shadow-xl hover:shadow-orange-500/5 transition-all group"
-                >
-                  <div className="w-32 h-32 rounded-[2rem] overflow-hidden bg-slate-50 shrink-0">
-                    <img
-                      src={item.thumbnail}
-                      alt={item.name}
-                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                    />
+                <div key={item.id} className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-4 rounded-2xl flex gap-6 items-center group transition-all hover:shadow-xl hover:shadow-slate-200/50 dark:hover:shadow-none">
+                  <div className="w-24 h-24 rounded-xl overflow-hidden bg-slate-100 shrink-0">
+                    <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
                   </div>
 
-                  <div className="flex-grow text-center sm:text-left">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
+                  <div className="flex-grow">
+                    <span className="text-[10px] font-black text-orange-500 uppercase tracking-widest">
                       {item.category}
-                    </p>
-                    <h3 className="font-bold text-slate-900 text-xl mb-1 group-hover:text-orange-500 transition-colors">
+                    </span>
+                    <h3 className="font-bold text-slate-900 dark:text-white text-lg">
                       {item.name}
                     </h3>
-                    <p className="text-orange-500 font-black text-lg">
-                      ₹{item.price.toLocaleString()}
-                    </p>
+                    <p className="text-slate-500 text-sm font-bold mt-1">${item.price.toFixed(2)}</p>
                   </div>
 
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center bg-slate-50 rounded-2xl p-1.5 border border-slate-100">
-                      <button
-                        onClick={() => updateQuantity(item._id, -1)}
-                        className="p-2 text-slate-400 hover:text-orange-500 transition-colors"
-                      >
-                        <Minus size={18} />
-                      </button>
-                      <span className="px-5 font-black text-slate-900 text-lg">
-                        {item.quantity}
-                      </span>
-                      <button
-                        onClick={() => updateQuantity(item._id, 1)}
-                        className="p-2 text-slate-400 hover:text-orange-500 transition-colors"
-                      >
-                        <Plus size={18} />
-                      </button>
-                    </div>
-
-                    <button
-                      onClick={() => removeItem(item._id)}
-                      className="p-4 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all"
+                  {/* QUANTITY CONTROLS */}
+                  <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-950 p-1.5 rounded-xl border border-slate-100 dark:border-slate-800">
+                    <button 
+                      onClick={() => updateQuantity(item.id, -1)}
+                      className="p-1 hover:text-orange-500 transition-colors dark:text-slate-400"
                     >
-                      <Trash2 size={22} />
+                      <Minus size={16} />
+                    </button>
+                    <span className="w-8 text-center font-black text-sm dark:text-white">
+                      {item.quantity}
+                    </span>
+                    <button 
+                      onClick={() => updateQuantity(item.id, 1)}
+                      className="p-1 hover:text-orange-500 transition-colors dark:text-slate-400"
+                    >
+                      <Plus size={16} />
                     </button>
                   </div>
+
+                  <button 
+                    onClick={() => removeItem(item.id)}
+                    className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                  >
+                    <Trash2 size={20} />
+                  </button>
                 </div>
               ))}
             </div>
 
-            {/* ORDER SUMMARY */}
-            <div className="lg:sticky lg:top-24 h-fit">
-              <div className="bg-white p-8 rounded-[3rem] shadow-2xl shadow-slate-200/50 border border-slate-100">
-                <h3 className="text-2xl font-black text-slate-900 mb-8 tracking-tighter">
-                  Order Summary
-                </h3>
-                <div className="space-y-4 mb-10">
-                  <div className="flex justify-between text-slate-500 font-bold">
+            {/* SUMMARY (Right) */}
+            <div className="lg:col-span-1">
+              <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl p-8 sticky top-28">
+                <h2 className="text-xl font-black tracking-tighter text-slate-900 dark:text-white mb-6">
+                  ORDER SUMMARY
+                </h2>
+                
+                <div className="space-y-4 mb-6">
+                  <div className="flex justify-between text-slate-500 font-medium">
                     <span>Subtotal</span>
-                    <span>₹{subtotal.toLocaleString()}</span>
+                    <span className="text-slate-900 dark:text-white">${subtotal.toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between text-slate-500 font-bold">
-                    <span>Shipping</span>
-                    <span className="text-green-500 uppercase text-xs tracking-widest font-black">
-                      Free
+                  <div className="flex justify-between text-slate-500 font-medium">
+                    <span>Estimated Shipping</span>
+                    <span className="text-slate-900 dark:text-white">
+                      {shipping === 0 ? "FREE" : `$${shipping.toFixed(2)}`}
                     </span>
                   </div>
-                  <div className="flex justify-between text-slate-500 font-bold">
-                    <span>Tax</span>
-                    <span>Calculated at checkout</span>
-                  </div>
-                  <div className="border-t border-slate-100 pt-6 flex justify-between items-end">
-                    <div>
-                      <span className="text-xs font-black text-slate-400 uppercase tracking-widest">
-                        Total Amount
-                      </span>
-                      <p className="text-3xl font-black text-slate-900">
-                        ₹{subtotal.toLocaleString()}
-                      </p>
-                    </div>
+                  <div className="h-[1px] bg-slate-100 dark:bg-slate-800 my-2" />
+                  <div className="flex justify-between items-end">
+                    <span className="text-lg font-black dark:text-white">Total</span>
+                    <span className="text-2xl font-black text-orange-500">${total.toFixed(2)}</span>
                   </div>
                 </div>
-                <button
-                  onClick={() => navigate("/checkout")}
-                  className="w-full bg-slate-900 text-white font-black py-6 rounded-[2rem] flex items-center justify-center gap-3 hover:bg-orange-500 transition-all shadow-xl shadow-slate-900/20 active:scale-95"
-                >
-                  Proceed to Checkout <ArrowRight size={20} />
-                </button>
-              </div>
 
-              <p className="text-center mt-6 text-slate-400 text-xs font-bold uppercase tracking-widest">
-                Secure SSL Encrypted Checkout
-              </p>
+                <button className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-3 shadow-lg shadow-orange-500/20 transition-all hover:-translate-y-1">
+                  CHECKOUT NOW <ArrowRight size={20} />
+                </button>
+
+                <p className="text-[10px] text-center text-slate-400 font-bold uppercase tracking-widest mt-6">
+                  Secure Checkout Guaranteed
+                </p>
+              </div>
             </div>
+          </div>
+        ) : (
+          /* EMPTY STATE */
+          <div className="text-center py-24 bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800">
+            <div className="bg-slate-50 dark:bg-slate-800 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
+              <ShoppingBag className="text-slate-300" size={32} />
+            </div>
+            <h2 className="text-2xl font-black text-slate-900 dark:text-white">Your cart is empty</h2>
+            <p className="text-slate-500 mt-2 mb-8">Looks like you haven't added anything yet.</p>
+            <Link to="/" className="bg-slate-900 dark:bg-white dark:text-slate-900 text-white px-8 py-3 rounded-xl font-bold transition-transform hover:scale-105 inline-block">
+              Start Shopping
+            </Link>
           </div>
         )}
       </main>
+
+      <Footer />
     </div>
   );
 }

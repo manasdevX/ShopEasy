@@ -310,6 +310,7 @@ export default function EditProduct() {
                   >
                     <input
                       type="file"
+                      autoComplete="off"
                       ref={(el) => (galleryInputRefs.current[idx] = el)}
                       className="hidden"
                       accept="image/*"
@@ -378,6 +379,7 @@ export default function EditProduct() {
                     <label className={labelStyle}>Product Title</label>
                     <input
                       type="text"
+                      autoComplete="off"
                       name="name"
                       value={formData.name}
                       onChange={handleChange}
@@ -389,6 +391,7 @@ export default function EditProduct() {
                     <label className={labelStyle}>Brand</label>
                     <input
                       type="text"
+                      autoComplete="off"
                       name="brand"
                       value={formData.brand}
                       onChange={handleChange}
@@ -423,6 +426,7 @@ export default function EditProduct() {
                       </label>
                       <input
                         type="number"
+                        autoComplete="off"
                         name="mrp"
                         value={formData.mrp}
                         onChange={handleChange}
@@ -435,6 +439,7 @@ export default function EditProduct() {
                       </label>
                       <input
                         type="number"
+                        autoComplete="off"
                         name="price"
                         value={formData.price}
                         onChange={handleChange}
@@ -448,6 +453,7 @@ export default function EditProduct() {
                       </label>
                       <input
                         type="number"
+                        autoComplete="off"
                         name="stock"
                         value={formData.stock}
                         onChange={handleChange}
@@ -492,6 +498,7 @@ export default function EditProduct() {
                     ))}
                     <input
                       type="text"
+                      autoComplete="off"
                       value={tagInput}
                       onChange={(e) => setTagInput(e.target.value)}
                       onKeyDown={addTag}

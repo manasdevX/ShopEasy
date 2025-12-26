@@ -306,6 +306,7 @@ export default function Signup() {
             <input
               type="text"
               name="name"
+              autoComplete="off"
               placeholder="Full Name"
               value={formData.name}
               onChange={handleChange}
@@ -319,6 +320,7 @@ export default function Signup() {
                 <input
                   type="email"
                   name="email"
+                  autoComplete="off"
                   placeholder="Email Address"
                   value={formData.email}
                   onChange={handleChange}
@@ -363,6 +365,7 @@ export default function Signup() {
               {isEmailSent && !isEmailVerified && !googleId && (
                 <div className="flex gap-2 p-2 bg-gray-50 dark:bg-slate-800/50 rounded-lg border border-dashed dark:border-slate-700 animate-in zoom-in-95">
                   <input
+                    autoComplete="off"
                     type="text"
                     placeholder="Email OTP"
                     value={emailOtp}
@@ -384,6 +387,7 @@ export default function Signup() {
             <div className="space-y-3">
               <div className="relative flex items-center">
                 <input
+                  autoComplete="off"
                   type="text"
                   name="phone"
                   placeholder="Phone Number"
@@ -428,6 +432,7 @@ export default function Signup() {
               {isMobileSent && !isMobileVerified && (
                 <div className="flex gap-2 p-2 bg-gray-50 dark:bg-slate-800/50 rounded-lg border border-dashed dark:border-slate-700 animate-in zoom-in-95">
                   <input
+                    autoComplete="off"
                     type="text"
                     placeholder="Mobile OTP"
                     value={mobileOtp}
@@ -448,6 +453,7 @@ export default function Signup() {
             {/* PASSWORD INPUT */}
             <div className="relative">
               <input
+                autoComplete="off"
                 type={showPassword ? "text" : "password"}
                 name="password"
                 placeholder="Secure Password"

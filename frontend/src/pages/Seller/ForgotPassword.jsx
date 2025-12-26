@@ -129,6 +129,7 @@ export default function ForgotPassword() {
               <div>
                 <input
                   type="text"
+                  autoComplete="off"
                   required
                   className={inputBase}
                   value={identifier}
@@ -154,6 +155,7 @@ export default function ForgotPassword() {
               <input
                 type="text"
                 required
+                autoComplete="off"
                 className={inputBase}
                 value={otp}
                 onChange={(e) => setOtp(e.target.value)}
@@ -166,6 +168,7 @@ export default function ForgotPassword() {
                   type={showPassword ? "text" : "password"}
                   required
                   className={inputBase}
+                  autoComplete="off"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="New Password"
@@ -183,6 +186,7 @@ export default function ForgotPassword() {
                 <input
                   type={showConfirmPassword ? "text" : "password"}
                   required
+                  autoComplete="off"
                   className={inputBase}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}

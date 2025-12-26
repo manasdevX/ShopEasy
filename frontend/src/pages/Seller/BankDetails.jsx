@@ -152,6 +152,7 @@ export default function BankDetails() {
             <div className="space-y-1">
               <input
                 type="text"
+                autoComplete="off"
                 required
                 placeholder="Account Holder Name"
                 className={inputBase}
@@ -165,6 +166,7 @@ export default function BankDetails() {
             <div className="relative">
               <input
                 type={showAcc ? "text" : "password"}
+                autoComplete="off"
                 required
                 placeholder="Account Number"
                 className={`${inputBase} pr-14`}
@@ -185,6 +187,7 @@ export default function BankDetails() {
             <div className="relative">
               <input
                 type="text"
+                autoComplete="off"
                 required
                 onPaste={(e) => {
                   e.preventDefault();
@@ -217,6 +220,7 @@ export default function BankDetails() {
               <div className="relative">
                 <input
                   type="text"
+                  autoComplete="off"
                   required
                   maxLength={11}
                   placeholder="IFSC Code"

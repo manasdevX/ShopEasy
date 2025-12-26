@@ -122,7 +122,12 @@ export default function Account() {
             addresses: allAddresses,
             address: {
               name: data.address?.name || primaryAddr.fullName || data.name,
-              phone: (data.address?.phone || primaryAddr.phone || data.phone || "").replace(/^\+91/, ""),
+              phone: (
+                data.address?.phone ||
+                primaryAddr.phone ||
+                data.phone ||
+                ""
+              ).replace(/^\+91/, ""),
               street: data.address?.street || primaryAddr.addressLine || "",
               city: data.address?.city || primaryAddr.city || "",
               state: data.address?.state || primaryAddr.state || "",
@@ -509,11 +514,14 @@ export default function Account() {
     }
 
     // Validate Pincode
-    if (formData.address.pincode && !pincodeRegex.test(formData.address.pincode)) {
+    if (
+      formData.address.pincode &&
+      !pincodeRegex.test(formData.address.pincode)
+    ) {
       showError("Please enter a valid 6-digit pincode");
       return;
     }
-    
+
     setStatus("saving");
     try {
       const token = localStorage.getItem("token");
@@ -635,6 +643,7 @@ export default function Account() {
                   </button>
                 )}
                 <input
+                  autoComplete="off"
                   type="file"
                   ref={fileInputRef}
                   onChange={handleImageChange}
@@ -719,6 +728,7 @@ export default function Account() {
                       <InputField
                         label="Full Name"
                         name="name"
+                        autoComplete="off"
                         value={formData.name}
                         onChange={handleInputChange}
                         isEditing={isEditing}
@@ -726,6 +736,7 @@ export default function Account() {
                       />
                       <InputField
                         label="Email"
+                        autoComplete="off"
                         name="email"
                         value={formData.email}
                         onChange={handleInputChange}
@@ -736,6 +747,7 @@ export default function Account() {
                       <InputField
                         label="Phone"
                         name="phone"
+                        autoComplete="off"
                         value={formData.phone}
                         onChange={handleInputChange}
                         icon={<Phone size={16} />}
@@ -758,6 +770,7 @@ export default function Account() {
                         <InputField
                           label="Receiver Name"
                           name="addressName"
+                          autoComplete="off"
                           value={formData.address.name}
                           onChange={handleInputChange}
                           isEditing={isEditing}
@@ -765,6 +778,7 @@ export default function Account() {
                         />
                         <InputField
                           label="Contact"
+                          autoComplete="off"
                           name="addressPhone"
                           value={formData.address.phone}
                           onChange={handleInputChange}
@@ -774,6 +788,7 @@ export default function Account() {
                         <div className="md:col-span-2">
                           <InputField
                             label="Street Address"
+                            autoComplete="off"
                             name="street"
                             value={formData.address.street}
                             onChange={handleInputChange}
@@ -782,6 +797,7 @@ export default function Account() {
                         </div>
                         <InputField
                           label="City"
+                          autoComplete="off"
                           name="city"
                           value={formData.address.city}
                           onChange={handleInputChange}
@@ -789,6 +805,7 @@ export default function Account() {
                         />
                         <InputField
                           label="Pincode"
+                          autoComplete="off"
                           name="pincode"
                           value={formData.address.pincode}
                           onChange={handleInputChange}
@@ -796,6 +813,7 @@ export default function Account() {
                         />
                         <InputField
                           label="State"
+                          autoComplete="off"
                           name="state"
                           value={formData.address.state}
                           onChange={handleInputChange}
@@ -803,6 +821,7 @@ export default function Account() {
                         />
                         <InputField
                           label="Country"
+                          autoComplete="off"
                           name="country"
                           value={formData.address.country}
                           onChange={handleInputChange}
@@ -857,6 +876,7 @@ export default function Account() {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                         <input
                           placeholder="Receiver's Name"
+                          autoComplete="off"
                           value={newAddress.name}
                           onChange={(e) =>
                             setNewAddress({
@@ -868,6 +888,7 @@ export default function Account() {
                         />
                         <input
                           placeholder="Receiver's Phone"
+                          autoComplete="off"
                           value={newAddress.phone}
                           onChange={(e) =>
                             setNewAddress({
@@ -882,6 +903,7 @@ export default function Account() {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                         <input
                           placeholder="Street Address"
+                          autoComplete="off"
                           value={newAddress.street}
                           onChange={(e) =>
                             setNewAddress({
@@ -893,6 +915,7 @@ export default function Account() {
                         />
                         <input
                           placeholder="City"
+                          autoComplete="off"
                           value={newAddress.city}
                           onChange={(e) =>
                             setNewAddress({
@@ -904,6 +927,7 @@ export default function Account() {
                         />
                         <input
                           placeholder="Pincode"
+                          autoComplete="off"
                           value={newAddress.pincode}
                           onChange={(e) =>
                             setNewAddress({
@@ -915,6 +939,7 @@ export default function Account() {
                         />
                         <input
                           placeholder="State"
+                          autoComplete="off"
                           value={newAddress.state}
                           onChange={(e) =>
                             setNewAddress({
@@ -926,6 +951,7 @@ export default function Account() {
                         />
                         <input
                           placeholder="Country"
+                          autoComplete="off"
                           value={newAddress.country}
                           onChange={(e) =>
                             setNewAddress({

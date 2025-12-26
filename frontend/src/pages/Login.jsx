@@ -154,6 +154,7 @@ export default function Login() {
           <form onSubmit={handleSubmit} className="space-y-5">
             <input
               type="text"
+              autoComplete="off"
               placeholder="Email or Phone"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -163,6 +164,7 @@ export default function Login() {
             <div className="relative">
               <input
                 type={showPassword ? "text" : "password"}
+                autoComplete="off"
                 placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import SellerNavbar from "../../components/Seller/SellerNavbar";
 import SellerFooter from "../../components/Seller/SellerFooter";
-import { showError , showSuccess } from "../../utils/toast";
+import { showError, showSuccess } from "../../utils/toast";
 import {
   ArrowLeft,
   Plus,
@@ -212,6 +212,7 @@ export default function AddProduct() {
                 )}
                 <input
                   type="file"
+                  autoComplete="off"
                   onChange={handleThumbnail}
                   className="absolute inset-0 opacity-0 cursor-pointer"
                   accept="image/*"
@@ -244,6 +245,7 @@ export default function AddProduct() {
                     <Plus size={20} className="text-slate-400" />
                     <input
                       type="file"
+                      autoComplete="off"
                       multiple
                       onChange={handleGallery}
                       className="hidden"
@@ -263,6 +265,7 @@ export default function AddProduct() {
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
                     type="checkbox"
+                    autoComplete="off"
                     name="isFeatured"
                     checked={formData.isFeatured}
                     onChange={handleChange}
@@ -275,6 +278,7 @@ export default function AddProduct() {
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
                     type="checkbox"
+                    autoComplete="off"
                     name="isBestSeller"
                     checked={formData.isBestSeller}
                     onChange={handleChange}
@@ -294,6 +298,7 @@ export default function AddProduct() {
               <div className="md:col-span-2">
                 <label className={labelStyle}>Product Name *</label>
                 <input
+                  autoComplete="off"
                   type="text"
                   name="name"
                   required
@@ -307,6 +312,7 @@ export default function AddProduct() {
                 <label className={labelStyle}>Brand *</label>
                 <input
                   type="text"
+                  autoComplete="off"
                   name="brand"
                   required
                   value={formData.brand}
@@ -344,6 +350,7 @@ export default function AddProduct() {
                 <label className={labelStyle}>Sub-Category</label>
                 <input
                   type="text"
+                  autoComplete="off"
                   name="subCategory"
                   value={formData.subCategory}
                   onChange={handleChange}
@@ -355,6 +362,7 @@ export default function AddProduct() {
                 <label className={labelStyle}>Stock Quantity *</label>
                 <input
                   type="number"
+                  autoComplete="off"
                   name="stock"
                   required
                   value={formData.stock}
@@ -371,6 +379,7 @@ export default function AddProduct() {
                 <input
                   type="number"
                   name="mrp"
+                  autoComplete="off"
                   required
                   value={formData.mrp}
                   onChange={handleChange}
@@ -384,6 +393,7 @@ export default function AddProduct() {
                   type="number"
                   name="price"
                   required
+                  autoComplete="off"
                   value={formData.price}
                   onChange={handleChange}
                   className={inputStyle}
@@ -415,6 +425,7 @@ export default function AddProduct() {
                 <input
                   type="text"
                   name="tags"
+                  autoComplete="off"
                   value={formData.tags}
                   onChange={handleChange}
                   className={`${inputStyle} pl-12`}

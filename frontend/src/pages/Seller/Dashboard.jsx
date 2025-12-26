@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import SellerNavbar from "../../components/Seller/SellerNavbar";
 import SellerFooter from "../../components/Seller/SellerFooter";
-import { showSuccess , showError } from "../../utils/toast";
+import { showSuccess, showError } from "../../utils/toast";
 import {
   BarChart3,
   ShoppingBag,
@@ -16,6 +16,7 @@ import {
   AlertCircle,
   LayoutGrid,
   Loader2,
+  Edit3,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -323,39 +324,55 @@ export default function Dashboard() {
   );
 }
 
-function ProductRow({ id, name, stock, amount, onRemove }) {
+// 1. Add 'onEdit' to the destructuring props
+function ProductRow({ id, name, stock, amount, onRemove, onEdit }) {
   return (
-    <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group">
+    <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group border-b border-slate-100 dark:border-slate-800">
       <td className="px-8 py-6">
-        <p className="font-black text-slate-900 dark:text-white text-sm tracking-tight line-clamp-1">
+        <p className="font-black text-slate-900 dark:text-white text-sm tracking-tight line-clamp-1 uppercase">
           {name}
         </p>
-        <p className="text-[10px] text-slate-400 font-bold uppercase">
+        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
           ID: #{id.slice(-6)}
         </p>
       </td>
       <td className="px-8 py-6">
+        {/* Changed rounded-lg to rounded-none for pointed edges */}
         <span
-          className={`px-3 py-1 rounded-lg text-[10px] font-black ${
+          className={`px-3 py-1.5 border text-[10px] font-black uppercase tracking-tighter ${
             stock > 0
-              ? "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
-              : "bg-red-100 text-red-600"
+              ? "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700"
+              : "bg-red-50 text-red-600 border-red-100"
           }`}
         >
           {stock} in stock
         </span>
       </td>
-      <td className="px-8 py-6 font-black text-slate-900 dark:text-white text-sm">
+      <td className="px-8 py-6 font-black text-slate-900 dark:text-white text-sm tracking-tighter">
         {amount}
       </td>
+
+      {/* Updated Action Cell */}
       <td className="px-8 py-6 text-right">
-        <button
-          onClick={() => onRemove(id)}
-          className="p-2.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition-all"
-          title="Remove Product"
-        >
-          <Trash2 size={18} />
-        </button>
+        <div className="flex items-center justify-end gap-2">
+          {/* EDIT BUTTON */}
+          <button
+            onClick={() => navigate(`/Seller/edit-product/${id}`)}
+            className="p-2.5 text-slate-400 hover:text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-500/10 transition-all border border-transparent hover:border-orange-200 dark:hover:border-orange-900/30"
+            title="Edit Product"
+          >
+            <Edit3 size={18} />
+          </button>
+
+          {/* REMOVE BUTTON */}
+          <button
+            onClick={() => onRemove(id)}
+            className="p-2.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all border border-transparent hover:border-red-200 dark:hover:border-red-900/30"
+            title="Remove Product"
+          >
+            <Trash2 size={18} />
+          </button>
+        </div>
       </td>
     </tr>
   );
