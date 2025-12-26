@@ -16,6 +16,39 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  /**
+   * PRODUCTION HELPER: Sync Guest Cart to Database
+   * Extracts LocalStorage items and pushes them to the /api/cart/sync endpoint
+   */
+  const syncGuestCart = async (token) => {
+    try {
+      const localCart = JSON.parse(localStorage.getItem("cart")) || [];
+      if (localCart.length === 0) return;
+
+      // Map local cart to match the Backend Schema: { product: id, quantity: num }
+      const localItems = localCart.map((item) => ({
+        product: item._id,
+        quantity: item.quantity,
+      }));
+
+      const res = await fetch(`${API_URL}/api/cart/sync`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ localItems }),
+      });
+
+      if (res.ok) {
+        // Clear local storage after successful sync to prevent duplicate merges
+        localStorage.removeItem("cart");
+      }
+    } catch (err) {
+      console.error("Cart Sync Error:", err);
+    }
+  };
+
   /* ================= EMAIL / PASSWORD LOGIN ================= */
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -38,8 +71,12 @@ export default function Login() {
         return showError(data.message || "Login failed");
       }
 
+      // 1. Save Auth State
       localStorage.setItem("token", data.token);
       localStorage.setItem("user", JSON.stringify(data.user));
+
+      // 2. PRODUCTION STEP: Sync Guest Cart to MongoDB
+      await syncGuestCart(data.token);
 
       showSuccess("Login successful!");
       window.location.href = "/";
@@ -51,9 +88,9 @@ export default function Login() {
     }
   };
 
-  /* ================= GOOGLE LOGIN (FIXED) ================= */
+  /* ================= GOOGLE LOGIN ================= */
   const googleLogin = useGoogleLogin({
-    flow: "implicit", // 🔥 CRITICAL FIX (NO redirect)
+    flow: "implicit",
     scope: "openid profile email",
     onSuccess: async (tokenResponse) => {
       try {
@@ -61,7 +98,7 @@ export default function Login() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            token: tokenResponse.access_token, // ✅ ACCESS TOKEN ONLY
+            token: tokenResponse.access_token,
           }),
         });
 
@@ -80,8 +117,12 @@ export default function Login() {
             },
           });
         } else {
+          // 1. Save Auth State
           localStorage.setItem("token", data.token);
           localStorage.setItem("user", JSON.stringify(data.user));
+
+          // 2. PRODUCTION STEP: Sync Guest Cart to MongoDB
+          await syncGuestCart(data.token);
 
           showSuccess("Login successful!");
           window.location.href = "/";

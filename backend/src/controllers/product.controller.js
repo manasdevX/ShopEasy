@@ -33,12 +33,32 @@ const uploadToCloudinary = (buffer) => {
    PUBLIC ROUTES
 ========================================= */
 
-// @desc    Fetch all products
+// @desc    Fetch all products with Search/Filter functionality
 // @route   GET /api/products
 // @access  Public
 export const getAllProducts = async (req, res) => {
   try {
-    const products = await Product.find({}).sort({ createdAt: -1 });
+    const { keyword, category } = req.query;
+
+    // 1. Build Query Object
+    let query = {};
+
+    // Global Search: Matches keyword against Name, Description, Category, or Tags
+    if (keyword) {
+      query.$or = [
+        { name: { $regex: keyword, $options: "i" } },
+        { description: { $regex: keyword, $options: "i" } },
+        { category: { $regex: keyword, $options: "i" } },
+        { tags: { $regex: keyword, $options: "i" } },
+      ];
+    }
+
+    // Direct Category Filter (optional)
+    if (category) {
+      query.category = category;
+    }
+
+    const products = await Product.find(query).sort({ createdAt: -1 });
     res.json(products);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -102,13 +122,11 @@ export const createProduct = async (req, res) => {
       isBestSeller,
     } = req.body;
 
-    // 1. Handle Thumbnail Upload
     let thumbnail = "";
     if (req.files && req.files.thumbnail) {
       thumbnail = await uploadToCloudinary(req.files.thumbnail[0].buffer);
     }
 
-    // 2. Handle Gallery Images Upload
     let images = [];
     if (req.files && req.files.images) {
       const uploadPromises = req.files.images.map((file) =>
@@ -117,7 +135,6 @@ export const createProduct = async (req, res) => {
       images = await Promise.all(uploadPromises);
     }
 
-    // 3. Create Product in DB
     const product = await Product.create({
       seller: req.seller._id,
       name,
@@ -150,14 +167,12 @@ export const updateProduct = async (req, res) => {
     const product = await Product.findById(req.params.id);
 
     if (product) {
-      // Security Check: Seller must own the product
       if (product.seller.toString() !== req.seller._id.toString()) {
         return res
           .status(403)
           .json({ message: "Not authorized to edit this product" });
       }
 
-      // 1. Handle Image Updates if new files are provided
       if (req.files && req.files.thumbnail) {
         product.thumbnail = await uploadToCloudinary(
           req.files.thumbnail[0].buffer
@@ -171,7 +186,6 @@ export const updateProduct = async (req, res) => {
         product.images = await Promise.all(uploadPromises);
       }
 
-      // 2. Update Fields
       product.name = req.body.name || product.name;
       product.price = req.body.price || product.price;
       product.mrp = req.body.mrp || product.mrp;
@@ -205,7 +219,6 @@ export const deleteProduct = async (req, res) => {
     const product = await Product.findById(req.params.id);
 
     if (product) {
-      // Security Check: Seller must own the product
       if (product.seller.toString() !== req.seller._id.toString()) {
         return res
           .status(403)
@@ -226,9 +239,6 @@ export const deleteProduct = async (req, res) => {
    REVIEW ROUTES
 ========================================= */
 
-// @desc    Create new review
-// @route   POST /api/products/:id/reviews
-// @access  Private (Users)
 export const createProductReview = async (req, res) => {
   const { rating, comment } = req.body;
   const product = await Product.findById(req.params.id);

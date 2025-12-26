@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useState } from "react";
-import useDarkSide from "../hooks/useDarkSide"; // ✅ Import your custom hook
+import { useState, useEffect } from "react";
+import useDarkSide from "../hooks/useDarkSide";
 import {
   Moon,
   Sun,
@@ -11,6 +11,8 @@ import {
   Search,
   LogOut,
 } from "lucide-react";
+
+const API_URL = import.meta.env.VITE_API_URL;
 
 const CATEGORY_DATA = {
   "Mobiles & Tablets": ["Smartphones", "Tablets", "Accessories", "Power Banks"],
@@ -34,173 +36,208 @@ const CATEGORY_DATA = {
 
 export default function Navbar() {
   const [activeCategory, setActiveCategory] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [cartCount, setCartCount] = useState(0);
   const navigate = useNavigate();
 
   // ✅ DARK MODE LOGIC
   const [colorTheme, setTheme] = useDarkSide();
-  // Derived state to keep your existing JSX logic (theme === "light") working
   const theme = colorTheme === "dark" ? "light" : "dark";
+  const toggleTheme = () => setTheme(colorTheme);
 
-  const toggleTheme = () => {
-    setTheme(colorTheme);
+  // ✅ DYNAMIC AUTH & USER STATE
+  const token = localStorage.getItem("token");
+  const isLoggedIn = !!token;
+
+  // Initialize user from localStorage to prevent "empty" state on reload
+  const [user, setUser] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("user")) || null;
+    } catch {
+      return null;
+    }
+  });
+
+  // ✅ PRODUCTION CART COUNT (With 404 & Connection Fail-safes)
+  useEffect(() => {
+    const fetchCartCount = async () => {
+      if (isLoggedIn && token) {
+        try {
+          const res = await fetch(`${API_URL}/api/cart`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+
+          // Check if response is valid before parsing
+          if (res.ok) {
+            const data = await res.json();
+            const total =
+              data.items?.reduce((acc, item) => acc + item.quantity, 0) || 0;
+            setCartCount(total);
+          } else {
+            // If 404, fallback to local storage count
+            const localCart = JSON.parse(localStorage.getItem("cart")) || [];
+            setCartCount(
+              localCart.reduce((acc, item) => acc + item.quantity, 0)
+            );
+          }
+        } catch (err) {
+          console.debug("Backend connection pending...");
+        }
+      } else {
+        const localCart = JSON.parse(localStorage.getItem("cart")) || [];
+        setCartCount(localCart.reduce((acc, item) => acc + item.quantity, 0));
+      }
+    };
+
+    fetchCartCount();
+
+    // Listen for storage changes and custom events from Account.jsx
+    const syncHeader = () => {
+      try {
+        const updatedUser = JSON.parse(localStorage.getItem("user"));
+        setUser(updatedUser);
+        fetchCartCount();
+      } catch (e) {
+        console.error("Header sync error", e);
+      }
+    };
+
+    window.addEventListener("storage", syncHeader);
+    window.addEventListener("user-info-updated", syncHeader);
+
+    return () => {
+      window.removeEventListener("storage", syncHeader);
+      window.removeEventListener("user-info-updated", syncHeader);
+    };
+  }, [isLoggedIn, token]);
+
+  const handleSearch = (e) => {
+    if (e) e.preventDefault();
+    if (searchTerm.trim()) {
+      navigate(`/search?q=${encodeURIComponent(searchTerm.trim())}`);
+    }
   };
 
-  // ✅ SAFE AUTH CHECK
-  let user = null;
-  try {
-    user = JSON.parse(localStorage.getItem("user"));
-  } catch {
-    user = null;
-  }
-  const isLoggedIn = !!localStorage.getItem("token");
-
   const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    navigate("/");
+    localStorage.clear(); // Clear all for security
+    window.location.href = "/";
   };
 
   return (
-    <header className="relative w-full z-50 transition-colors duration-300">
-      {/* 🔹 TOP NAVBAR */}
+    <header className="relative w-full z-[100] transition-colors duration-300 shadow-sm">
       <div className="bg-white dark:bg-[#030712] border-b border-gray-100 dark:border-gray-800 px-6 py-3 flex items-center gap-6">
         <Link
           to="/"
-          className="text-orange-500 text-2xl font-bold tracking-tighter"
+          className="text-orange-500 text-2xl font-black tracking-tighter shrink-0"
         >
-          ShopEasy
+          ShopEasy<span className="text-slate-900 dark:text-white">.</span>
         </Link>
 
-        {/* SEARCH - Adjusted for Dark Mode depth */}
-        <div className="flex flex-1 bg-gray-100 dark:bg-gray-800/50 border border-transparent dark:border-gray-700 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-orange-500/50 transition-all">
+        {/* SEARCH BAR */}
+        <div className="flex flex-1 bg-gray-100 dark:bg-gray-800/50 border border-transparent dark:border-gray-700 rounded-2xl overflow-hidden focus-within:ring-2 focus-within:ring-orange-500/50 transition-all">
           <input
             type="text"
-            placeholder="Search for products, brands and more"
-            className="px-4 py-2 w-full outline-none bg-transparent text-gray-800 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
+            placeholder="Search products..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+            className="px-5 py-2.5 w-full outline-none bg-transparent text-gray-800 dark:text-gray-100 font-medium"
           />
-          <button className="px-5 bg-orange-500 text-white hover:bg-orange-600 transition-colors">
+          <button
+            onClick={handleSearch}
+            className="px-6 bg-orange-500 text-white hover:bg-orange-600"
+          >
             <Search size={18} />
           </button>
         </div>
 
         {/* RIGHT ACTIONS */}
-        <div className="flex items-center gap-6 text-gray-800 dark:text-gray-200">
-          {/* THEME TOGGLE BUTTON */}
+        <div className="flex items-center gap-6 text-gray-800 dark:text-gray-200 shrink-0">
           <button
             onClick={toggleTheme}
-            className="p-2.5 rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-slate-700 dark:text-yellow-400 transition-all duration-300"
-            title="Toggle Theme"
+            className="p-2.5 rounded-xl bg-gray-100 dark:bg-gray-800"
           >
             {theme === "light" ? <Moon size={20} /> : <Sun size={20} />}
           </button>
 
-          {/* LOGIN / ACCOUNT */}
           {!isLoggedIn ? (
             <Link
               to="/login"
-              className="flex items-center gap-1 hover:text-orange-500 transition-colors"
+              className="flex items-center gap-1 font-bold hover:text-orange-500"
             >
               <User size={18} />
               <span>Login</span>
             </Link>
           ) : (
-            <div className="relative group">
-              <button className="flex items-center gap-1 hover:text-orange-500 transition-colors">
-                <User size={18} />
-                <span>
-                  {user?.name
-                    ? user.name.split(" ")[0]
-                    : JSON.parse(localStorage.getItem("user"))?.name?.split(
-                        " "
-                      )[0] || "Account"}
+            <div className="relative group flex items-center h-full">
+              <button className="flex items-center gap-1 font-bold hover:text-orange-500 py-2">
+                <div className="w-8 h-8 rounded-full bg-orange-500 text-white flex items-center justify-center text-xs shadow-lg overflow-hidden border-2 border-white dark:border-slate-800">
+                  {user?.profilePicture ? (
+                    <img
+                      src={user.profilePicture}
+                      alt="User"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    user?.name?.charAt(0) || "U"
+                  )}
+                </div>
+                <span className="max-w-[80px] truncate ml-1 font-bold text-slate-900 dark:text-white">
+                  {user?.name ? user.name.split(" ")[0] : "Account"}
                 </span>
-                <ChevronDown size={14} />
+                <ChevronDown
+                  size={14}
+                  className="group-hover:rotate-180 transition-transform duration-300"
+                />
               </button>
 
-              {/* ACCOUNT DROPDOWN */}
-              <div className="absolute top-full left-1/2 -translate-x-1/2 w-52 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 rounded-xl overflow-hidden shadow-xl border border-gray-100 dark:border-gray-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
-                <Link
-                  to="/account"
-                  className="block px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
-                >
-                  My Profile
-                </Link>
-                <div className="border-t border-gray-100 dark:border-gray-700" />
-                <button
-                  onClick={handleLogout}
-                  className="w-full text-left px-4 py-2.5 hover:bg-red-50 dark:hover:bg-red-900/20 transition flex items-center gap-2 text-red-500"
-                >
-                  <LogOut size={16} />
-                  Logout
-                </button>
+              {/* ✅ THE BRIDGE: pt-3 Fixes hover gap */}
+              <div className="absolute top-full right-0 w-56 pt-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[99999]">
+                <div className="bg-white dark:bg-[#0f172a] rounded-2xl overflow-hidden shadow-2xl border border-gray-100 dark:border-slate-800 pointer-events-auto">
+                  <Link
+                    to="/account"
+                    className="block px-5 py-3.5 hover:bg-orange-500 hover:text-white font-bold text-sm text-slate-700 dark:text-slate-200"
+                  >
+                    My Profile
+                  </Link>
+                  <Link
+                    to="/orders"
+                    className="block px-5 py-3.5 hover:bg-orange-500 hover:text-white font-bold text-sm text-slate-700 dark:text-slate-200"
+                  >
+                    My Orders
+                  </Link>
+                  <div className="border-t border-gray-100 dark:border-slate-800" />
+                  <button
+                    onClick={handleLogout}
+                    className="w-full text-left px-5 py-3.5 hover:bg-red-500 hover:text-white text-red-500 font-bold text-sm flex items-center gap-2"
+                  >
+                    <LogOut size={16} /> Logout
+                  </button>
+                </div>
               </div>
             </div>
           )}
 
           <Link
             to="/cart"
-            className="flex items-center gap-1 hover:text-orange-500 transition-colors"
+            className="relative group flex items-center gap-1 font-bold hover:text-orange-500"
           >
-            <ShoppingCart size={18} />
-            Cart
+            <ShoppingCart size={22} />
+            {cartCount > 0 && (
+              <span className="absolute -top-2 -right-2 bg-orange-500 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-white dark:border-[#030712]">
+                {cartCount}
+              </span>
+            )}
           </Link>
 
           <Link
             to="/Seller/Landing"
-            className="flex items-center gap-2 px-4 py-2 rounded-xl border border-orange-400 text-orange-500 hover:bg-orange-500 hover:text-white transition-all font-medium text-sm"
+            className="hidden lg:flex px-5 py-2.5 rounded-2xl border-2 border-orange-500/20 text-orange-500 hover:bg-orange-500 hover:text-white font-black text-xs uppercase tracking-widest transition-all"
           >
-            <Store size={18} />
-            <span>Become a Seller</span>
+            <Store size={16} className="mr-2" /> Sell
           </Link>
         </div>
       </div>
-
-      {/* 🔹 CATEGORY BAR */}
-      {isLoggedIn ? (
-        <div className="bg-white dark:bg-[#030712] border-b border-gray-200 dark:border-gray-800 px-6 py-3 hidden md:flex justify-between text-sm font-medium">
-          {Object.keys(CATEGORY_DATA).map((category) => {
-            let positionClass = "left-1/2 -translate-x-1/2";
-            if (category === "Mobiles & Tablets")
-              positionClass = "left-0 translate-x-0";
-            else if (category === "Grocery")
-              positionClass = "right-0 translate-x-0";
-
-            return (
-              <div
-                key={category}
-                className="relative flex items-center gap-1 cursor-pointer text-gray-600 dark:text-gray-300 hover:text-orange-500 dark:hover:text-orange-400 transition-colors"
-                onMouseEnter={() => setActiveCategory(category)}
-                onMouseLeave={() => setActiveCategory(null)}
-              >
-                <span>{category}</span>
-                <ChevronDown
-                  size={14}
-                  className={`transition-transform duration-200 ${
-                    activeCategory === category ? "rotate-180" : ""
-                  }`}
-                />
-
-                {activeCategory === category && (
-                  <div
-                    className={`absolute top-full ${positionClass} w-60 bg-white dark:bg-gray-800 shadow-2xl border border-gray-100 dark:border-gray-700 rounded-xl z-50 overflow-hidden`}
-                  >
-                    <div className="p-3 grid gap-1">
-                      {CATEGORY_DATA[category].map((item) => (
-                        <div
-                          key={item}
-                          className="px-3 py-2 text-gray-700 dark:text-gray-200 hover:bg-orange-50 dark:hover:bg-gray-700 hover:text-orange-600 dark:hover:text-orange-400 rounded-lg transition-colors"
-                        >
-                          {item}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      ) : null}
     </header>
   );
 }
