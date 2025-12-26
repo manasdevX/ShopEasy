@@ -142,6 +142,7 @@ export default function Login() {
             <div>
               <input
                 type="text"
+                autoComplete="off"
                 placeholder="Email or Phone Number"
                 value={identifier}
                 onChange={(e) => {
@@ -165,6 +166,7 @@ export default function Login() {
               <input
                 type={showPassword ? "text" : "password"}
                 placeholder="Password"
+                autoComplete="off"
                 value={password}
                 onChange={(e) => {
                   setPassword(e.target.value);

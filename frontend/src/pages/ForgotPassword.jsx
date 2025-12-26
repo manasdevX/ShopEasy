@@ -121,6 +121,7 @@ export default function ForgotPassword() {
               <div>
                 <input
                   type="text"
+                  autofill="off"
                   required
                   className={inputBase}
                   value={identifier}

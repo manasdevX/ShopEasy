@@ -153,6 +153,7 @@ export default function SellerOrders() {
             />
             <input
               type="text"
+              autoComplete="off"
               placeholder="Search by Order ID or Customer Name..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}

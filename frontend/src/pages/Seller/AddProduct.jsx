@@ -2,15 +2,22 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import SellerNavbar from "../../components/Seller/SellerNavbar";
 import SellerFooter from "../../components/Seller/SellerFooter";
-import { showError , showSuccess } from "../../utils/toast";
+import { showError, showSuccess } from "../../utils/toast";
 import {
   ArrowLeft,
-  Plus,
+  ImageIcon,
   Upload,
-  Tag,
-  Loader2,
   X,
+  Plus,
+  Loader2,
+  Tag as TagIcon,
+  Sparkles,
+  TrendingUp,
   ChevronDown,
+  LayoutGrid,
+  Package,
+  Info,
+  BarChart3,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -160,284 +167,290 @@ export default function AddProduct() {
     "text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1 mb-2 block";
 
   return (
-    <div className="bg-white dark:bg-[#030712] min-h-screen transition-colors duration-500 flex flex-col">
+    <div className="bg-[#F8FAFC] dark:bg-[#020617] min-h-screen flex flex-col font-sans transition-colors duration-500">
       <SellerNavbar isLoggedIn={true} />
-      <main className="max-w-5xl mx-auto px-6 py-12 flex-grow">
-        <button
-          onClick={() => navigate(-1)}
-          className="flex items-center gap-2 text-slate-400 font-bold text-sm mb-8 hover:text-orange-500 transition-colors"
-        >
-          <ArrowLeft size={18} /> Back
-        </button>
 
-        <header className="mb-10">
-          <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tighter">
-            List New <span className="text-orange-500">Product.</span>
-          </h1>
-        </header>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full flex-grow">
+        {/* Header Section matching Edit Page */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+          <div className="space-y-1">
+            <button
+              onClick={() => navigate(-1)}
+              className="flex items-center gap-2 text-slate-500 hover:text-orange-500 font-semibold text-sm transition-colors group"
+            >
+              <ArrowLeft
+                size={16}
+                className="group-hover:-translate-x-1 transition-transform"
+              />
+              Back
+            </button>
+            <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white flex items-center gap-3">
+              List New <span className="text-orange-500">Product</span>
+            </h1>
+          </div>
+        </div>
 
-        <form onSubmit={handleSubmit} className="grid lg:grid-cols-3 gap-8">
-          {/* Left: Media Upload */}
-          <div className="space-y-6">
-            <div className="bg-slate-50 dark:bg-slate-900/40 p-6 rounded-[2.5rem] border dark:border-slate-800">
-              <label className={labelStyle}>Main Thumbnail *</label>
-              <div className="relative group aspect-square bg-slate-200 dark:bg-slate-800 rounded-3xl overflow-hidden mb-4 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-orange-500 transition-colors">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          {/* LEFT COLUMN: MEDIA & INSIGHTS (Exact match to Edit UI) */}
+          <div className="lg:col-span-4 space-y-6">
+            <section className="bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border border-slate-200 dark:border-slate-800">
+              <h3 className={labelStyle}>
+                <ImageIcon size={14} /> Product Media
+              </h3>
+
+              {/* PRIMARY THUMBNAIL SLOT */}
+              <div className="group relative aspect-square rounded-2xl overflow-hidden bg-slate-100 dark:bg-slate-800 border-2 border-dashed border-orange-500/20 mb-4 hover:border-orange-500 cursor-pointer">
                 {previews.thumbnail ? (
-                  <div className="relative h-full w-full">
+                  <>
                     <img
                       src={previews.thumbnail}
                       className="w-full h-full object-cover"
-                      alt="thumb"
+                      alt="Primary"
                     />
-                    <button
-                      type="button"
-                      // Added z-50 to ensure it stays above the hidden file input
-                      className="absolute top-3 right-3 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors shadow-lg z-50"
-                      onClick={(e) => {
-                        e.preventDefault(); // Prevent any default behavior
-                        e.stopPropagation(); // Stop the click from bubbling to the input
-                        removeThumbnail();
-                      }}
-                    >
-                      <X size={15} />
-                    </button>
-                  </div>
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          removeThumbnail();
+                        }}
+                        className="p-3 bg-white rounded-full text-red-500 shadow-xl"
+                      >
+                        <X size={20} />
+                      </button>
+                    </div>
+                  </>
                 ) : (
-                  <div className="flex flex-col items-center justify-center h-full text-slate-400 pointer-events-none">
-                    <Upload size={32} className="mb-2" />
-                    <span className="text-[10px] font-bold">
-                      CLICK TO UPLOAD
-                    </span>
-                  </div>
-                )}
-                <input
-                  type="file"
-                  onChange={handleThumbnail}
-                  className="absolute inset-0 opacity-0 cursor-pointer"
-                  accept="image/*"
-                />
-              </div>
-
-              <label className={labelStyle}>Gallery Images (Max 5)</label>
-              <div className="grid grid-cols-3 gap-2">
-                {previews.images.map((img, i) => (
-                  <div
-                    key={i}
-                    className="relative aspect-square rounded-xl overflow-hidden border dark:border-slate-700 group"
-                  >
-                    <img
-                      src={img}
-                      className="w-full h-full object-cover"
-                      alt="gallery"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeGalleryImage(i)}
-                      className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
-                ))}
-                {previews.images.length < 5 && (
-                  <label className="aspect-square flex items-center justify-center border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl cursor-pointer hover:border-orange-500 transition-colors">
-                    <Plus size={20} className="text-slate-400" />
+                  <label className="flex flex-col items-center justify-center h-full w-full cursor-pointer text-slate-400">
+                    <Plus size={32} />
                     <input
+                      autoComplete="off"
                       type="file"
-                      multiple
-                      onChange={handleGallery}
+                      onChange={handleThumbnail}
                       className="hidden"
                       accept="image/*"
                     />
                   </label>
                 )}
+                <div className="absolute top-3 left-3 bg-orange-500 text-white text-[9px] font-black px-2 py-1 rounded-md">
+                  PRIMARY
+                </div>
               </div>
-            </div>
 
-            {/* Visibility Toggles */}
-            <div className="bg-orange-500/10 p-6 rounded-[2rem] border border-orange-500/20">
-              <h4 className="text-orange-600 dark:text-orange-400 font-black text-xs uppercase mb-3">
-                Visibility
-              </h4>
-              <div className="space-y-3">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    name="isFeatured"
-                    checked={formData.isFeatured}
-                    onChange={handleChange}
-                    className="w-4 h-4 accent-orange-500"
-                  />
-                  <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
-                    Featured Product
-                  </span>
-                </label>
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    name="isBestSeller"
-                    checked={formData.isBestSeller}
-                    onChange={handleChange}
-                    className="w-4 h-4 accent-orange-500"
-                  />
-                  <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
-                    Best Seller Tag
-                  </span>
-                </label>
+              {/* GALLERY SLOTS (2x2 Grid) */}
+              <div className="grid grid-cols-2 gap-3">
+                {[0, 1, 2, 3].map((idx) => (
+                  <div
+                    key={idx}
+                    className="group relative aspect-square rounded-xl overflow-hidden bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 flex items-center justify-center cursor-pointer"
+                  >
+                    {previews.images[idx] ? (
+                      <>
+                        <img
+                          src={previews.images[idx]}
+                          className="w-full h-full object-cover"
+                          alt="Gallery"
+                        />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center">
+                          <button
+                            type="button"
+                            onClick={() => removeGalleryImage(idx)}
+                            className="p-1.5 bg-white rounded-full text-red-500"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <label className="flex items-center justify-center w-full h-full cursor-pointer">
+                        <Plus size={20} className="text-slate-300" />
+                        <input
+                          type="file"
+                          autoComplete="off"
+                          multiple
+                          onChange={handleGallery}
+                          className="hidden"
+                          accept="image/*"
+                        />
+                      </label>
+                    )}
+                  </div>
+                ))}
               </div>
-            </div>
+            </section>
           </div>
 
-          {/* Right: Details */}
-          <div className="lg:col-span-2 space-y-6">
-            <div className="grid md:grid-cols-2 gap-6">
-              <div className="md:col-span-2">
-                <label className={labelStyle}>Product Name *</label>
-                <input
-                  type="text"
-                  name="name"
-                  required
-                  value={formData.name}
-                  onChange={handleChange}
-                  className={inputStyle}
-                  placeholder="e.g. Sony WH-1000XM5"
-                />
-              </div>
-              <div>
-                <label className={labelStyle}>Brand *</label>
-                <input
-                  type="text"
-                  name="brand"
-                  required
-                  value={formData.brand}
-                  onChange={handleChange}
-                  className={inputStyle}
-                  placeholder="e.g. Sony"
-                />
-              </div>
-              <div>
-                <label className={labelStyle}>Category *</label>
-                {/* 1. Wrapper must be relative */}
-                <div className="relative group">
-                  <select
-                    name="category"
-                    value={formData.category}
-                    onChange={handleChange}
-                    // 2. appearance-none removes the old arrow.
-                    // 3. pr-12 adds space so text doesn't hit the new arrow.
-                    className={`${inputStyle} appearance-none pr-12 cursor-pointer`}
-                  >
-                    <option>Electronics</option>
-                    <option>Fashion</option>
-                    <option>Home</option>
-                    <option>Beauty</option>
-                    <option>Sports</option>
-                  </select>
+          {/* RIGHT COLUMN: FORM (Matching Edit UI) */}
+          <div className="lg:col-span-8">
+            <form
+              id="product-form"
+              onSubmit={handleSubmit}
+              className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden"
+            >
+              <div className="p-8 space-y-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="md:col-span-2">
+                    <label className={labelStyle}>Product Title</label>
+                    <input
+                      type="text"
+                      autoComplete="off"
+                      name="name"
+                      value={formData.name}
+                      onChange={handleChange}
+                      className={inputStyle}
+                      placeholder="e.g. Sony WH-1000XM5"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className={labelStyle}>Brand</label>
+                    <input
+                      type="text"
+                      autoComplete="off"
+                      name="brand"
+                      value={formData.brand}
+                      onChange={handleChange}
+                      className={inputStyle}
+                      placeholder="e.g. Sony"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className={labelStyle}>Category</label>
+                    <select
+                      name="category"
+                      value={formData.category}
+                      onChange={handleChange}
+                      className={inputStyle}
+                    >
+                      <option>Electronics</option>
+                      <option>Fashion</option>
+                      <option>Home</option>
+                      <option>Beauty</option>
+                      <option>Sports</option>
+                    </select>
+                  </div>
+                </div>
 
-                  {/* 4. This is your new arrow. Adjust 'right-5' to move it further left or right */}
-                  <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-orange-500 transition-colors">
-                    <ChevronDown size={18} strokeWidth={3} />
+                <div className="bg-slate-50 dark:bg-slate-800/30 rounded-2xl p-6 border border-slate-100 dark:border-slate-800">
+                  <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-6 flex items-center gap-2">
+                    <Sparkles size={16} className="text-orange-500" /> Pricing &
+                    Inventory
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase mb-2 block">
+                        MRP (₹)
+                      </label>
+                      <input
+                        type="number"
+                        autoComplete="off"
+                        name="mrp"
+                        value={formData.mrp}
+                        onChange={handleChange}
+                        className={inputStyle}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase mb-2 block">
+                        Sale Price (₹)
+                      </label>
+                      <input
+                        type="number"
+                        autoComplete="off"
+                        name="price"
+                        value={formData.price}
+                        onChange={handleChange}
+                        className={inputStyle}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase mb-2 block">
+                        Initial Stock
+                      </label>
+                      <input
+                        type="number"
+                        autoComplete="off"
+                        name="stock"
+                        value={formData.stock}
+                        onChange={handleChange}
+                        className={inputStyle}
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className={labelStyle}>Detailed Description</label>
+                  <textarea
+                    name="description"
+                    rows="5"
+                    value={formData.description}
+                    onChange={handleChange}
+                    className={`${inputStyle} resize-none`}
+                    placeholder="Describe your product features..."
+                    required
+                  />
+                </div>
+
+                <div className="bg-orange-500/5 p-6 rounded-2xl border border-orange-500/10">
+                  <h4 className="text-xs font-bold text-orange-600 uppercase mb-4">
+                    Visibility Settings
+                  </h4>
+                  <div className="flex flex-wrap gap-6">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        autoComplete="off"
+                        name="isFeatured"
+                        checked={formData.isFeatured}
+                        onChange={handleChange}
+                        className="w-4 h-4 accent-orange-500"
+                      />
+                      <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                        Featured Product
+                      </span>
+                    </label>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        autoComplete="off"
+                        name="isBestSeller"
+                        checked={formData.isBestSeller}
+                        onChange={handleChange}
+                        className="w-4 h-4 accent-orange-500"
+                      />
+                      <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                        Best Seller Tag
+                      </span>
+                    </label>
                   </div>
                 </div>
               </div>
-              <div>
-                <label className={labelStyle}>Sub-Category</label>
-                <input
-                  type="text"
-                  name="subCategory"
-                  value={formData.subCategory}
-                  onChange={handleChange}
-                  className={inputStyle}
-                  placeholder="e.g. Wireless Headphones"
-                />
-              </div>
-              <div>
-                <label className={labelStyle}>Stock Quantity *</label>
-                <input
-                  type="number"
-                  name="stock"
-                  required
-                  value={formData.stock}
-                  onChange={handleChange}
-                  className={inputStyle}
-                  placeholder="0"
-                />
-              </div>
-            </div>
 
-            <div className="grid md:grid-cols-2 gap-6 p-6 bg-slate-50 dark:bg-slate-900/40 rounded-[2rem]">
-              <div>
-                <label className={labelStyle}>MRP (Original Price) *</label>
-                <input
-                  type="number"
-                  name="mrp"
-                  required
-                  value={formData.mrp}
-                  onChange={handleChange}
-                  className={inputStyle}
-                  placeholder="₹ 0.00"
-                />
+              <div className="px-8 py-6 bg-slate-50 dark:bg-slate-900/80 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-4">
+                <button
+                  type="button"
+                  onClick={() => navigate(-1)}
+                  className="px-6 py-2.5 text-slate-500 text-sm font-bold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="px-8 py-2.5 bg-orange-500 text-white text-sm font-bold rounded-xl shadow-lg shadow-orange-500/30 flex items-center gap-2"
+                >
+                  {loading && <Loader2 size={16} className="animate-spin" />}
+                  Publish Product
+                </button>
               </div>
-              <div>
-                <label className={labelStyle}>Selling Price *</label>
-                <input
-                  type="number"
-                  name="price"
-                  required
-                  value={formData.price}
-                  onChange={handleChange}
-                  className={inputStyle}
-                  placeholder="₹ 0.00"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className={labelStyle}>Description *</label>
-              <textarea
-                name="description"
-                required
-                rows="4"
-                value={formData.description}
-                onChange={handleChange}
-                className={`${inputStyle} resize-none`}
-                placeholder="Write detailed product features..."
-              />
-            </div>
-
-            <div>
-              <label className={labelStyle}>Tags (Comma separated)</label>
-              <div className="relative">
-                <Tag
-                  className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
-                  size={18}
-                />
-                <input
-                  type="text"
-                  name="tags"
-                  value={formData.tags}
-                  onChange={handleChange}
-                  className={`${inputStyle} pl-12`}
-                  placeholder="tech, audio, wireless"
-                />
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-slate-900 dark:bg-orange-500 text-white py-5 rounded-[2rem] font-black uppercase tracking-widest hover:scale-[1.01] transition-all shadow-xl shadow-orange-500/10 disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center gap-3"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="animate-spin" /> Publishing...
-                </>
-              ) : (
-                "Publish Product"
-              )}
-            </button>
+            </form>
           </div>
-        </form>
+        </div>
       </main>
       <SellerFooter />
     </div>

@@ -4,6 +4,7 @@ import SellerNavbar from "../../components/Seller/SellerNavbar";
 import SellerFooter from "../../components/Seller/SellerFooter";
 import { Plus, Search, Edit3, Trash2, Loader2, Package } from "lucide-react";
 import toast from "react-hot-toast";
+import { showSuccess, showError } from "../../utils/toast";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -27,7 +28,7 @@ export default function Products() {
 
       setProducts(data);
     } catch (err) {
-      toast.error(err.message);
+      showError(err.message);
     } finally {
       setLoading(false);
     }
@@ -39,14 +40,6 @@ export default function Products() {
 
   // --- Delete Product ---
   const handleDelete = async (id) => {
-    // Confirmation before permanent deletion
-    if (
-      !window.confirm(
-        "Are you sure you want to delete this product? This action cannot be undone."
-      )
-    )
-      return;
-
     try {
       const token = localStorage.getItem("sellerToken");
       const res = await fetch(`${API_URL}/api/products/${id}`, {
@@ -55,7 +48,7 @@ export default function Products() {
       });
 
       if (res.ok) {
-        toast.success("Product deleted successfully");
+        showSucess("Product deleted successfully");
         // Remove from local state only after backend confirms success
         setProducts(products.filter((p) => p._id !== id));
       } else {
@@ -63,7 +56,7 @@ export default function Products() {
         throw new Error(data.message || "Deletion failed");
       }
     } catch (err) {
-      toast.error(err.message);
+      showError(err.message);
     }
   };
 
@@ -103,6 +96,7 @@ export default function Products() {
             />
             <input
               type="text"
+              autoComplete="off"
               placeholder="Search your products..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}

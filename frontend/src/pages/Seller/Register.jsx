@@ -97,10 +97,10 @@ export default function SellerRegister() {
     const gstRegex =
       /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
     if (!gstRegex.test(gstin.toUpperCase())) {
-      return showError("Invalid GST Format.");
+      return showError("Invalid GST Format.(e.g. : 22AAAAA0000A1Z5)");
     }
 
-    // Pincode Validation
+    // --- ADDED PINCODE VALIDATION ---
     const pincodeRegex = /^[1-9][0-9]{5}$/;
     if (!pincodeRegex.test(pincode)) {
       return showError("Invalid Pincode.");
@@ -235,6 +235,7 @@ export default function SellerRegister() {
                 </label>
                 <input
                   type="text"
+                  autoComplete="off"
                   name="businessName"
                   value={form.businessName}
                   onChange={handleChange}
@@ -250,6 +251,7 @@ export default function SellerRegister() {
                 </label>
                 <input
                   type="email"
+                  autoComplete="off"
                   value={
                     JSON.parse(localStorage.getItem("seller_step1") || "{}")
                       .email || ""
@@ -266,6 +268,7 @@ export default function SellerRegister() {
                 </label>
                 <input
                   type="tel"
+                  autoComplete="off"
                   value={
                     JSON.parse(localStorage.getItem("seller_step1") || "{}")
                       .phone || ""
@@ -301,6 +304,7 @@ export default function SellerRegister() {
                 </label>
                 <input
                   type="text"
+                  autoComplete="off"
                   name="gstin"
                   value={form.gstin}
                   onChange={handleChange}
@@ -346,6 +350,7 @@ export default function SellerRegister() {
                   </label>
                   <input
                     type="text"
+                    autoComplete="off"
                     name="pincode"
                     value={form.pincode}
                     onChange={handleChange}
@@ -362,6 +367,7 @@ export default function SellerRegister() {
                   </label>
                   <input
                     type="text"
+                    autoComplete="off"
                     name="street"
                     value={form.street}
                     onChange={handleChange}
@@ -377,6 +383,7 @@ export default function SellerRegister() {
                   </label>
                   <input
                     type="text"
+                    autoComplete="off"
                     name="city"
                     value={form.city}
                     className={`${inputStyles} bg-slate-50 dark:bg-slate-900/50 cursor-not-allowed`}
@@ -391,6 +398,7 @@ export default function SellerRegister() {
                   </label>
                   <input
                     type="text"
+                    autoComplete="off"
                     name="state"
                     value={form.state}
                     className={`${inputStyles} bg-slate-50 dark:bg-slate-900/50 cursor-not-allowed`}
@@ -405,6 +413,7 @@ export default function SellerRegister() {
               <input
                 type="checkbox"
                 name="agree"
+                autoComplete="off"
                 id="agree"
                 checked={form.agree}
                 onChange={handleChange}

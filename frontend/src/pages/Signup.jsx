@@ -321,6 +321,7 @@ export default function Signup() {
           <form onSubmit={handleSubmit} className="space-y-5">
             <input
               type="text"
+              autoComplete="off"
               name="name"
               placeholder="Full Name"
               value={formData.name}
@@ -334,6 +335,7 @@ export default function Signup() {
               <div className="relative flex items-center">
                 <input
                   type="email"
+                  autoComplete="off"
                   name="email"
                   placeholder="Email Address"
                   value={formData.email}
@@ -371,6 +373,7 @@ export default function Signup() {
                 <div className="flex gap-2 p-2 bg-gray-50 dark:bg-slate-800/50 rounded-lg border border-dashed border-slate-700">
                   <input
                     type="text"
+                    autoComplete="off"
                     placeholder="Email OTP"
                     value={emailOtp}
                     onChange={(e) => setEmailOtp(e.target.value)}
@@ -392,6 +395,7 @@ export default function Signup() {
               <div className="relative flex items-center">
                 <input
                   type="text"
+                  autoComplete="off"
                   name="phone"
                   placeholder="Phone Number"
                   value={formData.phone}
@@ -429,6 +433,7 @@ export default function Signup() {
                 <div className="flex gap-2 p-2 bg-gray-50 dark:bg-slate-800/50 rounded-lg border border-dashed border-slate-700">
                   <input
                     type="text"
+                    autoComplete="off"
                     placeholder="Mobile OTP"
                     value={mobileOtp}
                     onChange={(e) => setMobileOtp(e.target.value)}
@@ -448,6 +453,7 @@ export default function Signup() {
             <div className="relative">
               <input
                 type={showPassword ? "text" : "password"}
+                autoComplete="off"
                 name="password"
                 placeholder="Secure Password"
                 value={formData.password}

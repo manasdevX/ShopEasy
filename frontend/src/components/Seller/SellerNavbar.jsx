@@ -12,6 +12,7 @@ import {
   LogOut,
   Settings,
   User,
+  Check,
 } from "lucide-react";
 
 export default function SellerNavbar({ isLoggedIn }) {
@@ -45,23 +46,23 @@ export default function SellerNavbar({ isLoggedIn }) {
     { name: "Orders", path: "/Seller/orders", icon: ListOrdered },
   ];
 
-  // Stepper Logic for Onboarding
-  const isOnboarding = [
-    "/Seller/login",
-    "/Seller/signup",
-    "/Seller/forgot-password",
-    "/Seller/register",
-    "/Seller/bank-details",
-  ].includes(location.pathname);
-
+  // 1. Your exact steps array (I added [] to the single paths for consistency)
   const steps = [
-    { name: "EMAIL & PASSWORD", path: "/Seller/register" }, // Note: This mapping depends on your route logic
-    { name: "BUSINESS DETAILS", path: "/Seller/register" },
-    { name: "BANK VERIFICATION", path: "/Seller/bank-details" },
+    {
+      name: "EMAIL & PASSWORD",
+      path: ["/Seller/login", "/Seller/signup", "/Seller/forgot-password"],
+    },
+    { name: "BUSINESS DETAILS", path: ["/Seller/register"] },
+    { name: "BANK VERIFICATION", path: ["/Seller/bank-details"] },
   ];
 
-  // Simple logic to highlight current step based on path
-  const currentStepIndex = steps.findIndex((s) => s.path === location.pathname);
+  // 2. The Professional way: Calculate index first
+  // We check if the current path exists inside the 'path' array of any step
+  const currentStepIndex = steps.findIndex((s) => s.path.includes(location.pathname));
+
+  // 3. Derived Onboarding State: If we found an index, we ARE onboarding.
+  // This solves the "Step 0" bug because 0 !== -1 is TRUE.
+  const isOnboarding = currentStepIndex !== -1;
 
   return (
     <nav className="sticky top-0 z-50 bg-white dark:bg-[#030712] border-b border-slate-100 dark:border-slate-800 transition-all duration-300">
@@ -89,63 +90,65 @@ export default function SellerNavbar({ isLoggedIn }) {
           <div className="hidden lg:flex flex-grow max-w-2xl justify-center">
             {isOnboarding ? (
               <div className="flex items-center gap-4">
-                {steps.map((step, index) => (
-                  <React.Fragment key={step.name}>
-                    <div className="flex items-center gap-3">
-                      {/* Step Icon */}
-                      <div
-                        className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
-                          index <= currentStepIndex
-                            ? "bg-orange-500 border-orange-500 text-white"
-                            : "border-slate-300 text-slate-400"
-                        }`}
-                      >
-                        {index < currentStepIndex ? (
-                          <svg
-                            className="w-4 h-4"
-                            fill="currentColor"
-                            viewBox="0 0 20 20"
+                {steps.map((step, index) => {
+                  const isCompleted = index < currentStepIndex;
+                  const isActive = Number(index) === Number(currentStepIndex);
+
+                  return (
+                    <React.Fragment key={step.name}>
+                      <div className="flex items-center gap-3">
+                        {/* STEP ICON */}
+                        <div
+                          className={`w-6 h-6 flex items-center justify-center border-2 transition-all duration-300 ${
+                            isCompleted
+                              ? "bg-orange-500 border-orange-500 text-white"
+                              : "border-slate-300 dark:border-slate-700 text-slate-400"
+                          }`}
+                          style={{
+                            borderRadius: "50px",
+                          }} /* Kept pointed edges */
+                        >
+                          {isCompleted ? (
+                            <Check size={14} strokeWidth={4} />
+                          ) : (
+                            <span className="text-[10px] font-black">
+                              {index + 1}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* STEP NAME & UNDERLINE */}
+                        <div className="flex flex-col items-start">
+                          <span
+                            className={`text-[10px] font-black tracking-widest uppercase whitespace-nowrap transition-colors ${
+                              isCompleted || isActive
+                                ? "text-slate-900 dark:text-white"
+                                : "text-slate-400"
+                            }`}
                           >
-                            <path
-                              fillRule="evenodd"
-                              d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                              clipRule="evenodd"
-                            />
-                          </svg>
-                        ) : (
-                          <span className="text-[10px] font-bold">
-                            {index + 1}
+                            {step.name}
                           </span>
-                        )}
+
+                          {/* Underline renders for BOTH Completed and Active steps */}
+                          {(isCompleted || isActive) && (
+                            <div className="h-[2px] w-full bg-orange-500 mt-1" />
+                          )}
+                        </div>
                       </div>
 
-                      {/* Step Name */}
-                      <span
-                        className={`text-[10px] font-black tracking-widest whitespace-nowrap transition-colors ${
-                          index <= currentStepIndex
-                            ? "text-slate-900 dark:text-white"
-                            : "text-slate-400"
-                        }`}
-                      >
-                        {step.name}
-                        {index === currentStepIndex && (
-                          <div className="h-0.5 w-full bg-orange-500 mt-0.5 rounded-full" />
-                        )}
-                      </span>
-                    </div>
-
-                    {/* Connector Line */}
-                    {index < steps.length - 1 && (
-                      <div
-                        className={`w-12 h-[1px] ${
-                          index < currentStepIndex
-                            ? "bg-orange-500"
-                            : "bg-slate-200 dark:bg-slate-800"
-                        }`}
-                      />
-                    )}
-                  </React.Fragment>
-                ))}
+                      {/* CONNECTOR LINE - Only orange if the step is COMPLETED */}
+                      {index < steps.length - 1 && (
+                        <div
+                          className={`w-12 h-[1px] transition-colors duration-500 ${
+                            isCompleted
+                              ? "bg-orange-500"
+                              : "bg-slate-200 dark:bg-slate-800"
+                          }`}
+                        />
+                      )}
+                    </React.Fragment>
+                  );
+                })}
               </div>
             ) : (
               /* DEFAULT SEARCH BAR */
