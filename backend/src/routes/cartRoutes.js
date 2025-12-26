@@ -1,14 +1,14 @@
 import express from "express";
 import Cart from "../models/Cart.js";
-import { verifyToken } from "../middlewares/auth.middleware.js";
+import { protect } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
 // @route   GET /api/cart
 // @desc    Get logged-in user's cart
-router.get("/", verifyToken, async (req, res) => {
+router.get("/", protect, async (req, res) => {
   try {
-    const cart = await Cart.findOne({ userId: req.user.id }).populate(
+    const cart = await Cart.findOne({ userId: req.user._id }).populate(
       "items.product"
     );
 
@@ -18,20 +18,24 @@ router.get("/", verifyToken, async (req, res) => {
 
     res.json(cart);
   } catch (err) {
+    console.error(err);
     res.status(500).send("Server Error");
   }
 });
 
 // @route   POST /api/cart/sync
 // @desc    Sync local cart with database
-router.post("/sync", verifyToken, async (req, res) => {
+router.post("/sync", protect, async (req, res) => {
   const { localItems } = req.body;
 
   try {
-    let cart = await Cart.findOne({ userId: req.user.id });
+    let cart = await Cart.findOne({ userId: req.user._id });
 
     if (!cart) {
-      cart = new Cart({ userId: req.user.id, items: localItems });
+      cart = new Cart({
+        userId: req.user._id,
+        items: localItems,
+      });
     } else {
       localItems.forEach((localItem) => {
         const itemIndex = cart.items.findIndex(
@@ -49,15 +53,16 @@ router.post("/sync", verifyToken, async (req, res) => {
     await cart.save();
     res.status(200).json(cart);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Sync failed" });
   }
 });
 
 // @route   DELETE /api/cart/:productId
 // @desc    Remove an item from cart
-router.delete("/:productId", verifyToken, async (req, res) => {
+router.delete("/:productId", protect, async (req, res) => {
   try {
-    const cart = await Cart.findOne({ userId: req.user.id });
+    const cart = await Cart.findOne({ userId: req.user._id });
 
     if (cart) {
       cart.items = cart.items.filter(
@@ -68,17 +73,19 @@ router.delete("/:productId", verifyToken, async (req, res) => {
 
     res.json({ message: "Item removed" });
   } catch (err) {
+    console.error(err);
     res.status(500).send("Server Error");
   }
 });
 
 // @route   POST /api/cart/clear
 // @desc    Clear cart after successful order
-router.post("/clear", verifyToken, async (req, res) => {
+router.post("/clear", protect, async (req, res) => {
   try {
-    await Cart.findOneAndDelete({ userId: req.user.id });
+    await Cart.findOneAndDelete({ userId: req.user._id });
     res.json({ message: "Cart cleared" });
   } catch (err) {
+    console.error(err);
     res.status(500).send("Server Error");
   }
 });
