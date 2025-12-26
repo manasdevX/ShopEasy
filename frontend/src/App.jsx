@@ -11,7 +11,7 @@ import ForgotPassword from "./pages/ForgotPassword";
 // --- SELLER PAGES ---
 import SellerLanding from "./pages/Seller/Landing"; // The "Become a Seller" info page
 import SellerSignup from "./pages/Seller/Signup"; // Seller Signup
-import SellerLogin from "./pages/Seller/Login";       // Seller Login 
+import SellerLogin from "./pages/Seller/Login"; // Seller Login
 import SellerForgotPassword from "./pages/Seller/ForgotPassword"; // Seller Forgot Password
 import SellerRegister from "./pages/Seller/Register"; // Seller-specific Register
 import BankDetails from "./pages/Seller/BankDetails"; // Seller Bank Details Verification
@@ -20,7 +20,6 @@ import Products from "./pages/Seller/Products"; // List of seller items
 import AddProduct from "./pages/Seller/AddProduct"; // Add new product form
 import EditProduct from "./pages/Seller/EditProduct"; // Edit existing product form
 import SellerOrders from "./pages/Seller/Orders"; // Seller Orders Management
-
 
 export default function App() {
   return (
@@ -54,7 +53,7 @@ export default function App() {
         <Route path="/Seller/products" element={<Products />} />
         <Route path="/Seller/orders" element={<SellerOrders />} />
         <Route path="/Seller/add-product" element={<AddProduct />} />
-        <Route path="/Seller/edit-product" element={<EditProduct />} />
+        <Route path="/Seller/edit-product/:id" element={<EditProduct />} />
         {/* Seller Auth Flow */}
         <Route path="/Seller/login" element={<SellerLogin />} />
         <Route

@@ -157,12 +157,33 @@ export const updateProduct = async (req, res) => {
           .json({ message: "Not authorized to edit this product" });
       }
 
+      // 1. Handle Image Updates if new files are provided
+      if (req.files && req.files.thumbnail) {
+        product.thumbnail = await uploadToCloudinary(
+          req.files.thumbnail[0].buffer
+        );
+      }
+
+      if (req.files && req.files.images) {
+        const uploadPromises = req.files.images.map((file) =>
+          uploadToCloudinary(file.buffer)
+        );
+        product.images = await Promise.all(uploadPromises);
+      }
+
+      // 2. Update Fields
       product.name = req.body.name || product.name;
       product.price = req.body.price || product.price;
+      product.mrp = req.body.mrp || product.mrp;
       product.description = req.body.description || product.description;
       product.brand = req.body.brand || product.brand;
       product.category = req.body.category || product.category;
       product.stock = req.body.stock || product.stock;
+
+      if (req.body.tags) {
+        product.tags = req.body.tags.split(",").map((t) => t.trim());
+      }
+
       product.isFeatured = req.body.isFeatured ?? product.isFeatured;
       product.isBestSeller = req.body.isBestSeller ?? product.isBestSeller;
 

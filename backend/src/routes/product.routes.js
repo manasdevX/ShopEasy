@@ -14,18 +14,19 @@ import { protect, protectSeller } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
+// --- Multer Configuration ---
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
 /* =========================================
    SELLER ROUTES (Manage Products)
-   NOTE: Defined FIRST to prevent conflict with /:id
+   NOTE: Specialized routes come before /:id to prevent routing conflicts
 ========================================= */
 
-// GET /api/products/seller/all
+// Matches: GET /api/products/seller/all
 router.get("/seller/all", protectSeller, getSellerProducts);
 
-// POST /api/products/add
+// Matches: POST /api/products/add
 router.post(
   "/add",
   protectSeller,
@@ -36,22 +37,37 @@ router.post(
   createProduct
 );
 
+// Matches: PUT /api/products/:id
+// Added upload middleware to handle image updates during editing
+router.put(
+  "/:id",
+  protectSeller,
+  upload.fields([
+    { name: "thumbnail", maxCount: 1 },
+    { name: "images", maxCount: 5 },
+  ]),
+  updateProduct
+);
+
+// Matches: DELETE /api/products/:id
+router.delete("/:id", protectSeller, deleteProduct);
+
 /* =========================================
    PUBLIC ROUTES
 ========================================= */
 
-// GET /api/products
+// Matches: GET /api/products
 router.get("/", getAllProducts);
 
-// GET /api/products/:id (STAY AT BOTTOM)
+// Matches: GET /api/products/:id
+// Keep this at the bottom of the GET routes
 router.get("/:id", getProductById);
 
 /* =========================================
-   PROTECTED ACTIONS
+   CUSTOMER ACTIONS
 ========================================= */
 
-router.put("/:id", protectSeller, updateProduct);
-router.delete("/:id", protectSeller, deleteProduct);
+// Matches: POST /api/products/:id/reviews
 router.post("/:id/reviews", protect, createProductReview);
 
 export default router;
