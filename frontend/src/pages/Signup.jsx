@@ -5,6 +5,7 @@ import AuthFooter from "../components/AuthFooter";
 import { useGoogleLogin } from "@react-oauth/google";
 import { Eye, EyeOff, CheckCircle, Loader2 } from "lucide-react";
 import { showSuccess, showError } from "../utils/toast";
+
 const API_URL = import.meta.env.VITE_API_URL;
 
 export default function Signup() {
@@ -40,8 +41,38 @@ export default function Signup() {
   const [showPassword, setShowPassword] = useState(false);
 
   const hasShownToast = useRef(false);
+  const phoneRegex = /^[6-9]\d{9}$/;
 
-  const phoneRegex = /^[6-9]\d{9}$/; // Indian standard: starts with 6-9, 10 digits
+  // ================= PRODUCTION HELPER: CART SYNC =================
+  /**
+   * Syncs the LocalStorage guest cart to MongoDB immediately after registration.
+   */
+  const syncGuestCart = async (token) => {
+    try {
+      const localCart = JSON.parse(localStorage.getItem("cart")) || [];
+      if (localCart.length === 0) return;
+
+      const localItems = localCart.map((item) => ({
+        product: item._id, // Matches MongoDB ID
+        quantity: item.quantity,
+      }));
+
+      const res = await fetch(`${API_URL}/api/cart/sync`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ localItems }),
+      });
+
+      if (res.ok) {
+        localStorage.removeItem("cart"); // Clear local after successful cloud sync
+      }
+    } catch (err) {
+      console.error("Signup Cart Sync Error:", err);
+    }
+  };
 
   // ================= AUTOFILL LOGIC =================
   useEffect(() => {
@@ -49,12 +80,10 @@ export default function Signup() {
       const { name, email, googleId } = location.state;
       if (email && googleId && !hasShownToast.current) {
         hasShownToast.current = true;
-
         setFormData((prev) => ({ ...prev, name, email }));
         setGoogleId(googleId);
         setIsEmailVerified(true);
         showSuccess("Email Verified!");
-
         window.history.replaceState({}, document.title);
       }
     }
@@ -81,7 +110,6 @@ export default function Signup() {
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
-
     if (e.target.name === "email" && !googleId) {
       setIsEmailVerified(false);
       setIsEmailSent(false);
@@ -98,7 +126,6 @@ export default function Signup() {
     }
   };
 
-  // --- EMAIL FLOW ---
   const sendEmailOtp = async () => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(formData.email))
@@ -106,7 +133,6 @@ export default function Signup() {
 
     setVerifyingEmail(true);
     setEmailError("");
-
     try {
       const res = await fetch(`${API_URL}/api/auth/send-email-otp`, {
         method: "POST",
@@ -114,13 +140,10 @@ export default function Signup() {
         body: JSON.stringify({ email: formData.email }),
       });
       const data = await res.json();
-
       if (res.ok) {
         setIsEmailSent(true);
         setEmailTimer(30);
-        showSuccess(
-          isEmailSent ? "OTP Resent to Email!" : "OTP sent to Email!"
-        );
+        showSuccess(isEmailSent ? "OTP Resent!" : "OTP sent!");
       } else {
         setEmailError(data.message);
         showError(data.message);
@@ -150,18 +173,11 @@ export default function Signup() {
     }
   };
 
-  // --- MOBILE FLOW ---
   const sendMobileOtp = async () => {
     if (!phoneRegex.test(formData.phone))
       return showError("Invalid phone number");
-
-    if (!formData.phone) return showError("Please enter phone first");
-
-    if (isMobileVerified) return showSuccess("Phone already verified!");
-
     setVerifyingMobile(true);
     setPhoneError("");
-
     try {
       const res = await fetch(`${API_URL}/api/auth/send-mobile-otp`, {
         method: "POST",
@@ -169,13 +185,10 @@ export default function Signup() {
         body: JSON.stringify({ phone: formData.phone }),
       });
       const data = await res.json();
-
       if (res.ok) {
         setIsMobileSent(true);
         setMobileTimer(30);
-        showSuccess(
-          isMobileSent ? "OTP Resent to Mobile!" : "OTP sent to Mobile!"
-        );
+        showSuccess("OTP sent to Mobile!");
       } else {
         setPhoneError(data.message);
         showError(data.message);
@@ -205,55 +218,40 @@ export default function Signup() {
     }
   };
 
-  // ================= SUBMIT HANDLER (UPDATED) =================
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    // 1. Password Verification Logic
     const password = formData.password;
     const isValidPassword = (pass) =>
       /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/.test(
         pass
       );
 
-    if (!password) {
-      return showError("Password is required");
-    }
-
     if (!isValidPassword(password)) {
       return showError(
-        "Password must be 8+ characters with uppercase, lowercase, a number, and a special character (@$!%*?&)"
+        "Password must be 8+ characters with uppercase, lowercase, number, and special char."
       );
     }
 
-    if (!isEmailVerified)
-      return showError("Please verify your email address first");
-    if (!isMobileVerified)
-      return showError("Please verify your phone number first");
+    if (!isEmailVerified || !isMobileVerified)
+      return showError("Verify your email and phone first");
 
     setLoading(true);
     try {
       const res = await fetch(`${API_URL}/api/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...formData,
-          emailOtp,
-          mobileOtp,
-          googleId,
-        }),
+        body: JSON.stringify({ ...formData, emailOtp, mobileOtp, googleId }),
       });
       const data = await res.json();
 
       if (res.ok) {
         localStorage.setItem("token", data.token);
-
-        // ✅ CRITICAL FIX: Save only the user object, not the whole response
         localStorage.setItem("user", JSON.stringify(data.user));
 
-        showSuccess("Welcome to ShopEasy! Registration complete.");
+        // ✅ PRODUCTION: Sync guest cart items to the new account
+        await syncGuestCart(data.token);
 
-        // ✅ CRITICAL FIX: Use window.location to force Navbar update
+        showSuccess("Registration complete!");
         window.location.href = "/";
       } else {
         showError(data.message || "Registration failed");
@@ -265,7 +263,6 @@ export default function Signup() {
     }
   };
 
-  // --- GOOGLE LOGIN ---
   const googleLogin = useGoogleLogin({
     onSuccess: async (tokenResponse) => {
       try {
@@ -275,7 +272,6 @@ export default function Signup() {
           body: JSON.stringify({ token: tokenResponse.access_token }),
         });
         const data = await res.json();
-
         if (res.ok) {
           if (data.isNewUser) {
             setFormData((prev) => ({
@@ -289,14 +285,17 @@ export default function Signup() {
           } else {
             localStorage.setItem("token", data.token);
             localStorage.setItem("user", JSON.stringify(data.user));
+
+            // ✅ PRODUCTION: Sync cart for Google Login
+            await syncGuestCart(data.token);
+
             showSuccess("Login successful!");
-            // ✅ Updated to window.location for consistency
             window.location.href = "/";
           }
         } else {
           showError(data.message);
         }
-      } catch (err) {
+      } catch {
         showError("Google Login Failed");
       }
     },
@@ -305,7 +304,7 @@ export default function Signup() {
   const inputBase = `w-full border px-4 py-2.5 rounded-lg outline-none transition-all duration-200 
     bg-white dark:bg-slate-800 text-slate-900 dark:text-white
     autofill:shadow-[inset_0_0_0px_1000px_#ffffff] dark:autofill:shadow-[inset_0_0_0px_1000px_#1e293b]
-    autofill:text-fill-slate-900 dark:autofill:text-fill-white border-gray-300 dark:border-slate-700`;
+    border-gray-300 dark:border-slate-700`;
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-[#030712] transition-colors duration-300 font-sans">
@@ -330,6 +329,7 @@ export default function Signup() {
               required
             />
 
+            {/* Email Field with Verification */}
             <div className="space-y-3">
               <div className="relative flex items-center">
                 <input
@@ -341,25 +341,23 @@ export default function Signup() {
                   disabled={isEmailVerified || !!googleId}
                   className={`${inputBase} pr-24 ${
                     isEmailVerified
-                      ? "border-green-500 ring-1 ring-green-500/20"
+                      ? "border-green-500 ring-1"
                       : "focus:ring-2 focus:ring-orange-400"
                   }`}
                   required
                 />
-                <div className="absolute right-2 flex items-center">
+                <div className="absolute right-2">
                   {!isEmailVerified ? (
                     <button
                       type="button"
                       onClick={sendEmailOtp}
                       disabled={verifyingEmail || emailTimer > 0}
-                      className="text-xs font-bold text-orange-500 hover:text-orange-600 disabled:text-gray-400 uppercase tracking-wider px-2"
+                      className="text-xs font-bold text-orange-500 uppercase px-2"
                     >
                       {verifyingEmail ? (
                         <Loader2 className="animate-spin" size={16} />
                       ) : emailTimer > 0 ? (
                         `${emailTimer}s`
-                      ) : isEmailSent ? (
-                        "Resend"
                       ) : (
                         "Verify"
                       )}
@@ -369,24 +367,19 @@ export default function Signup() {
                   )}
                 </div>
               </div>
-              {emailError && (
-                <p className="text-red-500 text-xs font-medium ml-1">
-                  {emailError}
-                </p>
-              )}
               {isEmailSent && !isEmailVerified && !googleId && (
-                <div className="flex gap-2 p-2 bg-gray-50 dark:bg-slate-800/50 rounded-lg border border-dashed dark:border-slate-700 animate-in zoom-in-95">
+                <div className="flex gap-2 p-2 bg-gray-50 dark:bg-slate-800/50 rounded-lg border border-dashed border-slate-700">
                   <input
                     type="text"
                     placeholder="Email OTP"
                     value={emailOtp}
                     onChange={(e) => setEmailOtp(e.target.value)}
-                    className="flex-grow bg-white dark:bg-slate-800 border dark:border-slate-700 px-3 py-1.5 rounded-md text-sm outline-none focus:ring-2 focus:ring-green-400"
+                    className="flex-grow bg-white dark:bg-slate-800 border px-3 py-1.5 rounded-md text-sm outline-none"
                   />
                   <button
                     type="button"
                     onClick={verifyEmailOtp}
-                    className="bg-green-600 text-white px-4 py-1.5 rounded-md text-xs font-bold hover:bg-green-700 transition-colors"
+                    className="bg-green-600 text-white px-4 py-1.5 rounded-md text-xs font-bold"
                   >
                     CONFIRM
                   </button>
@@ -394,6 +387,7 @@ export default function Signup() {
               )}
             </div>
 
+            {/* Phone Field with Verification */}
             <div className="space-y-3">
               <div className="relative flex items-center">
                 <input
@@ -405,25 +399,23 @@ export default function Signup() {
                   disabled={isMobileVerified}
                   className={`${inputBase} pr-24 ${
                     isMobileVerified
-                      ? "border-green-500 ring-1 ring-green-500/20"
+                      ? "border-green-500 ring-1"
                       : "focus:ring-2 focus:ring-orange-400"
                   }`}
                   required
                 />
-                <div className="absolute right-2 flex items-center">
+                <div className="absolute right-2">
                   {!isMobileVerified ? (
                     <button
                       type="button"
                       onClick={sendMobileOtp}
                       disabled={verifyingMobile || mobileTimer > 0}
-                      className="text-xs font-bold text-orange-500 hover:text-orange-600 disabled:text-gray-400 uppercase tracking-wider px-2"
+                      className="text-xs font-bold text-orange-500 uppercase px-2"
                     >
                       {verifyingMobile ? (
                         <Loader2 className="animate-spin" size={16} />
                       ) : mobileTimer > 0 ? (
                         `${mobileTimer}s`
-                      ) : isMobileSent ? (
-                        "Resend"
                       ) : (
                         "Verify"
                       )}
@@ -433,24 +425,19 @@ export default function Signup() {
                   )}
                 </div>
               </div>
-              {phoneError && (
-                <p className="text-red-500 text-xs font-medium ml-1">
-                  {phoneError}
-                </p>
-              )}
               {isMobileSent && !isMobileVerified && (
-                <div className="flex gap-2 p-2 bg-gray-50 dark:bg-slate-800/50 rounded-lg border border-dashed dark:border-slate-700 animate-in zoom-in-95">
+                <div className="flex gap-2 p-2 bg-gray-50 dark:bg-slate-800/50 rounded-lg border border-dashed border-slate-700">
                   <input
                     type="text"
                     placeholder="Mobile OTP"
                     value={mobileOtp}
                     onChange={(e) => setMobileOtp(e.target.value)}
-                    className="flex-grow bg-white dark:bg-slate-800 border dark:border-slate-700 px-3 py-1.5 rounded-md text-sm outline-none focus:ring-2 focus:ring-green-400"
+                    className="flex-grow bg-white dark:bg-slate-800 border px-3 py-1.5 rounded-md text-sm outline-none"
                   />
                   <button
                     type="button"
                     onClick={verifyMobileOtp}
-                    className="bg-green-600 text-white px-4 py-1.5 rounded-md text-xs font-bold hover:bg-green-700 transition-colors"
+                    className="bg-green-600 text-white px-4 py-1.5 rounded-md text-xs font-bold"
                   >
                     CONFIRM
                   </button>
@@ -471,7 +458,7 @@ export default function Signup() {
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-3 flex items-center text-gray-400 hover:text-gray-600"
+                className="absolute inset-y-0 right-3 flex items-center text-gray-400"
               >
                 {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
               </button>
@@ -480,12 +467,10 @@ export default function Signup() {
             <button
               type="submit"
               disabled={loading || !isEmailVerified || !isMobileVerified}
-              className="w-full bg-orange-500 text-white py-3 rounded-lg hover:bg-orange-600 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed font-bold shadow-lg shadow-orange-500/20"
+              className="w-full bg-orange-500 text-white py-3 rounded-lg hover:bg-orange-600 transition-all font-bold shadow-lg disabled:opacity-50"
             >
               {loading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <Loader2 className="animate-spin" size={20} /> Processing...
-                </span>
+                <Loader2 className="animate-spin mx-auto" size={20} />
               ) : (
                 "Create Account"
               )}
@@ -494,9 +479,7 @@ export default function Signup() {
 
           <div className="flex items-center my-6">
             <div className="flex-grow h-px bg-gray-300 dark:bg-slate-700" />
-            <span className="px-3 text-sm text-gray-500 dark:text-slate-500 font-medium">
-              OR
-            </span>
+            <span className="px-3 text-sm text-gray-500 font-medium">OR</span>
             <div className="flex-grow h-px bg-gray-300 dark:bg-slate-700" />
           </div>
 
@@ -504,11 +487,7 @@ export default function Signup() {
             type="button"
             onClick={() => googleLogin()}
             disabled={loading}
-            className={`w-full flex items-center justify-center gap-3 
-              bg-[#e8f0fe] dark:bg-slate-800 hover:bg-[#dfe9fd] dark:hover:bg-slate-700
-              text-[#1a73e8] dark:text-blue-400 font-medium 
-              py-3 rounded-lg transition
-              ${loading ? "opacity-60 cursor-not-allowed" : ""}`}
+            className="w-full flex items-center justify-center gap-3 bg-[#e8f0fe] dark:bg-slate-800 hover:bg-[#dfe9fd] text-[#1a73e8] dark:text-blue-400 font-medium py-3 rounded-lg transition"
           >
             <img
               src="https://developers.google.com/identity/images/g-logo.png"
@@ -518,12 +497,9 @@ export default function Signup() {
             <span>Continue with Google</span>
           </button>
 
-          <p className="mt-8 text-center text-sm text-gray-500 dark:text-slate-400">
+          <p className="mt-8 text-center text-sm text-gray-500">
             Already have an account?{" "}
-            <Link
-              to="/login"
-              className="text-orange-500 hover:text-orange-600 font-bold transition-colors"
-            >
+            <Link to="/login" className="text-orange-500 font-bold">
               Login
             </Link>
           </p>
