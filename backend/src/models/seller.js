@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 
 const sellerSchema = new mongoose.Schema(
   {
-    // --- PERSONAL INFO ---
+    // --- STEP 1: PERSONAL INFO (Required for Account Creation) ---
     name: {
       type: String,
       required: [true, "Please enter your name"],
@@ -21,32 +21,36 @@ const sellerSchema = new mongoose.Schema(
     },
     password: {
       type: String,
-      required: [true, "Please enter your password"],
+      // Password is NOT required if using Google Auth
+      required: function () {
+        return !this.googleId;
+      },
       minlength: 6,
-      select: false, // Security: hide password by default
+      select: false,
     },
     phone: {
       type: String,
-      required: [true, "Please enter your phone number"],
+      // Phone might be collected later in some flows, but usually Step 1
+      required: [false, "Please enter your phone number"],
     },
 
-    // === GOOGLE AUTH FIELD (New) ===
+    // === GOOGLE AUTH FIELD ===
     googleId: {
       type: String,
       unique: true,
-      sparse: true, // Allows null values (for sellers who don't use Google)
+      sparse: true,
     },
 
-    // --- BUSINESS DETAILS ---
+    // --- STEP 2: BUSINESS DETAILS (Updated via PUT) ---
+    // Note: 'required' removed to allow initial creation in Step 1
     businessName: {
       type: String,
-      required: [true, "Please enter your business name"],
       unique: true,
       trim: true,
+      sparse: true, // Allows null/undefined for incomplete profiles
     },
     businessType: {
       type: String,
-      required: [true, "Please select business type"],
       enum: [
         "Proprietorship",
         "Partnership",
@@ -57,17 +61,17 @@ const sellerSchema = new mongoose.Schema(
     },
     gstin: {
       type: String,
-      required: [true, "GSTIN is required"],
-      unique: true,
       uppercase: true,
       trim: true,
+      // Unique but sparse so multiple "incomplete" users can exist without error
+      unique: true,
+      sparse: true,
     },
     address: {
       type: String,
-      required: [true, "Address is required"],
     },
 
-    // --- BANK DETAILS ---
+    // --- STEP 3: BANK DETAILS (Updated via PUT) ---
     bankDetails: {
       accountHolder: { type: String },
       accountNumber: { type: String },
@@ -80,28 +84,32 @@ const sellerSchema = new mongoose.Schema(
     // --- STATUS & ROLES ---
     role: {
       type: String,
-      default: "seller", // Fixed role
+      default: "seller",
+    },
+    // Used to track if they finished the full registration wizard
+    isOnboardingComplete: {
+      type: Boolean,
+      default: false,
     },
     isVerified: {
       type: Boolean, // Admin approval status
       default: false,
     },
     isActive: {
-      type: Boolean, // Seller can temporarily disable their own account
+      type: Boolean,
       default: true,
     },
 
-    // --- PASSWORD RESET TOKENS ---
     resetPasswordToken: String,
     resetPasswordExpire: Date,
   },
   {
-    timestamps: true, // Auto-adds createdAt and updatedAt
+    timestamps: true,
   }
 );
 
 /* ======================================================
-   MIDDLEWARE & METHODS (Essential for Auth)
+   MIDDLEWARE & METHODS
 ====================================================== */
 
 // 1. Encrypt password before saving
@@ -109,23 +117,27 @@ sellerSchema.pre("save", async function (next) {
   if (!this.isModified("password")) {
     next();
   }
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
+  // Only hash if password exists (skip for Google Auth users)
+  if (this.password) {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+  }
 });
 
-// 2. Sign JWT Token (Helper method)
+// 2. Sign JWT Token
 sellerSchema.methods.getSignedJwtToken = function () {
   return jwt.sign({ id: this._id, role: "seller" }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRE || "30d",
   });
 };
 
-// 3. Match entered password with hashed password
+// 3. Match entered password
 sellerSchema.methods.matchPassword = async function (enteredPassword) {
+  // If user has no password (e.g., Google Auth only), return false
+  if (!this.password) return false;
   return await bcrypt.compare(enteredPassword, this.password);
 };
 
-// Check if "Seller" is already defined; if so, use it. If not, define it.
 const Seller = mongoose.models.Seller || mongoose.model("Seller", sellerSchema);
 
 export default Seller;
