@@ -1,25 +1,18 @@
 import Navbar from "../../components/Seller/SellerNavbar";
 import Footer from "../../components/Seller/SellerFooter";
 import { useState, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
-import { Loader2, LocateFixed } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Loader2, LocateFixed, ArrowRight, ArrowLeft } from "lucide-react";
 import { showError, showSuccess } from "../../utils/toast";
-
-// Fallback if env variable is missing
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export default function SellerRegister() {
   const navigate = useNavigate();
-  const location = useLocation();
+
+  // State for UI interactions
   const [isLocating, setIsLocating] = useState(false);
-
-  // 1. GET DATA FROM STEP 1
-  const stepOneData = location.state;
-
-  const [loading, setLoading] = useState(false);
   const [loadingPincode, setLoadingPincode] = useState(false);
 
-  // 2. FORM STATE (Business Details)
+  // 1. FORM STATE (Business Details)
   const [form, setForm] = useState({
     businessName: "",
     businessType: "",
@@ -31,13 +24,22 @@ export default function SellerRegister() {
     agree: false,
   });
 
-  // 3. SECURITY CHECK & PRE-FILL
+  // 2. SECURITY CHECK & PRE-FILL
   useEffect(() => {
-    if (!stepOneData) {
+    // ✅ Check if Step 1 data exists in storage (Handle Refresh)
+    const step1 = localStorage.getItem("seller_step1");
+    if (!step1) {
       showError("Please complete Step 1 first.");
       navigate("/Seller/signup");
+      return;
     }
-  }, [stepOneData, navigate]);
+
+    // ✅ Load saved Step 2 data if available (Back Button Support)
+    const savedStep2 = JSON.parse(localStorage.getItem("seller_step2"));
+    if (savedStep2) {
+      setForm((prev) => ({ ...prev, ...savedStep2 }));
+    }
+  }, [navigate]);
 
   // Auto-lookup City/State
   useEffect(() => {
@@ -72,19 +74,12 @@ export default function SellerRegister() {
     }));
   };
 
-  const handleSubmit = async (e) => {
+  // ✅ DEFERRED SUBMIT: Save to LocalStorage & Move to Step 3
+  const handleSubmit = (e) => {
     e.preventDefault();
 
-    const {
-      businessName,
-      businessType,
-      gstin,
-      street,
-      city,
-      state,
-      pincode,
-      agree,
-    } = form;
+    const { businessName, businessType, gstin, street, city, pincode, agree } =
+      form;
 
     // VALIDATION
     if (
@@ -98,7 +93,7 @@ export default function SellerRegister() {
       return showError("Please fill all mandatory fields.");
     }
 
-    // Basic GST Regex (15 chars)
+    // GST Regex
     const gstRegex =
       /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
     if (!gstRegex.test(gstin.toUpperCase())) {
@@ -115,50 +110,22 @@ export default function SellerRegister() {
       return showError("You must agree to the Terms & Conditions.");
     }
 
-    setLoading(true);
+    // 🚀 ACTION: Save to LocalStorage ONLY (No API Call yet)
+    localStorage.setItem(
+      "seller_step2",
+      JSON.stringify({
+        ...form,
+        gstin: gstin.toUpperCase(), // Ensure uppercase
+      })
+    );
 
-    // 4. PREPARE FINAL PAYLOAD
-    const fullAddress = `${street}, ${city}, ${state} - ${pincode}`;
+    showSuccess("Business Details Saved!");
 
-    const registrationData = {
-      ...stepOneData, // name, email, phone, password from Step 1
-      businessName,
-      businessType,
-      gstin: gstin.toUpperCase(),
-      address: fullAddress,
-    };
-
-    try {
-      // 5. CALL BACKEND API
-      const res = await fetch(`${API_URL}/api/sellers/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(registrationData),
-      });
-
-      const data = await res.json();
-
-      if (res.ok) {
-        // 6. SUCCESS: SAVE TOKEN & REDIRECT
-        // === CRITICAL FIX: USING SELLER-SPECIFIC KEYS ===
-        localStorage.setItem("sellerToken", data.token);
-        localStorage.setItem("sellerUser", JSON.stringify(data));
-
-        showSuccess("Account Created Successfully!");
-
-        // Navigate to Bank Details (Step 3) - Now Authenticated
-        navigate("/Seller/bank-details");
-      } else {
-        showError(data.message || "Registration Failed");
-      }
-    } catch (error) {
-      showError("Server Error. Please try again.");
-    } finally {
-      setLoading(false);
-    }
+    // Navigate to Final Step
+    navigate("/Seller/bank-details");
   };
 
-  // ================= GEOLOCATION HANDLER (FIXED) =================
+  // ================= GEOLOCATION HANDLER =================
   const handleUseCurrentLocation = () => {
     if (!navigator.geolocation) {
       showError("Geolocation is not supported by your browser");
@@ -210,7 +177,6 @@ export default function SellerRegister() {
               addr.state_district ||
               "";
 
-            // FIXED: Using setForm instead of setNewAddress
             setForm((prev) => ({
               ...prev,
               street: fullStreet || addr.display_name.split(",")[0],
@@ -278,7 +244,7 @@ export default function SellerRegister() {
                 />
               </div>
 
-              {/* READ ONLY: Email from Step 1 */}
+              {/* READ ONLY: Email from Step 1 (Retrieved from LocalStorage) */}
               <div>
                 <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 ml-1">
                   Business Email (Verified)
@@ -286,7 +252,10 @@ export default function SellerRegister() {
                 <input
                   type="email"
                   autoComplete="off"
-                  value={stepOneData?.email || ""}
+                  value={
+                    JSON.parse(localStorage.getItem("seller_step1") || "{}")
+                      .email || ""
+                  }
                   readOnly
                   className={`${inputStyles} opacity-60 cursor-not-allowed bg-slate-100 dark:bg-slate-800`}
                 />
@@ -300,7 +269,10 @@ export default function SellerRegister() {
                 <input
                   type="tel"
                   autoComplete="off"
-                  value={stepOneData?.phone || ""}
+                  value={
+                    JSON.parse(localStorage.getItem("seller_step1") || "{}")
+                      .phone || ""
+                  }
                   readOnly
                   className={`${inputStyles} opacity-60 cursor-not-allowed bg-slate-100 dark:bg-slate-800`}
                 />
@@ -348,8 +320,9 @@ export default function SellerRegister() {
               <h3 className="text-xl font-black mb-6 text-slate-900 dark:text-white tracking-tight">
                 Pickup Address
               </h3>
-              {/* 👇 "Use my current location" Button (Left Aligned & Compact) */}
+
               <button
+                type="button"
                 onClick={handleUseCurrentLocation}
                 disabled={isLocating}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 font-bold text-sm mb-6 shadow-sm transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
@@ -363,6 +336,7 @@ export default function SellerRegister() {
                   ? "Fetching Location..."
                   : "Use my current location"}
               </button>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Pincode */}
                 <div className="md:col-span-2">
@@ -457,21 +431,23 @@ export default function SellerRegister() {
               </label>
             </div>
 
-            {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-slate-900 dark:bg-orange-500 text-white font-black py-5 rounded-2xl hover:scale-[1.01] active:scale-95 transition-all shadow-xl shadow-orange-500/10 uppercase tracking-widest text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <Loader2 className="animate-spin" size={20} /> Creating
-                  Account...
-                </span>
-              ) : (
-                "Save & Continue"
-              )}
-            </button>
+            {/* Navigation Buttons */}
+            <div className="flex gap-4 pt-2">
+              <button
+                type="button"
+                onClick={() => navigate("/Seller/signup")}
+                className="w-1/3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold py-4 rounded-2xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-all flex justify-center items-center gap-2"
+              >
+                <ArrowLeft size={20} /> Back
+              </button>
+
+              <button
+                type="submit"
+                className="w-2/3 bg-slate-900 dark:bg-orange-500 text-white font-black py-4 rounded-2xl hover:scale-[1.01] active:scale-95 transition-all shadow-xl shadow-orange-500/10 uppercase tracking-widest text-sm flex justify-center items-center gap-2"
+              >
+                Save & Continue <ArrowRight size={20} />
+              </button>
+            </div>
           </form>
         </div>
       </div>

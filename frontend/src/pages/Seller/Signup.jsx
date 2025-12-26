@@ -6,9 +6,9 @@ import { showSuccess, showError } from "../../utils/toast";
 import SellerFooter from "../../components/Seller/SellerFooter";
 import SellerNavbar from "../../components/Seller/SellerNavbar";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_URL = import.meta.env.VITE_API_URL;
 
-export default function Signup() {
+export default function SellerSignup() {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -43,21 +43,29 @@ export default function Signup() {
   const hasShownToast = useRef(false);
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  const phoneRegex = /^[6-9]\d{9}$/; // Indian standard: starts with 6-9, 10 digits
+  const phoneRegex = /^[6-9]\d{9}$/; // Indian standard
 
   // ================= AUTOFILL LOGIC =================
   useEffect(() => {
+    // 1. Check for existing "Step 1" data (Back button support)
+    const savedData = JSON.parse(localStorage.getItem("seller_step1"));
+    if (savedData) {
+      setFormData((prev) => ({ ...prev, ...savedData }));
+      // If data was saved, we assume it was verified (or user has to re-verify for security - your choice)
+      // For UX, we usually force re-verification if critical fields change, but for "Back" button, we can autofill.
+      if (savedData.email) setIsEmailVerified(true);
+      if (savedData.phone) setIsMobileVerified(true);
+    }
+
+    // 2. Handle Navigation State (Google Redirects)
     if (location.state) {
       const { name, email, googleId } = location.state;
       if (email && googleId && !hasShownToast.current) {
         hasShownToast.current = true;
-
         setFormData((prev) => ({ ...prev, name, email }));
         setGoogleId(googleId);
         setIsEmailVerified(true);
-        // TOAST: Triggered only on Google Redirect
-        showSuccess("Email Verified!");
-
+        showSuccess("Email Verified via Google!");
         window.history.replaceState({}, document.title);
       }
     }
@@ -85,6 +93,7 @@ export default function Signup() {
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
 
+    // Reset verification if core fields change
     if (e.target.name === "email" && !googleId) {
       setIsEmailVerified(false);
       setIsEmailSent(false);
@@ -113,7 +122,6 @@ export default function Signup() {
       const res = await fetch(`${API_URL}/api/auth/send-email-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        // UPDATED: Added type: 'seller' to isolate from User DB
         body: JSON.stringify({ email: formData.email, type: "seller" }),
       });
       const data = await res.json();
@@ -121,9 +129,7 @@ export default function Signup() {
       if (res.ok) {
         setIsEmailSent(true);
         setEmailTimer(30);
-        showSuccess(
-          isEmailSent ? "OTP Resent to Email!" : "OTP sent to Email!"
-        );
+        showSuccess(isEmailSent ? "OTP Resent!" : "OTP Sent!");
       } else {
         setEmailError(data.message);
         showError(data.message);
@@ -157,9 +163,7 @@ export default function Signup() {
   const sendMobileOtp = async () => {
     if (!phoneRegex.test(formData.phone))
       return showError("Invalid phone number");
-
     if (!formData.phone) return showError("Please enter phone first");
-
     if (isMobileVerified) return showSuccess("Phone already verified!");
 
     setVerifyingMobile(true);
@@ -169,7 +173,6 @@ export default function Signup() {
       const res = await fetch(`${API_URL}/api/auth/send-mobile-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        // UPDATED: Added type: 'seller' to isolate from User DB
         body: JSON.stringify({ phone: formData.phone, type: "seller" }),
       });
       const data = await res.json();
@@ -177,9 +180,7 @@ export default function Signup() {
       if (res.ok) {
         setIsMobileSent(true);
         setMobileTimer(30);
-        showSuccess(
-          isMobileSent ? "OTP Resent to Mobile!" : "OTP sent to Mobile!"
-        );
+        showSuccess(isMobileSent ? "OTP Resent!" : "OTP Sent!");
       } else {
         setPhoneError(data.message);
         showError(data.message);
@@ -209,10 +210,11 @@ export default function Signup() {
     }
   };
 
+  // --- SUBMIT HANDLER (DEFERRED LOGIC) ---
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    // 1. Password Validation
+    // 1. Password Verification
     const password = formData.password;
     const isValidPassword = (pass) =>
       /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/.test(
@@ -225,19 +227,19 @@ export default function Signup() {
       );
     }
 
-    // 2. OTP Validation
+    // 2. OTP Verification Check
     if (!isEmailVerified)
       return showError("Please verify your email address first");
     if (!isMobileVerified)
       return showError("Please verify your phone number first");
 
-    // 3. Move to Step 2 (Don't call API yet)
-    navigate("/Seller/register", {
-      state: {
-        ...formData,
-        googleId,
-      },
-    });
+    // 3. ✅ SAVE TO LOCAL STORAGE (DEFERRED)
+    // We do NOT call the API here. We save data and move to Step 2.
+    const step1Data = { ...formData, googleId };
+    localStorage.setItem("seller_step1", JSON.stringify(step1Data));
+
+    showSuccess("Step 1 Complete! Moving to Business Details...");
+    navigate("/Seller/register");
   };
 
   // --- GOOGLE LOGIN ---
@@ -247,7 +249,6 @@ export default function Signup() {
         const res = await fetch(`${API_URL}/api/auth/google`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          // === CRITICAL FIX: Add role: "seller" ===
           body: JSON.stringify({
             token: tokenResponse.access_token,
             role: "seller",
@@ -266,14 +267,13 @@ export default function Signup() {
             setIsEmailVerified(true);
             showSuccess("Email Verified!");
           } else {
-            // Existing seller login via Google
+            // Existing seller login -> Go directly to dashboard
             localStorage.setItem("sellerToken", data.token);
-            // Ensure we save the user object correctly (handles both wrapped and unwrapped responses)
             localStorage.setItem(
               "sellerUser",
               JSON.stringify(data.user || data)
             );
-            showSuccess("Login successful!");
+            showSuccess("Welcome back!");
             navigate("/Seller/Dashboard");
           }
         } else {
@@ -299,7 +299,7 @@ export default function Signup() {
             ShopEasy
           </h1>
           <p className="text-center text-gray-500 dark:text-slate-400 mb-8 font-medium">
-            Create your account
+            Create your seller account
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-5">
@@ -355,13 +355,11 @@ export default function Signup() {
                   )}
                 </div>
               </div>
-              {/* Error Message */}
               {emailError && (
                 <p className="text-red-500 text-xs font-medium ml-1">
                   {emailError}
                 </p>
               )}
-              {/* OTP Input */}
               {isEmailSent && !isEmailVerified && !googleId && (
                 <div className="flex gap-2 p-2 bg-gray-50 dark:bg-slate-800/50 rounded-lg border border-dashed dark:border-slate-700 animate-in zoom-in-95">
                   <input
@@ -375,7 +373,7 @@ export default function Signup() {
                   <button
                     type="button"
                     onClick={verifyEmailOtp}
-                    className="bg-green-600 text-white px-4 py-1.5 rounded-md text-xs font-bold hover:bg-green-700 transition-colors"
+                    className="bg-green-600 text-white px-4 py-1.5 rounded-md text-xs font-bold hover:bg-green-700"
                   >
                     CONFIRM
                   </button>
@@ -442,7 +440,7 @@ export default function Signup() {
                   <button
                     type="button"
                     onClick={verifyMobileOtp}
-                    className="bg-green-600 text-white px-4 py-1.5 rounded-md text-xs font-bold hover:bg-green-700 transition-colors"
+                    className="bg-green-600 text-white px-4 py-1.5 rounded-md text-xs font-bold hover:bg-green-700"
                   >
                     CONFIRM
                   </button>
@@ -481,7 +479,7 @@ export default function Signup() {
                   <Loader2 className="animate-spin" size={20} /> Processing...
                 </span>
               ) : (
-                "Create Account"
+                "Next Step"
               )}
             </button>
           </form>
@@ -498,11 +496,9 @@ export default function Signup() {
             type="button"
             onClick={() => googleLogin()}
             disabled={loading}
-            className={`w-full flex items-center justify-center gap-3 
-              bg-[#e8f0fe] dark:bg-slate-800 hover:bg-[#dfe9fd] dark:hover:bg-slate-700
-              text-[#1a73e8] dark:text-blue-400 font-medium 
-              py-3 rounded-lg transition
-              ${loading ? "opacity-60 cursor-not-allowed" : ""}`}
+            className={`w-full flex items-center justify-center gap-3 bg-[#e8f0fe] dark:bg-slate-800 hover:bg-[#dfe9fd] dark:hover:bg-slate-700 text-[#1a73e8] dark:text-blue-400 font-medium py-3 rounded-lg transition ${
+              loading ? "opacity-60 cursor-not-allowed" : ""
+            }`}
           >
             <img
               src="https://developers.google.com/identity/images/g-logo.png"

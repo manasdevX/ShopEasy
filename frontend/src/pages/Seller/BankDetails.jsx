@@ -36,6 +36,17 @@ export default function BankDetails() {
     ifscCode: "",
   });
 
+  // 1. SECURITY CHECK: Ensure Step 1 & 2 are done
+  useEffect(() => {
+    if (
+      !localStorage.getItem("seller_step1") ||
+      !localStorage.getItem("seller_step2")
+    ) {
+      showError("Please complete previous steps first.");
+      navigate("/Seller/signup");
+    }
+  }, [navigate]);
+
   // Effect to verify IFSC Code
   useEffect(() => {
     const verifyIFSC = async () => {
@@ -86,16 +97,39 @@ export default function BankDetails() {
     setLoading(true);
 
     try {
-      // 2. Get Token (Ensure this matches what you saved in Login/Register)
-      const token = localStorage.getItem("sellerToken");
+      // 2. RETRIEVE ALL DATA (Step 1 & Step 2)
+      const step1 = JSON.parse(localStorage.getItem("seller_step1"));
+      const step2 = JSON.parse(localStorage.getItem("seller_step2"));
 
-      if (!token) {
-        showError("Authentication failed. Please login again.");
-        navigate("/Seller/login");
-        return;
+      if (!step1 || !step2) {
+        throw new Error("Missing registration data. Please restart.");
       }
 
-      // 3. Prepare Payload
+      // 3. API CALL 1: Create Account (Signup)
+      const signupRes = await fetch(`${API_URL}/api/seller/signup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(step1),
+      });
+
+      const signupData = await signupRes.json();
+      if (!signupRes.ok) throw new Error(signupData.message || "Signup failed");
+
+      const token = signupData.token; // ✅ Get the fresh token
+
+      // 4. API CALL 2: Save Profile (Business Details)
+      const profileRes = await fetch(`${API_URL}/api/seller/profile`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`, // Auth required now
+        },
+        body: JSON.stringify(step2),
+      });
+
+      if (!profileRes.ok) throw new Error("Failed to save business details");
+
+      // 5. API CALL 3: Save Bank Details
       const payload = {
         accountHolder: bankData.accountHolder,
         accountNumber: bankData.accountNumber,
@@ -104,26 +138,29 @@ export default function BankDetails() {
         branchName: ifscInfo.branch,
       };
 
-      // 4. API Call
-      const res = await fetch(`${API_URL}/api/sellers/bank-details`, {
-        method: "POST",
+      const bankRes = await fetch(`${API_URL}/api/seller/bank`, {
+        method: "PUT", // Use PUT to update the newly created profile
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`, // Send Token in Header
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
+      if (!bankRes.ok) throw new Error("Failed to save bank details");
 
-      if (res.ok) {
-        showSuccess("Bank details saved successfully!");
-        navigate("/Seller/Dashboard");
-      } else {
-        showError(data.message || "Failed to save bank details");
-      }
+      // 6. SUCCESS: Clean up & Redirect
+      localStorage.removeItem("seller_step1");
+      localStorage.removeItem("seller_step2");
+
+      // Save valid session
+      localStorage.setItem("sellerToken", token);
+      localStorage.setItem("sellerUser", JSON.stringify(signupData.seller));
+
+      showSuccess("Seller Account Created Successfully!");
+      navigate("/Seller/Dashboard");
     } catch (err) {
-      showError("Server Error. Please try again later.");
+      showError(err.message || "Server Error. Please try again later.");
       console.error(err);
     } finally {
       setLoading(false);
@@ -134,8 +171,7 @@ export default function BankDetails() {
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-[#030712] transition-colors duration-300 font-sans">
-      <SellerNavbar isLoggedIn={true} />
-
+      <SellerNavbar isLoggedIn={false} /> {/* Not logged in yet */}
       <div className="flex-grow flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-xl p-8 border dark:border-slate-800">
           <div className="text-center mb-10">
@@ -268,7 +304,10 @@ export default function BankDetails() {
               className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-bold py-4 rounded-lg shadow-[0_0_20px_rgba(249,115,22,0.2)] transition-all flex items-center justify-center gap-2"
             >
               {loading ? (
-                <Loader2 className="animate-spin" size={20} />
+                <>
+                  <Loader2 className="animate-spin" size={20} /> Creating
+                  Account...
+                </>
               ) : (
                 <>
                   VERIFY & FINISH <ArrowRight size={18} />
