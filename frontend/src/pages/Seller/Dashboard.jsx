@@ -268,6 +268,7 @@ export default function Dashboard() {
                         stock={product.stock}
                         amount={formatCurrency(product.price)}
                         onRemove={handleRemoveProduct}
+                        onEdit={(id) => navigate(`/Seller/edit-product/${id}`)}
                       />
                     ))
                   )}
@@ -357,7 +358,7 @@ function ProductRow({ id, name, stock, amount, onRemove, onEdit }) {
         <div className="flex items-center justify-end gap-2">
           {/* EDIT BUTTON */}
           <button
-            onClick={() => navigate(`/Seller/edit-product/${id}`)}
+            onClick={() => onEdit(id)}
             className="p-2.5 text-slate-400 hover:text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-500/10 transition-all border border-transparent hover:border-orange-200 dark:hover:border-orange-900/30"
             title="Edit Product"
           >
