@@ -10,43 +10,89 @@ import {
   Package,
   ListOrdered,
   LogOut,
-  Settings,
   User,
   Check,
+  Store,
+  LayoutDashboard,
 } from "lucide-react";
 
-export default function SellerNavbar({ isLoggedIn }) {
+export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // 1. Get SELLER data safely (Fixed key: sellerUser)
-  const storedUser = JSON.parse(localStorage.getItem("sellerUser") || "{}");
-  // If the stored data has a 'user' object inside (common in some auth responses), use that, otherwise use the root
-  const user = storedUser.user || storedUser;
+  // ==========================================
+  // 1. SAFE DATA RETRIEVAL (Fixes the Crash)
+  // ==========================================
+  const [seller, setSeller] = useState(() => {
+    try {
+      const stored = localStorage.getItem("sellerUser");
+      if (!stored || stored === "undefined") return null;
+      return JSON.parse(stored);
+    } catch (e) {
+      console.error("Error parsing seller data:", e);
+      return null;
+    }
+  });
 
+  const [token, setToken] = useState(localStorage.getItem("sellerToken"));
+
+  // ==========================================
+  // 2. SYNC STATE ON CHANGE
+  // ==========================================
+  useEffect(() => {
+    const handleStorageChange = () => {
+      setToken(localStorage.getItem("sellerToken"));
+      try {
+        const stored = localStorage.getItem("sellerUser");
+        if (stored && stored !== "undefined") {
+          setSeller(JSON.parse(stored));
+        } else {
+          setSeller(null);
+        }
+      } catch (err) {
+        setSeller(null);
+      }
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    // Custom event listener for immediate updates within the same tab
+    window.addEventListener("seller-info-updated", handleStorageChange);
+
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("seller-info-updated", handleStorageChange);
+    };
+  }, []);
+
+  const isAuth = propIsLoggedIn || !!token;
+
+  // Theme Logic
   const [isDark, setIsDark] = useState(
     document.documentElement.classList.contains("dark")
   );
-
   const toggleTheme = () => {
     document.documentElement.classList.toggle("dark");
     setIsDark(!isDark);
   };
 
-  // 2. Define handleLogout (Fixed keys: sellerToken, sellerUser)
+  // Logout Logic
   const handleLogout = () => {
     localStorage.removeItem("sellerToken");
     localStorage.removeItem("sellerUser");
-    navigate("/Seller/Landing"); // Redirect to Seller Landing page
+    localStorage.removeItem("seller_step1");
+    localStorage.removeItem("seller_step2");
+    setSeller(null);
+    setToken(null);
+    navigate("/Seller/login");
   };
 
   const navLinks = [
-    { name: "Dashboard", path: "/Seller/Dashboard", icon: ShoppingBag },
+    { name: "Dashboard", path: "/Seller/Dashboard", icon: LayoutDashboard },
     { name: "Inventory", path: "/Seller/products", icon: Package },
     { name: "Orders", path: "/Seller/orders", icon: ListOrdered },
   ];
 
-  // 1. Your exact steps array (I added [] to the single paths for consistency)
+  // Stepper Logic (for Registration Flow)
   const steps = [
     {
       name: "EMAIL & PASSWORD",
@@ -56,12 +102,9 @@ export default function SellerNavbar({ isLoggedIn }) {
     { name: "BANK VERIFICATION", path: ["/Seller/bank-details"] },
   ];
 
-  // 2. The Professional way: Calculate index first
-  // We check if the current path exists inside the 'path' array of any step
-  const currentStepIndex = steps.findIndex((s) => s.path.includes(location.pathname));
-
-  // 3. Derived Onboarding State: If we found an index, we ARE onboarding.
-  // This solves the "Step 0" bug because 0 !== -1 is TRUE.
+  const currentStepIndex = steps.findIndex((s) =>
+    s.path.includes(location.pathname)
+  );
   const isOnboarding = currentStepIndex !== -1;
 
   return (
@@ -70,11 +113,11 @@ export default function SellerNavbar({ isLoggedIn }) {
         <div className="flex items-center justify-between gap-8">
           {/* LOGO */}
           <Link
-            to="/Seller/Dashboard"
+            to={isAuth ? "/Seller/Dashboard" : "/Seller/Landing"}
             className="flex items-center gap-2.5 shrink-0 group"
           >
             <div className="bg-orange-500 p-2 rounded-xl shadow-lg shadow-orange-500/20 group-hover:rotate-6 transition-transform">
-              <ShoppingBag className="text-white" size={22} />
+              <Store className="text-white" size={22} />
             </div>
             <div className="hidden sm:block">
               <span className="text-xl font-black tracking-tighter text-slate-900 dark:text-white block leading-none">
@@ -86,7 +129,7 @@ export default function SellerNavbar({ isLoggedIn }) {
             </div>
           </Link>
 
-          {/* CONDITIONAL CENTER CONTENT: SEARCH OR STEPPER */}
+          {/* CENTER: ONBOARDING STEPS OR SEARCH */}
           <div className="hidden lg:flex flex-grow max-w-2xl justify-center">
             {isOnboarding ? (
               <div className="flex items-center gap-4">
@@ -104,9 +147,7 @@ export default function SellerNavbar({ isLoggedIn }) {
                               ? "bg-orange-500 border-orange-500 text-white"
                               : "border-slate-300 dark:border-slate-700 text-slate-400"
                           }`}
-                          style={{
-                            borderRadius: "50px",
-                          }} /* Kept pointed edges */
+                          style={{ borderRadius: "50px" }}
                         >
                           {isCompleted ? (
                             <Check size={14} strokeWidth={4} />
@@ -117,7 +158,7 @@ export default function SellerNavbar({ isLoggedIn }) {
                           )}
                         </div>
 
-                        {/* STEP NAME & UNDERLINE */}
+                        {/* STEP NAME */}
                         <div className="flex flex-col items-start">
                           <span
                             className={`text-[10px] font-black tracking-widest uppercase whitespace-nowrap transition-colors ${
@@ -128,15 +169,13 @@ export default function SellerNavbar({ isLoggedIn }) {
                           >
                             {step.name}
                           </span>
-
-                          {/* Underline renders for BOTH Completed and Active steps */}
                           {(isCompleted || isActive) && (
                             <div className="h-[2px] w-full bg-orange-500 mt-1" />
                           )}
                         </div>
                       </div>
 
-                      {/* CONNECTOR LINE - Only orange if the step is COMPLETED */}
+                      {/* CONNECTOR LINE */}
                       {index < steps.length - 1 && (
                         <div
                           className={`w-12 h-[1px] transition-colors duration-500 ${
@@ -151,8 +190,8 @@ export default function SellerNavbar({ isLoggedIn }) {
                 })}
               </div>
             ) : (
-              /* DEFAULT SEARCH BAR */
-              !["/Seller/login", "/login"].includes(location.pathname) && (
+              /* SEARCH BAR (Only visible if logged in and not onboarding) */
+              isAuth && (
                 <div className="w-full relative group">
                   <Search
                     className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-orange-500 transition-colors"
@@ -168,7 +207,7 @@ export default function SellerNavbar({ isLoggedIn }) {
             )}
           </div>
 
-          {/* ACTION BUTTONS */}
+          {/* RIGHT SIDE ACTIONS */}
           <div className="flex items-center gap-2 sm:gap-4">
             <button
               onClick={toggleTheme}
@@ -177,7 +216,7 @@ export default function SellerNavbar({ isLoggedIn }) {
               {isDark ? <Sun size={20} /> : <Moon size={20} />}
             </button>
 
-            {isLoggedIn && (
+            {isAuth && (
               <button className="p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 relative transition-colors">
                 <Bell size={20} />
                 <span className="absolute top-2 right-2.5 w-2 h-2 bg-orange-500 rounded-full border-2 border-white dark:border-[#030712]"></span>
@@ -186,13 +225,19 @@ export default function SellerNavbar({ isLoggedIn }) {
 
             <div className="h-8 w-[1px] bg-slate-100 dark:bg-slate-800 mx-1 hidden sm:block"></div>
 
-            {/* USER PROFILE DROPDOWN */}
-            {isLoggedIn ? (
+            {/* PROFILE DROPDOWN */}
+            {isAuth ? (
               <div className="relative group">
                 <button className="flex items-center gap-1 hover:text-orange-500 transition-colors">
-                  <div className="flex items-center gap-1 hover:text-orange-500 transition-colors font-bold text-sm text-slate-700 dark:text-slate-200">
-                    <User size={18} />
-                    {user?.name?.split(" ")[0] || "Seller"}
+                  <div className="flex items-center gap-2 hover:text-orange-500 transition-colors font-bold text-sm text-slate-700 dark:text-slate-200">
+                    <div className="w-8 h-8 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center text-orange-600 dark:text-orange-400 font-bold border border-orange-200 dark:border-orange-800">
+                      {/* ✅ FIX: Use optional chaining (?.) for safe access */}
+                      {seller?.name ? seller.name.charAt(0).toUpperCase() : "S"}
+                    </div>
+                    <span className="hidden md:block">
+                      {/* ✅ FIX: Check if name exists before splitting */}
+                      {seller?.name ? seller.name.split(" ")[0] : "Seller"}
+                    </span>
                   </div>
                   <ChevronDown
                     size={16}
@@ -200,20 +245,35 @@ export default function SellerNavbar({ isLoggedIn }) {
                   />
                 </button>
 
-                {/* DROPDOWN MENU */}
-                <div className="absolute top-full left-1/2 -translate-x-1/2 w-52 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 rounded-xl overflow-hidden shadow-xl border border-gray-100 dark:border-gray-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                {/* Dropdown Menu */}
+                <div className="absolute top-full right-0 w-52 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-xl overflow-hidden shadow-xl border border-slate-100 dark:border-slate-800 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 mt-2">
+                  <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800">
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                      Signed in as
+                    </p>
+                    <p className="text-sm font-bold truncate text-slate-900 dark:text-white mt-0.5">
+                      {seller?.email || "No Email"}
+                    </p>
+                  </div>
+
                   <Link
                     to="/Seller/Dashboard"
-                    className="block px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700 transition font-medium"
+                    className="block px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 transition font-medium text-sm"
                   >
-                    My Profile
+                    Dashboard
                   </Link>
-                  <div className="border-t border-gray-100 dark:border-gray-700" />
+                  <Link
+                    to="/Seller/Settings"
+                    className="block px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 transition font-medium text-sm"
+                  >
+                    Settings
+                  </Link>
 
-                  {/* Logout Button */}
+                  <div className="border-t border-slate-100 dark:border-slate-800" />
+
                   <button
                     onClick={handleLogout}
-                    className="w-full text-left px-4 py-2.5 hover:bg-red-50 dark:hover:bg-red-900/20 transition flex items-center gap-2 text-red-500 font-medium"
+                    className="w-full text-left px-4 py-2.5 hover:bg-red-50 dark:hover:bg-red-900/20 transition flex items-center gap-2 text-red-500 font-medium text-sm"
                   >
                     <LogOut size={16} />
                     Logout
@@ -221,19 +281,26 @@ export default function SellerNavbar({ isLoggedIn }) {
                 </div>
               </div>
             ) : (
-              <Link
-                to="/Seller/login"
-                className="flex items-center gap-1 hover:text-orange-500 transition-colors font-bold text-sm"
-              >
-                <User size={18} />
-                Login
-              </Link>
+              <div className="flex items-center gap-3">
+                <Link
+                  to="/Seller/login"
+                  className="hidden md:block font-bold text-sm text-slate-600 dark:text-slate-300 hover:text-orange-500 transition-colors"
+                >
+                  Login
+                </Link>
+                <Link
+                  to="/Seller/signup"
+                  className="bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-5 py-2.5 rounded-xl font-bold text-sm hover:opacity-90 transition-all shadow-lg shadow-slate-900/10"
+                >
+                  Start Selling
+                </Link>
+              </div>
             )}
           </div>
         </div>
 
-        {/* BOTTOM NAV */}
-        {isLoggedIn && (
+        {/* BOTTOM NAV (Only visible if logged in and NOT onboarding) */}
+        {isAuth && !isOnboarding && (
           <div className="flex items-center gap-8 mt-4 border-t border-slate-50 dark:border-slate-800/50 pt-4 overflow-x-auto no-scrollbar">
             {navLinks.map((link) => {
               const isActive = location.pathname === link.path;

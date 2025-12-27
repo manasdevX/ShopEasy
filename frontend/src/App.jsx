@@ -13,11 +13,11 @@ import Cart from "./pages/Cart"; // ✅ Added Cart Import
 
 // --- SELLER PAGES ---
 import SellerLanding from "./pages/Seller/Landing";
-import SellerSignup from "./pages/Seller/Signup";
+import SellerSignup from "./pages/Seller/Signup"; // Step 1
 import SellerLogin from "./pages/Seller/Login";
 import SellerForgotPassword from "./pages/Seller/ForgotPassword";
-import SellerRegister from "./pages/Seller/Register";
-import BankDetails from "./pages/Seller/BankDetails";
+import SellerRegister from "./pages/Seller/Register"; // Step 2 (Business)
+import BankDetails from "./pages/Seller/BankDetails"; // Step 3 (Bank & Create)
 import Dashboard from "./pages/Seller/Dashboard";
 import Products from "./pages/Seller/Products";
 import AddProduct from "./pages/Seller/AddProduct";
@@ -76,7 +76,7 @@ export default function App() {
           element={<SellerForgotPassword />}
         />
 
-        {/* Registration Steps */}
+        {/* Registration Steps (Deferred Flow) */}
         <Route path="/Seller/signup" element={<SellerSignup />} />
         <Route path="/Seller/register" element={<SellerRegister />} />
         <Route path="/Seller/bank-details" element={<BankDetails />} />

@@ -4,7 +4,9 @@ import jwt from "jsonwebtoken";
 
 const sellerSchema = new mongoose.Schema(
   {
-    // --- STEP 1: PERSONAL INFO (Required for Account Creation) ---
+    // ======================================================
+    // STEP 1: PERSONAL INFO (Required for Account Creation)
+    // ======================================================
     name: {
       type: String,
       required: [true, "Please enter your name"],
@@ -26,11 +28,11 @@ const sellerSchema = new mongoose.Schema(
         return !this.googleId;
       },
       minlength: 6,
-      select: false,
+      select: false, // Security: hide password by default
     },
     phone: {
       type: String,
-      // Phone might be collected later in some flows, but usually Step 1
+      // Phone is optional during initial OAuth creation, but required for manual signup
       required: [false, "Please enter your phone number"],
     },
 
@@ -38,16 +40,19 @@ const sellerSchema = new mongoose.Schema(
     googleId: {
       type: String,
       unique: true,
-      sparse: true,
+      sparse: true, // Allows null values for sellers who don't use Google
     },
 
-    // --- STEP 2: BUSINESS DETAILS (Updated via PUT) ---
-    // Note: 'required' removed to allow initial creation in Step 1
+    // ======================================================
+    // STEP 2: BUSINESS DETAILS (Updated via PUT)
+    // ======================================================
     businessName: {
       type: String,
-      unique: true,
       trim: true,
-      sparse: true, // Allows null/undefined for incomplete profiles
+      // 'sparse' is critical here: It tells MongoDB to ignore this field for uniqueness checks
+      // if the value is null/undefined. This allows multiple "incomplete" profiles.
+      unique: true,
+      sparse: true,
     },
     businessType: {
       type: String,
@@ -63,15 +68,16 @@ const sellerSchema = new mongoose.Schema(
       type: String,
       uppercase: true,
       trim: true,
-      // Unique but sparse so multiple "incomplete" users can exist without error
       unique: true,
-      sparse: true,
+      sparse: true, // Critical for deferred registration
     },
     address: {
       type: String,
     },
 
-    // --- STEP 3: BANK DETAILS (Updated via PUT) ---
+    // ======================================================
+    // STEP 3: BANK DETAILS (Updated via PUT)
+    // ======================================================
     bankDetails: {
       accountHolder: { type: String },
       accountNumber: { type: String },
@@ -81,12 +87,14 @@ const sellerSchema = new mongoose.Schema(
       isVerified: { type: Boolean, default: false },
     },
 
-    // --- STATUS & ROLES ---
+    // ======================================================
+    // STATUS & ROLES
+    // ======================================================
     role: {
       type: String,
       default: "seller",
     },
-    // Used to track if they finished the full registration wizard
+    // Tracks if they finished the full registration wizard (Step 1 -> 3)
     isOnboardingComplete: {
       type: Boolean,
       default: false,
@@ -96,7 +104,7 @@ const sellerSchema = new mongoose.Schema(
       default: false,
     },
     isActive: {
-      type: Boolean,
+      type: Boolean, // Seller can temporarily disable their own account
       default: true,
     },
 
@@ -104,7 +112,7 @@ const sellerSchema = new mongoose.Schema(
     resetPasswordExpire: Date,
   },
   {
-    timestamps: true,
+    timestamps: true, // Auto-adds createdAt and updatedAt
   }
 );
 
@@ -117,7 +125,7 @@ sellerSchema.pre("save", async function (next) {
   if (!this.isModified("password")) {
     next();
   }
-  // Only hash if password exists (skip for Google Auth users)
+  // Only hash if password exists (skip for Google Auth users who might have no password)
   if (this.password) {
     const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
@@ -131,13 +139,14 @@ sellerSchema.methods.getSignedJwtToken = function () {
   });
 };
 
-// 3. Match entered password
+// 3. Match entered password with hashed password
 sellerSchema.methods.matchPassword = async function (enteredPassword) {
   // If user has no password (e.g., Google Auth only), return false
   if (!this.password) return false;
   return await bcrypt.compare(enteredPassword, this.password);
 };
 
+// Check if "Seller" model is already defined to prevent OverwriteModelError in serverless/dev
 const Seller = mongoose.models.Seller || mongoose.model("Seller", sellerSchema);
 
 export default Seller;

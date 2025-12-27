@@ -13,7 +13,6 @@ import SellerNavbar from "../../components/Seller/SellerNavbar";
 import SellerFooter from "../../components/Seller/SellerFooter";
 import { showError, showSuccess } from "../../utils/toast";
 
-// Get API URL from environment variables
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export default function BankDetails() {
@@ -47,7 +46,7 @@ export default function BankDetails() {
     }
   }, [navigate]);
 
-  // Effect to verify IFSC Code
+  // IFSC Verification
   useEffect(() => {
     const verifyIFSC = async () => {
       if (bankData.ifscCode.length === 11) {
@@ -80,12 +79,13 @@ export default function BankDetails() {
     verifyIFSC();
   }, [bankData.ifscCode]);
 
+  // 🚀 SUBMIT HANDLER
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // 1. Frontend Validation
+    // Frontend Validations
     if (bankData.accountNumber !== confirmAccountNumber) {
-      return showError("Account numbers do not match! Please re-check.");
+      return showError("Account numbers do not match!");
     }
     if (bankData.accountNumber.length < 9) {
       return showError("Enter a valid Account number.");
@@ -97,40 +97,53 @@ export default function BankDetails() {
     setLoading(true);
 
     try {
-      // 2. RETRIEVE ALL DATA (Step 1 & Step 2)
+      // 2. RETRIEVE ALL DATA
       const step1 = JSON.parse(localStorage.getItem("seller_step1"));
       const step2 = JSON.parse(localStorage.getItem("seller_step2"));
 
-      if (!step1 || !step2) {
+      if (!step1 || !step2)
         throw new Error("Missing registration data. Please restart.");
-      }
 
-      // 3. API CALL 1: Create Account (Signup)
-      const signupRes = await fetch(`${API_URL}/api/seller/signup`, {
+      // =========================================================
+      // 3. API CALL 1: Create Account
+      // Note: Endpoint is plural 'sellers' based on app.js mount point
+      // =========================================================
+      const signupRes = await fetch(`${API_URL}/api/sellers/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(step1),
       });
 
+      // Defensive check for HTML 404/500 errors
+      const contentType = signupRes.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("Server Error: Endpoint not found or server crash.");
+      }
+
       const signupData = await signupRes.json();
-      if (!signupRes.ok) throw new Error(signupData.message || "Signup failed");
+      if (!signupRes.ok)
+        throw new Error(signupData.message || "Account creation failed");
 
-      const token = signupData.token; // ✅ Get the fresh token
+      const token = signupData.token;
 
+      // =========================================================
       // 4. API CALL 2: Save Profile (Business Details)
-      const profileRes = await fetch(`${API_URL}/api/seller/profile`, {
+      // =========================================================
+      const profileRes = await fetch(`${API_URL}/api/sellers/profile`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`, // Auth required now
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(step2),
       });
 
       if (!profileRes.ok) throw new Error("Failed to save business details");
 
+      // =========================================================
       // 5. API CALL 3: Save Bank Details
-      const payload = {
+      // =========================================================
+      const bankPayload = {
         accountHolder: bankData.accountHolder,
         accountNumber: bankData.accountNumber,
         ifscCode: bankData.ifscCode,
@@ -138,30 +151,28 @@ export default function BankDetails() {
         branchName: ifscInfo.branch,
       };
 
-      const bankRes = await fetch(`${API_URL}/api/seller/bank`, {
-        method: "PUT", // Use PUT to update the newly created profile
+      const bankRes = await fetch(`${API_URL}/api/sellers/bank-details`, {
+        method: "PUT",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(bankPayload),
       });
 
       if (!bankRes.ok) throw new Error("Failed to save bank details");
 
-      // 6. SUCCESS: Clean up & Redirect
+      // 6. SUCCESS
       localStorage.removeItem("seller_step1");
       localStorage.removeItem("seller_step2");
-
-      // Save valid session
       localStorage.setItem("sellerToken", token);
       localStorage.setItem("sellerUser", JSON.stringify(signupData.seller));
 
       showSuccess("Seller Account Created Successfully!");
       navigate("/Seller/Dashboard");
     } catch (err) {
-      showError(err.message || "Server Error. Please try again later.");
       console.error(err);
+      showError(err.message || "Registration failed. Please check console.");
     } finally {
       setLoading(false);
     }
@@ -171,7 +182,7 @@ export default function BankDetails() {
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-[#030712] transition-colors duration-300 font-sans">
-      <SellerNavbar isLoggedIn={false} /> {/* Not logged in yet */}
+      <SellerNavbar isLoggedIn={false} />
       <div className="flex-grow flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-xl p-8 border dark:border-slate-800">
           <div className="text-center mb-10">
@@ -184,11 +195,10 @@ export default function BankDetails() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* ACCOUNT HOLDER */}
+            {/* Account Holder */}
             <div className="space-y-1">
               <input
                 type="text"
-                autoComplete="off"
                 required
                 placeholder="Account Holder Name"
                 className={inputBase}
@@ -198,11 +208,10 @@ export default function BankDetails() {
               />
             </div>
 
-            {/* ACCOUNT NUMBER */}
+            {/* Account Number */}
             <div className="relative">
               <input
                 type={showAcc ? "text" : "password"}
-                autoComplete="off"
                 required
                 placeholder="Account Number"
                 className={`${inputBase} pr-14`}
@@ -219,17 +228,14 @@ export default function BankDetails() {
               </button>
             </div>
 
-            {/* CONFIRM ACCOUNT NUMBER */}
+            {/* Confirm Account Number */}
             <div className="relative">
               <input
                 type="text"
-                autoComplete="off"
                 required
                 onPaste={(e) => {
                   e.preventDefault();
-                  showError(
-                    "Pasting is disabled for security. Please type the number."
-                  );
+                  showError("Pasting disabled.");
                 }}
                 placeholder="Confirm Account Number"
                 className={`${inputBase} ${
@@ -251,12 +257,11 @@ export default function BankDetails() {
               )}
             </div>
 
-            {/* IFSC CODE */}
+            {/* IFSC Code */}
             <div className="space-y-2">
               <div className="relative">
                 <input
                   type="text"
-                  autoComplete="off"
                   required
                   maxLength={11}
                   placeholder="IFSC Code"
@@ -275,10 +280,9 @@ export default function BankDetails() {
                   />
                 )}
               </div>
-
               {ifscInfo.bank && (
                 <div className="mx-1 px-3 py-2 bg-green-500/10 rounded-lg border border-green-500/20">
-                  <p className="text-[10px] font-bold text-green-500 uppercase tracking-tight leading-tight">
+                  <p className="text-[10px] font-bold text-green-500 uppercase">
                     {ifscInfo.bank}
                   </p>
                   <p className="text-[9px] text-green-600/80 font-medium">
@@ -288,16 +292,13 @@ export default function BankDetails() {
               )}
             </div>
 
-            {/* SECURITY BOX */}
             <div className="bg-slate-50 dark:bg-[#161f35]/50 border border-slate-100 dark:border-slate-800 rounded-lg p-4 flex gap-3">
               <ShieldCheck className="text-orange-500 shrink-0" size={18} />
               <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
-                We'll verify your account with a small ₹1 deposit. This ensures
-                your payments reach you safely.
+                We'll verify your account with a small ₹1 deposit.
               </p>
             </div>
 
-            {/* SUBMIT BUTTON */}
             <button
               type="submit"
               disabled={loading}
