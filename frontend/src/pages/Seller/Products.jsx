@@ -48,7 +48,7 @@ export default function Products() {
       });
 
       if (res.ok) {
-        showSucess("Product deleted successfully");
+        showSuccess("Product deleted successfully");
         // Remove from local state only after backend confirms success
         setProducts(products.filter((p) => p._id !== id));
       } else {

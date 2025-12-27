@@ -17,6 +17,7 @@ import {
   LayoutGrid,
   Package,
   Info,
+  Hash,
   BarChart3,
 } from "lucide-react";
 import toast from "react-hot-toast";
@@ -27,6 +28,8 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 export default function AddProduct() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false); // Loading state
+  const [tags, setTags] = React.useState([]);
+  const [tagInput, setTagInput] = React.useState("");
 
   // State for Text Data
   const [formData, setFormData] = useState({
@@ -278,6 +281,40 @@ export default function AddProduct() {
                 ))}
               </div>
             </section>
+
+            {/* NEW: Visibility Settings moved to Left Column */}
+            <section className="bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border border-slate-200 dark:border-slate-800">
+              <h3 className={labelStyle}>
+                <Sparkles size={14} /> Visibility Settings
+              </h3>
+              <div className="space-y-3">
+                <label className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 cursor-pointer hover:border-orange-500/30 transition-colors">
+                  <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                    Featured Product
+                  </span>
+                  <input
+                    type="checkbox"
+                    name="isFeatured"
+                    checked={formData.isFeatured}
+                    onChange={handleChange}
+                    className="w-5 h-5 accent-orange-500 rounded-lg"
+                  />
+                </label>
+
+                <label className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 cursor-pointer hover:border-orange-500/30 transition-colors">
+                  <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                    Best Seller Tag
+                  </span>
+                  <input
+                    type="checkbox"
+                    name="isBestSeller"
+                    checked={formData.isBestSeller}
+                    onChange={handleChange}
+                    className="w-5 h-5 accent-orange-500 rounded-lg"
+                  />
+                </label>
+              </div>
+            </section>
           </div>
 
           {/* RIGHT COLUMN: FORM (Matching Edit UI) */}
@@ -395,39 +432,62 @@ export default function AddProduct() {
                     required
                   />
                 </div>
+              </div>
 
-                <div className="bg-orange-500/5 p-6 rounded-2xl border border-orange-500/10">
-                  <h4 className="text-xs font-bold text-orange-600 uppercase mb-4">
-                    Visibility Settings
-                  </h4>
-                  <div className="flex flex-wrap gap-6">
-                    <label className="flex items-center gap-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        autoComplete="off"
-                        name="isFeatured"
-                        checked={formData.isFeatured}
-                        onChange={handleChange}
-                        className="w-4 h-4 accent-orange-500"
-                      />
-                      <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
-                        Featured Product
+              {/* PRODUCT TAGS SECTION - MATCHING PRICING UI EXACTLY */}
+              <div className="bg-slate-50 m-9 dark:bg-slate-800/30 rounded-2xl p-6 border border-slate-100 dark:border-slate-800 shadow-sm">
+                {/* Header: Matches "Pricing & Inventory" exactly */}
+                <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-6 flex items-center gap-2">
+                  <Hash size={16} className="text-orange-500" /> Search Keywords
+                </h4>
+
+                {/* Input Area: Aligned with the content grid of the pricing section */}
+                <div className="space-y-4">
+                  <div className="flex flex-wrap gap-2 items-center min-h-[45px] p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus-within:ring-2 focus-within:ring-orange-500/20 focus-within:border-orange-500 transition-all">
+                    {tags.map((tag, index) => (
+                      <span
+                        key={index}
+                        className="flex items-center gap-1.5 px-3 py-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-lg border border-slate-200 dark:border-slate-700 animate-in zoom-in-95"
+                      >
+                        {tag}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setTags(tags.filter((_, i) => i !== index))
+                          }
+                          className="text-slate-400 hover:text-red-500 transition-colors"
+                        >
+                          <X size={12} strokeWidth={3} />
+                        </button>
                       </span>
-                    </label>
-                    <label className="flex items-center gap-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        autoComplete="off"
-                        name="isBestSeller"
-                        checked={formData.isBestSeller}
-                        onChange={handleChange}
-                        className="w-4 h-4 accent-orange-500"
-                      />
-                      <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
-                        Best Seller Tag
-                      </span>
-                    </label>
+                    ))}
+
+                    <input
+                      type="text"
+                      value={tagInput}
+                      onChange={(e) => setTagInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          const val = tagInput.trim();
+                          if (val && !tags.includes(val)) {
+                            setTags([...tags, val]);
+                            setTagInput("");
+                          }
+                        }
+                      }}
+                      placeholder={tags.length === 0 ? "Add keywords..." : ""}
+                      className="flex-1 bg-transparent border-none outline-none text-sm text-slate-700 dark:text-slate-200 px-1"
+                    />
                   </div>
+
+                  {/* Footer text: Matching the "labelStyle" font weight but smaller */}
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight flex items-center gap-2">
+                    <span className="bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded text-slate-500">
+                      ENTER
+                    </span>
+                    to add a keyword
+                  </p>
                 </div>
               </div>
 

@@ -155,7 +155,7 @@ export default function Navbar() {
         <div className="flex items-center gap-6 text-gray-800 dark:text-gray-200 shrink-0">
           <button
             onClick={toggleTheme}
-            className="p-2.5 rounded-xl bg-gray-100 dark:bg-gray-800"
+            className="p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors"
           >
             {theme === "light" ? <Moon size={20} /> : <Sun size={20} />}
           </button>

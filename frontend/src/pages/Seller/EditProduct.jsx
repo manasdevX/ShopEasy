@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import SellerNavbar from "../../components/Seller/SellerNavbar";
 import SellerFooter from "../../components/Seller/SellerFooter";
+import { showSuccess , showError } from "../../utils/toast";
 import {
   ArrowLeft,
   RefreshCcw,
@@ -73,11 +74,11 @@ export default function EditProduct() {
               : [null, null, null, null],
           });
         } else {
-          toast.error("Product not found");
+          showError("Product not found");
           navigate("/Seller/Products");
         }
       } catch (err) {
-        toast.error("Error loading product");
+        showError("Error loading product");
       } finally {
         setLoading(false);
       }
@@ -109,7 +110,7 @@ export default function EditProduct() {
         newFiles[index] = file; // Store file object for backend
         setNewGalleryFiles(newFiles);
       }
-      toast.success("Image preview updated");
+      showSuccess("Image preview updated");
     };
     reader.readAsDataURL(file);
   };
@@ -188,14 +189,14 @@ export default function EditProduct() {
       });
 
       if (res.ok) {
-        toast.success("Product Updated Successfully!");
+        showSuccess("Product Updated Successfully!");
         navigate("/Seller/Products");
       } else {
         const error = await res.json();
         throw new Error(error.message);
       }
     } catch (err) {
-      toast.error(err.message || "Update failed");
+      showError(err.message || "Update failed");
     } finally {
       setIsUpdating(false);
     }
