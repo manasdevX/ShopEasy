@@ -690,36 +690,59 @@ export default function Account() {
               <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden relative">
                   {/* Header */}
-                  <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between sticky top-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm z-10">
+                  <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between sticky top-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm z-10 transition-colors duration-500">
                     <div>
-                      <h3 className="text-lg font-bold">Profile Settings</h3>
-                      <p className="text-xs text-slate-500 mt-1">
+                      <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                        Profile Settings
+                      </h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 transition-colors">
                         {isEditing
                           ? "Update your details"
                           : "View profile info"}
                       </p>
                     </div>
-                    {!isEditing ? (
+
+                    <div className="flex items-center gap-2">
+                      {/* EDIT / SAVE BUTTON - Fixed Dark Mode Visibility */}
+                      {!isEditing ? (
+                        <button
+                          onClick={() => setIsEditing(true)}
+                          className="flex items-center gap-2 px-5 py-2 rounded-xl font-bold text-xs 
+                   bg-slate-900 text-white 
+                   dark:bg-white dark:text-slate-900 
+                   hover:opacity-90 shadow-lg transition-all active:scale-95"
+                        >
+                          <Edit2 size={14} /> Edit
+                        </button>
+                      ) : (
+                        <button
+                          onClick={handleSave}
+                          disabled={status === "saving"}
+                          className="flex items-center gap-2 px-6 py-2 rounded-xl font-bold text-xs 
+                   bg-orange-500 text-white shadow-lg 
+                   hover:bg-orange-600 transition-all 
+                   disabled:opacity-50 active:scale-95"
+                        >
+                          {status === "saving" ? (
+                            <Loader2 className="animate-spin" size={14} />
+                          ) : (
+                            <Check size={16} />
+                          )}
+                          Save
+                        </button>
+                      )}
+
+                      {/* DELETE ACCOUNT BUTTON - Styled for both modes */}
                       <button
-                        onClick={() => setIsEditing(true)}
-                        className="flex items-center gap-2 px-5 py-2 rounded-xl font-bold text-xs bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:opacity-90 shadow-lg"
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs 
+                 bg-red-50 text-red-600 border border-red-100 
+                 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20 
+                 hover:bg-red-600 hover:text-white dark:hover:bg-red-600 dark:hover:text-white 
+                 transition-all shadow-sm active:scale-95"
                       >
-                        <Edit2 size={14} /> Edit
+                        <Trash2 size={14} /> Delete Account
                       </button>
-                    ) : (
-                      <button
-                        onClick={handleSave}
-                        disabled={status === "saving"}
-                        className="flex items-center gap-2 px-6 py-2 rounded-xl font-bold text-xs bg-orange-500 text-white shadow-lg hover:bg-orange-600 transition-all"
-                      >
-                        {status === "saving" ? (
-                          <Loader2 className="animate-spin" size={14} />
-                        ) : (
-                          <Check size={16} />
-                        )}{" "}
-                        Save
-                      </button>
-                    )}
+                    </div>
                   </div>
 
                   {/* Body - Compact */}

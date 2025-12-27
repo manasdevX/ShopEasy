@@ -116,7 +116,7 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
             to={isAuth ? "/Seller/Dashboard" : "/Seller/Landing"}
             className="flex items-center gap-2.5 shrink-0 group"
           >
-            <div className="bg-orange-500 p-2 rounded-xl shadow-lg shadow-orange-500/20 group-hover:rotate-6 transition-transform">
+            <div className="bg-orange-500 p-2 rounded-xl shadow-lg shadow-orange-500/20  transition-transform">
               <Store className="text-white" size={22} />
             </div>
             <div className="hidden sm:block">
@@ -227,15 +227,15 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
 
             {/* PROFILE DROPDOWN */}
             {isAuth ? (
-              <div className="relative group">
+              <div className="relative group py-2">
+                {" "}
+                {/* Added py-2 to extend the hoverable area vertically */}
                 <button className="flex items-center gap-1 hover:text-orange-500 transition-colors">
                   <div className="flex items-center gap-2 hover:text-orange-500 transition-colors font-bold text-sm text-slate-700 dark:text-slate-200">
                     <div className="w-8 h-8 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center text-orange-600 dark:text-orange-400 font-bold border border-orange-200 dark:border-orange-800">
-                      {/* ✅ FIX: Use optional chaining (?.) for safe access */}
                       {seller?.name ? seller.name.charAt(0).toUpperCase() : "S"}
                     </div>
                     <span className="hidden md:block">
-                      {/* ✅ FIX: Check if name exists before splitting */}
                       {seller?.name ? seller.name.split(" ")[0] : "Seller"}
                     </span>
                   </div>
@@ -244,40 +244,44 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
                     className="text-slate-400 transition-transform group-hover:rotate-180"
                   />
                 </button>
-
                 {/* Dropdown Menu */}
-                <div className="absolute top-full right-0 w-52 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-xl overflow-hidden shadow-xl border border-slate-100 dark:border-slate-800 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 mt-2">
-                  <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800">
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                      Signed in as
-                    </p>
-                    <p className="text-sm font-bold truncate text-slate-900 dark:text-white mt-0.5">
-                      {seller?.email || "No Email"}
-                    </p>
+                {/* CHANGE: Added 'pt-2' and removed 'mt-2'. 
+        The 'pt-2' acts as an invisible bridge so the mouse stay 'inside' the group.
+    */}
+                <div className="absolute top-full right-0 w-52 pt-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                  <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-xl overflow-hidden shadow-xl border border-slate-100 dark:border-slate-800">
+                    <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800">
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                        Signed in as
+                      </p>
+                      <p className="text-sm font-bold truncate text-slate-900 dark:text-white mt-0.5">
+                        {seller?.email || "No Email"}
+                      </p>
+                    </div>
+
+                    <Link
+                      to="/Seller/Dashboard"
+                      className="block px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 transition font-medium text-sm"
+                    >
+                      Dashboard
+                    </Link>
+                    <Link
+                      to="/Seller/Settings"
+                      className="block px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 transition font-medium text-sm"
+                    >
+                      Settings
+                    </Link>
+
+                    <div className="border-t border-slate-100 dark:border-slate-800" />
+
+                    <button
+                      onClick={handleLogout}
+                      className="w-full text-left px-4 py-2.5 hover:bg-red-50 dark:hover:bg-red-900/20 transition flex items-center gap-2 text-red-500 font-medium text-sm"
+                    >
+                      <LogOut size={16} />
+                      Logout
+                    </button>
                   </div>
-
-                  <Link
-                    to="/Seller/Dashboard"
-                    className="block px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 transition font-medium text-sm"
-                  >
-                    Dashboard
-                  </Link>
-                  <Link
-                    to="/Seller/Settings"
-                    className="block px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 transition font-medium text-sm"
-                  >
-                    Settings
-                  </Link>
-
-                  <div className="border-t border-slate-100 dark:border-slate-800" />
-
-                  <button
-                    onClick={handleLogout}
-                    className="w-full text-left px-4 py-2.5 hover:bg-red-50 dark:hover:bg-red-900/20 transition flex items-center gap-2 text-red-500 font-medium text-sm"
-                  >
-                    <LogOut size={16} />
-                    Logout
-                  </button>
                 </div>
               </div>
             ) : (
@@ -288,42 +292,40 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
                 >
                   Login
                 </Link>
-                <Link
-                  to="/Seller/signup"
-                  className="bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-5 py-2.5 rounded-xl font-bold text-sm hover:opacity-90 transition-all shadow-lg shadow-slate-900/10"
-                >
-                  Start Selling
-                </Link>
               </div>
             )}
           </div>
         </div>
 
         {/* BOTTOM NAV (Only visible if logged in and NOT onboarding) */}
-        {isAuth && !isOnboarding && (
-          <div className="flex items-center gap-8 mt-4 border-t border-slate-50 dark:border-slate-800/50 pt-4 overflow-x-auto no-scrollbar">
-            {navLinks.map((link) => {
-              const isActive = location.pathname === link.path;
-              return (
-                <Link
-                  key={link.name}
-                  to={link.path}
-                  className={`flex items-center gap-2 pb-2 text-[11px] font-black uppercase tracking-[0.15em] transition-all relative whitespace-nowrap ${
-                    isActive
-                      ? "text-orange-500"
-                      : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-                  }`}
-                >
-                  <link.icon size={14} strokeWidth={3} />
-                  {link.name}
-                  {isActive && (
-                    <span className="absolute bottom-0 left-0 w-full h-0.5 bg-orange-500 rounded-full"></span>
-                  )}
-                </Link>
-              );
-            })}
-          </div>
-        )}
+        {isAuth &&
+          !isOnboarding &&
+          ["/Seller/Dashboard", "/Seller/orders", "/Seller/products"].includes(
+            location.pathname
+          ) && (
+            <div className="flex items-center gap-8 mt-4 border-t border-slate-50 dark:border-slate-800/50 pt-4 overflow-x-auto no-scrollbar">
+              {navLinks.map((link) => {
+                const isActive = location.pathname === link.path;
+                return (
+                  <Link
+                    key={link.name}
+                    to={link.path}
+                    className={`flex items-center gap-2 pb-2 text-[11px] font-black uppercase tracking-[0.15em] transition-all relative whitespace-nowrap ${
+                      isActive
+                        ? "text-orange-500"
+                        : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                    }`}
+                  >
+                    <link.icon size={14} strokeWidth={3} />
+                    {link.name}
+                    {isActive && (
+                      <span className="absolute bottom-0 left-0 w-full h-0.5 bg-orange-500 rounded-full"></span>
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
       </div>
     </nav>
   );

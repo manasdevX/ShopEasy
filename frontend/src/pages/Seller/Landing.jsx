@@ -1,4 +1,4 @@
-import React from "react";
+import {React , useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import {
   Zap,
@@ -11,6 +11,14 @@ import SellerNavbar from "../../components/Seller/SellerNavbar";
 import SellerFooter from "../../components/Seller/SellerFooter";
 
 export default function SellerLanding() {
+  // --- LOGIC: Check Login Status ---
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    // Check if the token exists in localStorage
+    const token = localStorage.getItem("sellerToken");
+    setIsLoggedIn(!!token); // !! converts the string/null to a boolean
+  }, []);
   return (
     <div className="bg-white dark:bg-[#030712] min-h-screen transition-colors duration-500">
       <SellerNavbar isLoggedIn={false} />
@@ -30,7 +38,7 @@ export default function SellerLanding() {
             payouts, and a dedicated support team.
           </p>
           <Link
-            to="/Seller/login"
+            to={isLoggedIn ? "/Seller/Dashboard" : "/Seller/signup"}
             className="inline-flex items-center gap-3 bg-slate-900 dark:bg-orange-500 text-white px-10 py-4 rounded-2xl font-bold hover:scale-105 transition-all shadow-2xl shadow-orange-500/20"
           >
             Start Selling Today <ArrowRight size={20} />
