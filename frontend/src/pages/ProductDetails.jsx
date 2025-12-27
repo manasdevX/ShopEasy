@@ -1,166 +1,307 @@
-import React, { useState } from "react";
-import { Star, ShoppingCart, ShieldCheck, Truck, RotateCcw, Plus, Minus, MessageSquare } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import {
+  Star,
+  ShoppingCart,
+  Truck,
+  RotateCcw,
+  ShieldCheck,
+  Minus,
+  Plus,
+  Loader2,
+  ChevronLeft,
+  MessageSquare,
+  ImageOff, // Import ImageOff icon
+} from "lucide-react";
+import { toast } from "react-hot-toast";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 
 export default function ProductDetails() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+
+  const [product, setProduct] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
   const [selectedImage, setSelectedImage] = useState(0);
-  const [userRating, setUserRating] = useState(0);
 
-  // 1. DUMMY DATA
-  const product = {
-    name: "FocusPro Wireless Noise Cancelling Headphones",
-    price: 299.00,
-    rating: 4.8,
-    reviewsCount: 1240,
-    description: "Experience pure sound with the FocusPro Wireless. Featuring industry-leading noise cancellation, 40-hour battery life, and ultra-soft memory foam cushions for all-day comfort.",
-    images: [
-      "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80",
-      "https://images.unsplash.com/photo-1546435770-a3e426ff472b?w=800&q=80",
-      "https://images.unsplash.com/photo-1484704849700-f032a568e944?w=800&q=80"
-    ],
-    features: ["Active Noise Cancellation", "Bluetooth 5.2", "40-Hour Battery", "Built-in Mic"]
+  // 1. HARDCODED SAFETY CHECK FOR URL
+  const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+  const SAFE_API_URL = BASE_URL.startsWith("http")
+    ? BASE_URL
+    : `http://${BASE_URL}`;
+
+  // 2. IMAGE URL HELPER
+  const getImageUrl = (imagePath) => {
+    if (!imagePath) return null;
+    if (imagePath.startsWith("data:")) return imagePath;
+    if (imagePath.startsWith("http")) return imagePath;
+
+    const cleanPath = imagePath.startsWith("/")
+      ? imagePath.substring(1)
+      : imagePath;
+    return `${SAFE_API_URL}/${cleanPath}`;
   };
 
-  const reviews = [
-    { id: 1, user: "Alex M.", rating: 5, comment: "Best headphones I've ever owned. The bass is incredible!", date: "2 days ago" },
-    { id: 2, user: "Sarah K.", rating: 4, comment: "Very comfortable for long flights. Noise cancelling is top-tier.", date: "1 week ago" }
-  ];
+  useEffect(() => {
+    const fetchProduct = async () => {
+      try {
+        const res = await fetch(`${SAFE_API_URL}/api/products/${id}`);
+        const data = await res.json();
+
+        if (res.ok) {
+          setProduct(data);
+        } else {
+          toast.error("Product not found");
+          navigate("/");
+        }
+      } catch (error) {
+        console.error("Fetch Error:", error);
+        toast.error("Could not load product");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (id) fetchProduct();
+  }, [id, navigate, SAFE_API_URL]);
+
+  const handleAddToCart = async () => {
+    if (!product) return;
+    const token = localStorage.getItem("token");
+
+    // Guest Logic
+    if (!token) {
+      const currentCart = JSON.parse(localStorage.getItem("cart") || "[]");
+      const existingItemIndex = currentCart.findIndex(
+        (item) => item.product._id === product._id
+      );
+      let newCart = [...currentCart];
+      if (existingItemIndex > -1) {
+        newCart[existingItemIndex].quantity += quantity;
+      } else {
+        newCart.push({ product, quantity });
+      }
+      localStorage.setItem("cart", JSON.stringify(newCart));
+      toast.success(`Added ${quantity} ${product.name} to cart`);
+      return;
+    }
+
+    // Logged In Logic
+    try {
+      // ⚠️ Note: Ensure server/app.js has app.use("/api/cart", cartRoutes)
+      const res = await fetch(`${SAFE_API_URL}/api/cart/add`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ productId: product._id, quantity }),
+      });
+
+      if (res.ok) toast.success("Added to cart!");
+      else toast.error("Failed to add item");
+    } catch (error) {
+      toast.error("Server connection failed");
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-[#030712]">
+        <Loader2 className="animate-spin text-orange-500" size={40} />
+      </div>
+    );
+  }
+
+  if (!product) return null;
 
   return (
-    <div className="min-h-screen bg-white dark:bg-[#030712] transition-colors duration-500">
+    <div className="min-h-screen bg-slate-50 dark:bg-[#030712] transition-colors duration-300">
       <Navbar />
 
       <main className="max-w-7xl mx-auto px-6 py-12">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16">
-          
+        <button
+          onClick={() => navigate(-1)}
+          className="flex items-center gap-2 text-slate-500 hover:text-orange-500 font-bold text-xs uppercase tracking-widest mb-8 transition-colors"
+        >
+          <ChevronLeft size={16} /> Back to Results
+        </button>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20">
           {/* LEFT: IMAGE GALLERY */}
           <div className="space-y-6">
-            <div className="aspect-square bg-slate-50 dark:bg-slate-900 rounded-3xl overflow-hidden border border-slate-100 dark:border-slate-800">
-              <img src={product.images[selectedImage]} alt="Product" className="w-full h-full object-cover transition-transform duration-500 hover:scale-110" />
-            </div>
-            <div className="flex gap-4">
-              {product.images.map((img, idx) => (
-                <button 
-                  key={idx} 
-                  onClick={() => setSelectedImage(idx)}
-                  className={`w-24 h-24 rounded-2xl overflow-hidden border-2 transition-all ${selectedImage === idx ? 'border-orange-500' : 'border-transparent opacity-60'}`}
-                >
-                  <img src={img} className="w-full h-full object-cover" alt="thumb" />
-                </button>
-              ))}
-            </div>
-          </div>
+            <div className="aspect-square bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 overflow-hidden flex items-center justify-center p-8 relative group">
+              {/* ✅ ROBUST IMAGE LOADING */}
+              {getImageUrl(product.images?.[selectedImage]) ? (
+                <img
+                  src={getImageUrl(product.images?.[selectedImage])}
+                  alt={product.name}
+                  className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-110"
+                  onError={(e) => {
+                    e.target.style.display = "none"; // Hide broken image
+                    e.target.nextSibling.style.display = "flex"; // Show fallback icon
+                  }}
+                />
+              ) : null}
 
-          {/* RIGHT: PRODUCT INFO */}
-          <div className="flex flex-col">
-            <span className="text-orange-500 font-black text-xs tracking-widest uppercase mb-2">New Arrival</span>
-            <h1 className="text-4xl font-black tracking-tighter text-slate-900 dark:text-white mb-4 leading-tight">
-              {product.name}
-            </h1>
-            
-            <div className="flex items-center gap-4 mb-6">
-              <div className="flex text-orange-500">
-                {[...Array(5)].map((_, i) => (
-                  <Star key={i} size={18} fill={i < Math.floor(product.rating) ? "currentColor" : "none"} />
+              {/* ✅ FALLBACK ICON (Shows if image fails or is missing) */}
+              <div
+                className="hidden w-full h-full flex-col items-center justify-center text-slate-300"
+                style={{
+                  display: getImageUrl(product.images?.[selectedImage])
+                    ? "none"
+                    : "flex",
+                }}
+              >
+                <ImageOff size={64} strokeWidth={1} />
+                <span className="text-xs font-bold mt-2 uppercase tracking-widest">
+                  No Image
+                </span>
+              </div>
+            </div>
+
+            {/* Thumbnails */}
+            {product.images?.length > 1 && (
+              <div className="flex gap-4 overflow-x-auto pb-2 no-scrollbar">
+                {product.images.map((img, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setSelectedImage(idx)}
+                    className={`w-20 h-20 rounded-xl border-2 flex-shrink-0 overflow-hidden p-2 bg-white dark:bg-slate-900 transition-all ${
+                      selectedImage === idx
+                        ? "border-orange-500 opacity-100"
+                        : "border-transparent hover:border-slate-200 dark:hover:border-slate-700 opacity-60 hover:opacity-100"
+                    }`}
+                  >
+                    {/* Safe Thumbnail Loading */}
+                    {getImageUrl(img) ? (
+                      <img
+                        src={getImageUrl(img)}
+                        alt=""
+                        className="w-full h-full object-contain"
+                        onError={(e) => {
+                          e.target.style.display = "none";
+                          e.target.nextSibling.style.display = "flex";
+                        }}
+                      />
+                    ) : null}
+                    <div
+                      className="hidden w-full h-full items-center justify-center text-slate-300"
+                      style={{ display: getImageUrl(img) ? "none" : "flex" }}
+                    >
+                      <ImageOff size={20} />
+                    </div>
+                  </button>
                 ))}
               </div>
-              <span className="text-sm font-bold text-slate-400">({product.reviewsCount} Reviews)</span>
+            )}
+          </div>
+
+          {/* RIGHT: PRODUCT INFO (Unchanged) */}
+          <div>
+            <span className="text-orange-500 font-black tracking-widest uppercase text-xs mb-2 block">
+              {product.category || "New Arrival"}
+            </span>
+
+            <h1 className="text-3xl lg:text-4xl font-black text-slate-900 dark:text-white mb-4 leading-tight">
+              {product.name}
+            </h1>
+
+            <div className="flex items-center gap-3 mb-6">
+              <div className="flex text-yellow-400">
+                {[...Array(5)].map((_, i) => (
+                  <Star
+                    key={i}
+                    size={18}
+                    fill={i < (product.rating || 4) ? "currentColor" : "none"}
+                  />
+                ))}
+              </div>
+              <span className="text-slate-400 text-sm font-bold">
+                ({product.numReviews || 0} Reviews)
+              </span>
             </div>
 
-            <div className="text-3xl font-black text-slate-900 dark:text-white mb-6">
-              ${product.price.toFixed(2)}
+            <div className="text-3xl font-black text-slate-900 dark:text-white mb-8">
+              ${product.price?.toFixed(2)}
             </div>
 
-            <p className="text-slate-500 dark:text-slate-400 leading-relaxed mb-8">
-              {product.description}
+            <p className="text-slate-500 dark:text-slate-400 leading-relaxed font-medium mb-8">
+              {product.description ||
+                "No description available for this product."}
             </p>
 
-            {/* ACTION BOX */}
-            <div className="p-8 bg-slate-50 dark:bg-slate-900/50 rounded-3xl border border-slate-100 dark:border-slate-800">
-              <div className="flex items-center justify-between mb-6">
-                <span className="font-bold text-slate-900 dark:text-white">Quantity</span>
-                <div className="flex items-center gap-4 bg-white dark:bg-slate-800 p-2 rounded-xl border border-slate-200 dark:border-slate-700">
-                  <button onClick={() => setQuantity(q => Math.max(1, q - 1))}><Minus size={16} /></button>
-                  <span className="w-8 text-center font-black">{quantity}</span>
-                  <button onClick={() => setQuantity(q => q + 1)}><Plus size={16} /></button>
+            <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-6 mb-8 shadow-xl shadow-slate-200/50 dark:shadow-none">
+              <div className="flex flex-col sm:flex-row gap-4">
+                <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-950 rounded-xl px-4 py-3 sm:w-1/3 border border-slate-100 dark:border-slate-800">
+                  <button
+                    onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                    className="text-slate-400 hover:text-orange-500"
+                  >
+                    <Minus size={18} />
+                  </button>
+                  <span className="font-black text-slate-900 dark:text-white w-8 text-center">
+                    {quantity}
+                  </span>
+                  <button
+                    onClick={() => setQuantity((q) => q + 1)}
+                    className="text-slate-400 hover:text-orange-500"
+                  >
+                    <Plus size={18} />
+                  </button>
+                </div>
+
+                <button
+                  onClick={handleAddToCart}
+                  disabled={product.stock === 0}
+                  className="flex-1 bg-orange-500 hover:bg-orange-600 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-black py-3.5 rounded-xl shadow-lg shadow-orange-500/20 transition-all active:scale-95 flex items-center justify-center gap-2 uppercase tracking-widest text-sm"
+                >
+                  <ShoppingCart size={18} />
+                  {product.stock > 0 ? "Add to Cart" : "Out of Stock"}
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex items-start gap-3">
+                <Truck className="text-orange-500 shrink-0" size={20} />
+                <div>
+                  <h4 className="font-bold text-slate-900 dark:text-white text-xs uppercase">
+                    Free Delivery
+                  </h4>
+                  <p className="text-[10px] text-slate-500 font-medium">
+                    On orders over $500
+                  </p>
                 </div>
               </div>
-
-              <button className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-3 transition-transform active:scale-95 mb-4 shadow-lg shadow-orange-500/20">
-                <ShoppingCart size={20} /> ADD TO CART
-              </button>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-tight">
-                  <Truck size={14} className="text-orange-500" /> Free Delivery
+              <div className="flex items-start gap-3">
+                <RotateCcw className="text-orange-500 shrink-0" size={20} />
+                <div>
+                  <h4 className="font-bold text-slate-900 dark:text-white text-xs uppercase">
+                    Returns
+                  </h4>
+                  <p className="text-[10px] text-slate-500 font-medium">
+                    30-day easy returns
+                  </p>
                 </div>
-                <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-tight">
-                  <RotateCcw size={14} className="text-orange-500" /> 30-Day Returns
+              </div>
+              <div className="flex items-start gap-3">
+                <ShieldCheck className="text-orange-500 shrink-0" size={20} />
+                <div>
+                  <h4 className="font-bold text-slate-900 dark:text-white text-xs uppercase">
+                    Warranty
+                  </h4>
+                  <p className="text-[10px] text-slate-500 font-medium">
+                    1 year included
+                  </p>
                 </div>
               </div>
             </div>
           </div>
         </div>
-
-        {/* REVIEWS SECTION */}
-        <section className="mt-24 pt-16 border-t border-slate-100 dark:border-slate-800">
-          <div className="flex items-center justify-between mb-12">
-            <h2 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-3">
-              <MessageSquare className="text-orange-500" /> REVIEWS & RATINGS
-            </h2>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
-            {/* ADD REVIEW FORM */}
-            <div className="lg:col-span-1 space-y-6">
-              <div className="bg-slate-50 dark:bg-slate-900 p-8 rounded-3xl border border-slate-100 dark:border-slate-800">
-                <h3 className="font-black text-sm uppercase tracking-widest mb-4">Rate this product</h3>
-                <div className="flex gap-2 mb-6">
-                  {[1, 2, 3, 4, 5].map((num) => (
-                    <button 
-                      key={num} 
-                      onClick={() => setUserRating(num)}
-                      className={`transition-colors ${userRating >= num ? 'text-orange-500' : 'text-slate-300'}`}
-                    >
-                      <Star size={24} fill={userRating >= num ? "currentColor" : "none"} />
-                    </button>
-                  ))}
-                </div>
-                <textarea 
-                  placeholder="Share your experience..." 
-                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-4 rounded-xl outline-none focus:border-orange-500 h-32 mb-4 text-sm"
-                />
-                <button className="w-full bg-slate-900 dark:bg-white dark:text-slate-900 text-white font-black py-3 rounded-xl text-xs uppercase tracking-widest transition-all hover:bg-orange-500 hover:text-white">
-                  Submit Review
-                </button>
-              </div>
-            </div>
-
-            {/* REVIEW LIST */}
-            <div className="lg:col-span-2 space-y-6">
-              {reviews.map((rev) => (
-                <div key={rev.id} className="border-b border-slate-100 dark:border-slate-800 pb-8">
-                  <div className="flex justify-between items-start mb-2">
-                    <span className="font-bold text-slate-900 dark:text-white">{rev.user}</span>
-                    <span className="text-xs text-slate-400 font-bold">{rev.date}</span>
-                  </div>
-                  <div className="flex text-orange-500 mb-4">
-                    {[...Array(5)].map((_, i) => (
-                      <Star key={i} size={14} fill={i < rev.rating ? "currentColor" : "none"} />
-                    ))}
-                  </div>
-                  <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed">
-                    {rev.comment}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
       </main>
-
       <Footer />
     </div>
   );

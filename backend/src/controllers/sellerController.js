@@ -1,4 +1,4 @@
-import Seller from "../models/seller.js";
+import Seller from "../models/seller.js"; // Ensure filename case matches your system
 import Product from "../models/Product.js";
 import Order from "../models/Order.js";
 import jwt from "jsonwebtoken";
@@ -17,33 +17,16 @@ const generateToken = (id) => {
    AUTH CONTROLLERS
 ========================================= */
 
-// @desc    Register new seller
+// @desc    Register new seller (Step 1)
 // @route   POST /api/sellers/register
 // @access  Public
 export const registerSeller = async (req, res) => {
   try {
-    const {
-      name,
-      email,
-      password,
-      phone,
-      businessName,
-      businessType,
-      gstin,
-      address,
-      googleId,
-    } = req.body;
+    const { name, email, password, phone, googleId } = req.body;
 
-    if (
-      !name ||
-      !email ||
-      !password ||
-      !businessName ||
-      !phone ||
-      !businessType ||
-      !gstin ||
-      !address
-    ) {
+    // ✅ FIX: Only validate Step 1 fields.
+    // Removed checks for businessName, gstin, etc. as they come later.
+    if (!name || !email || !password || !phone) {
       return res
         .status(400)
         .json({ message: "Please fill all required fields" });
@@ -53,22 +36,14 @@ export const registerSeller = async (req, res) => {
     if (sellerExists)
       return res.status(400).json({ message: "Seller email already exists" });
 
-    const businessExists = await Seller.findOne({ businessName });
-    if (businessExists)
-      return res
-        .status(400)
-        .json({ message: "Business Name is already registered" });
-
+    // Create the partial seller profile
     const seller = await Seller.create({
       name,
       email,
       password,
-      businessName,
       phone,
-      businessType,
-      gstin,
-      address,
       googleId,
+      // Business fields are left undefined for now (handled by sparse index in DB)
     });
 
     if (seller) {
@@ -76,7 +51,6 @@ export const registerSeller = async (req, res) => {
         _id: seller._id,
         name: seller.name,
         email: seller.email,
-        businessName: seller.businessName,
         role: seller.role,
         token: generateToken(seller._id),
       });
@@ -162,8 +136,6 @@ export const forgotPasswordSeller = async (req, res) => {
         .json({ success: true, message: "OTP sent to email" });
     } else {
       // --- SEND SMS (TWILIO) ---
-
-      // ✅ UPDATED: Using 'TWILIO_SID' to match your .env file
       const accountSid = process.env.TWILIO_SID;
       const authToken = process.env.TWILIO_AUTH_TOKEN;
       const twilioPhone = process.env.TWILIO_PHONE_NUMBER;
@@ -258,13 +230,48 @@ export const getSellerProfile = async (req, res) => {
   }
 };
 
-// @desc    Add/Update Bank Details
-// @route   POST /api/sellers/bank-details
+// @desc    Update Seller Business Profile (Step 2)
+// @route   PUT /api/sellers/profile
+// @access  Private (Seller)
+// ✅ NEW FUNCTION: This was the missing export causing your error
+export const updateSellerProfile = async (req, res) => {
+  try {
+    const seller = await Seller.findById(req.seller._id);
+
+    if (seller) {
+      seller.businessName = req.body.businessName || seller.businessName;
+      seller.businessType = req.body.businessType || seller.businessType;
+      seller.gstin = req.body.gstin || seller.gstin;
+      seller.address = req.body.address || seller.address;
+
+      const updatedSeller = await seller.save();
+
+      res.json({
+        _id: updatedSeller._id,
+        name: updatedSeller.name,
+        email: updatedSeller.email,
+        businessName: updatedSeller.businessName,
+        role: updatedSeller.role,
+        token: generateToken(updatedSeller._id),
+      });
+    } else {
+      res.status(404).json({ message: "Seller not found" });
+    }
+  } catch (error) {
+    console.error("UPDATE PROFILE ERROR:", error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Add/Update Bank Details (Step 3)
+// @route   PUT /api/sellers/bank
 // @access  Private (Seller)
 export const addBankDetails = async (req, res) => {
   try {
     const { accountHolder, accountNumber, ifscCode, bankName, branchName } =
       req.body;
+
+    // Ensure critical bank details are present
     if (!accountHolder || !accountNumber || !ifscCode)
       return res.status(400).json({ message: "Provide all bank details" });
 
@@ -278,13 +285,17 @@ export const addBankDetails = async (req, res) => {
         branchName,
         isVerified: true,
       };
+
+      // Mark onboarding as complete
+      if (seller.businessName && seller.gstin) {
+        seller.isOnboardingComplete = true;
+      }
+
       await seller.save();
-      res
-        .status(200)
-        .json({
-          message: "Bank details updated",
-          bankDetails: seller.bankDetails,
-        });
+      res.status(200).json({
+        message: "Bank details updated",
+        bankDetails: seller.bankDetails,
+      });
     } else {
       res.status(404).json({ message: "Seller not found" });
     }
