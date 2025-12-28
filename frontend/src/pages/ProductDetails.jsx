@@ -12,6 +12,8 @@ import {
   ChevronLeft,
   ImageOff,
   Zap,
+  ThumbsUp,
+  ThumbsDown,
 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import Navbar from "../components/Navbar";
@@ -123,9 +125,9 @@ export default function ProductDetails() {
           <ChevronLeft size={16} /> Back to Results
         </button>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 relative">
           {/* LEFT COLUMN: IMAGES + ACTION CONTROL */}
-          <div className="space-y-8 lg:sticky lg:top-24 h-fit">
+          <div className="lg:sticky lg:top-24 h-fit space-y-8">
             <div className="aspect-square bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 overflow-hidden flex items-center justify-center p-8 relative shadow-sm">
               {getImageUrl(allImages[selectedImage]) ? (
                 <img
@@ -179,7 +181,9 @@ export default function ProductDetails() {
                 </button>
 
                 <button
-                  onClick={() => navigate("/payment", { state: { product, quantity } })}
+                  onClick={() =>
+                    navigate("/payment", { state: { product, quantity } })
+                  }
                   disabled={product.stock === 0}
                   className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-orange-500/20 transition-all active:scale-95 flex items-center justify-center gap-2 uppercase tracking-widest text-xs"
                 >
@@ -247,7 +251,7 @@ export default function ProductDetails() {
 
               {/* DESCRIPTION MOVED ABOVE PRICE */}
               <div className="space-y-2">
-                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                <h3 className="text-[12px] font-black text-slate-400 uppercase tracking-widest">
                   The Details
                 </h3>
                 <p className="text-slate-500 dark:text-slate-400 leading-relaxed text-sm max-w-prose">
@@ -313,6 +317,137 @@ export default function ProductDetails() {
                   </div>
                 </div>
               ))}
+            </div>
+
+            {/* RATINGS & REVIEWS SECTION */}
+            <div className="pt-10 border-t border-slate-100 dark:border-slate-800 space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <h3 className="text-[12px] font-black text-slate-400 uppercase tracking-[0.2em]">
+                    Ratings & Reviews
+                  </h3>
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1.5 bg-green-500 text-white px-2 py-0.5 rounded-md shadow-sm">
+                      <span className="text-sm font-black">
+                        {product.rating || 4.1}
+                      </span>
+                      <Star size={12} fill="currentColor" />
+                    </div>
+                    <p className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                      {product.numReviews?.toLocaleString() || "2,945"} Ratings
+                      &{" "}
+                      {product.numReviews
+                        ? Math.floor(product.numReviews / 10)
+                        : "130"}{" "}
+                      Reviews
+                    </p>
+                  </div>
+                </div>
+
+                <button className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 hover:border-orange-500 dark:hover:border-orange-500 text-slate-900 dark:text-white font-black py-2.5 px-6 rounded-xl transition-all active:scale-95 text-xs uppercase tracking-widest shadow-sm" onClick={() => window.location.href = '/reviews'}>
+                  Rate Product
+                </button>
+              </div>
+
+              {/* VISUAL RATING BARS (Professional Insight) */}
+              <div className="grid grid-cols-1 gap-2 pt-2">
+                {[5, 4, 3, 2, 1].map((star) => (
+                  <div key={star} className="flex items-center gap-3">
+                    <span className="text-[10px] font-black text-slate-400 w-3">
+                      {star}
+                    </span>
+                    <div className="flex-1 h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${
+                          star >= 4
+                            ? "bg-green-500"
+                            : star === 3
+                            ? "bg-yellow-400"
+                            : "bg-orange-500"
+                        }`}
+                        style={{
+                          width: `${star === 5 ? 70 : star === 4 ? 20 : 5}%`,
+                        }}
+                      />
+                    </div>
+                    <span className="text-[10px] font-bold text-slate-400 w-8">
+                      {star === 5 ? "70%" : star === 4 ? "20%" : "5%"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* RECENT REVIEW PREVIEW */}
+              <div className="pt-4 space-y-4">
+                <div className="group p-5 bg-white dark:bg-slate-900/40 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-md transition-all duration-300">
+                  {/* TOP ROW: RATING & TITLE */}
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1 bg-green-600 dark:bg-green-500 text-white text-[10px] px-2 py-0.5 rounded-full font-black shadow-sm">
+                        5 <Star size={8} fill="currentColor" />
+                      </div>
+                      <span className="text-sm font-black text-slate-800 dark:text-white tracking-tight">
+                        Perfect Experience
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      2 days ago
+                    </span>
+                  </div>
+
+                  {/* REVIEW TEXT */}
+                  <p className="text-[13px] italic text-slate-600 dark:text-slate-400 leading-relaxed font-medium">
+                    "Absolutely stunning quality. The attention to detail
+                    exceeded my expectations. Fast delivery too!"
+                  </p>
+
+                  {/* BOTTOM ROW: USER INFO & VOTING */}
+                  <div className="flex items-center justify-between mt-5 pt-4 border-t border-slate-50 dark:border-slate-800/50">
+                    <div className="flex items-center gap-3">
+                      <div className="flex flex-col">
+                        <span className="text-xs font-black text-slate-800 dark:text-slate-400">
+                          Rahul M.
+                        </span>
+                        <div className="flex items-center gap-1 text-[9px] font-bold text-green-500 uppercase tracking-tighter">
+                          <ShieldCheck
+                            size={10}
+                            fill="currentColor"
+                            className="text-green-500/20"
+                          />
+                          Verified Buyer
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* INTERACTION: LIKE / DISLIKE */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-black text-slate-400">
+                        Helpful?
+                      </span>
+
+                      {/* LIKE */}
+                      <div className="flex items-center gap-1 group/like cursor-pointer">
+                        <button className="p-2 rounded-full bg-slate-50 dark:bg-slate-800 text-slate-400 group-hover/like:text-green-500 group-hover/like:bg-green-50 dark:group-hover/like:bg-green-500/10 transition-all">
+                          <ThumbsUp size={12} />
+                        </button>
+                        <span className="text-[10px] font-black text-slate-400 group-hover/like:text-slate-600 dark:group-hover/like:text-slate-200">
+                          24
+                        </span>
+                      </div>
+
+                      {/* DISLIKE */}
+                      <div className="flex items-center gap-1 group/dislike cursor-pointer">
+                        <button className="p-2 rounded-full bg-slate-50 dark:bg-slate-800 text-slate-400 group-hover/dislike:text-red-500 group-hover/dislike:bg-red-50 dark:group-hover/dislike:bg-red-500/10 transition-all">
+                          <ThumbsDown size={12} />
+                        </button>
+                        <span className="text-[10px] font-black text-slate-400 group-hover/dislike:text-slate-600 dark:group-hover/dislike:text-slate-200">
+                          2
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>

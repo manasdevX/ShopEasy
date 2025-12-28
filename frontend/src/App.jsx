@@ -11,6 +11,7 @@ import SearchResults from "./pages/SearchResults";
 import ProductDetails from "./pages/ProductDetails";
 import Cart from "./pages/Cart"; // ✅ Added Cart Import
 import Payment from "./pages/Payment";
+import Reviews from "./pages/Reviews.jsx";
 
 // --- SELLER PAGES ---
 import SellerLanding from "./pages/Seller/Landing";
@@ -55,6 +56,7 @@ export default function App() {
         <Route path="/search" element={<SearchResults />} />
         <Route path="/product/:id" element={<ProductDetails />} />
         <Route path="/payment" element={<Payment />} />
+        <Route path="/reviews" element={<Reviews />} />
 
         {/* ✅ Production Cart Route */}
         <Route path="/cart" element={<Cart />} />

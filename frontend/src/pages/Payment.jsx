@@ -10,7 +10,8 @@ import {
   CheckCircle2,
   LocateFixed,
 } from "lucide-react";
-import Navbar from "../components/Navbar";
+import PaymentHeader from "../components/PaymentHeader";
+import PaymentFooter from "../components/PaymentFooter";
 
 export default function CheckoutPage() {
   const location = useLocation();
@@ -44,11 +45,11 @@ export default function CheckoutPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#030712] transition-colors">
-      <Navbar />
+      <PaymentHeader />
 
       <main className="max-w-6xl mx-auto px-6 py-10">
         <div className="flex flex-row items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-6 mb-2">
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
+          <h1 className="text-5xl font-bold text-slate-900 dark:text-white tracking-tight">
             Checkout
           </h1>
           {/* Back Button */}
@@ -80,7 +81,7 @@ export default function CheckoutPage() {
 
               <button
                 type="button"
-                className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 font-bold text-sm mb-6 shadow-sm transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 font-bold text-sm mb-6 shadow-sm transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
               >
                 <LocateFixed size={18} />
                 Use my current location
@@ -301,6 +302,7 @@ export default function CheckoutPage() {
           </div>
         </div>
       </main>
+        <PaymentFooter />
     </div>
   );
 }
