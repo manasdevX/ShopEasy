@@ -93,6 +93,8 @@ export default function Cart() {
               : item
           )
         );
+        // 🚀 TRIGGER NAVBAR UPDATE
+        window.dispatchEvent(new Event("cartUpdated"));
       } else {
         toast.error("Failed to update quantity");
       }
@@ -115,6 +117,9 @@ export default function Cart() {
           prev.filter((item) => item.product._id !== productId)
         );
         toast.success("Item removed");
+
+        // 🚀 TRIGGER NAVBAR UPDATE
+        window.dispatchEvent(new Event("cartUpdated"));
       } else {
         toast.error("Could not remove item");
       }
@@ -172,12 +177,11 @@ export default function Cart() {
                   key={item.product._id}
                   className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-4 rounded-2xl flex gap-6 items-center group transition-all hover:shadow-xl hover:shadow-slate-200/50 dark:hover:shadow-none"
                 >
-                  {/* ✅ 1. CLICKABLE IMAGE WRAPPER */}
+                  {/* Clickable Image */}
                   <Link
                     to={`/product/${item.product._id}`}
                     className="w-24 h-24 rounded-xl overflow-hidden bg-slate-100 shrink-0 flex items-center justify-center border border-slate-100 dark:border-slate-800"
                   >
-                    {/* ✅ 2. FIX: Check 'thumbnail' first, then 'images[0]' */}
                     {getImageUrl(
                       item.product.thumbnail || item.product.images?.[0]
                     ) ? (
@@ -214,7 +218,6 @@ export default function Cart() {
                       {item.product.category || "General"}
                     </span>
 
-                    {/* ✅ 3. CLICKABLE TITLE */}
                     <Link to={`/product/${item.product._id}`}>
                       <h3 className="font-bold text-slate-900 dark:text-white text-lg line-clamp-1 hover:text-orange-500 transition-colors">
                         {item.product.name}
