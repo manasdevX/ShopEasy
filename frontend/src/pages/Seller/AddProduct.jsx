@@ -112,63 +112,84 @@ export default function AddProduct() {
     }));
   };
 
- const handleSubmit = async (e) => {
-   e.preventDefault();
-   setLoading(true);
+  // ✅ ROBUST SUBMIT HANDLER
+  const handleSubmit = async (e) => {
+    e.preventDefault();
 
-   try {
-     const token = localStorage.getItem("sellerToken");
-     if (!token) {
-       showError("Please login first");
-       navigate("/Seller/login");
-       return;
-     }
+    // 1. VALIDATION: Check for Primary Image
+    if (!files.thumbnail) {
+      toast.error("Please upload a primary product image");
+      return;
+    }
 
-     const data = new FormData();
+    // 2. VALIDATION: Check for Tags (Mandatory now)
+    if (tags.length === 0) {
+      toast.error("Please add at least one search keyword (tag)");
+      return;
+    }
 
-     // 1. Append Standard Text Fields
-     Object.keys(formData).forEach((key) => {
-       // Skip 'tags' from formData, we use the state variable 'tags' instead
-       if (key !== "tags") {
-         data.append(key, formData[key]);
-       }
-     });
+    setLoading(true);
+    const loadingToast = toast.loading("Uploading product..."); // Feedback
 
-     // 2. ✅ FIX: Append Tags Correctly (as JSON string)
-     data.append("tags", JSON.stringify(tags));
+    try {
+      const token = localStorage.getItem("sellerToken");
+      if (!token) {
+        toast.dismiss(loadingToast);
+        showError("Please login first");
+        navigate("/Seller/login");
+        return;
+      }
 
-     // 3. Append Files
-     if (files.thumbnail) {
-       data.append("thumbnail", files.thumbnail);
-     }
-     if (files.images && files.images.length > 0) {
-       files.images.forEach((file) => {
-         data.append("images", file);
-       });
-     }
+      const data = new FormData();
 
-     const res = await fetch(`${API_URL}/api/products/add`, {
-       method: "POST",
-       headers: {
-         Authorization: `Bearer ${token}`,
-         // No 'Content-Type' header needed for FormData
-       },
-       body: data,
-     });
+      // Append Text Fields
+      Object.keys(formData).forEach((key) => {
+        if (key !== "tags") {
+          data.append(key, formData[key]);
+        }
+      });
 
-     const result = await res.json();
+      // Append Tags as JSON string
+      data.append("tags", JSON.stringify(tags));
 
-     if (!res.ok) throw new Error(result.message || "Failed to add product");
+      // Append Files
+      if (files.thumbnail) {
+        data.append("thumbnail", files.thumbnail);
+      }
 
-     showSuccess("Product Listed Successfully! 🎉");
-     navigate("/Seller/dashboard");
-   } catch (error) {
-     console.error(error);
-     showError(error.message);
-   } finally {
-     setLoading(false);
-   }
- };
+      if (files.images && files.images.length > 0) {
+        files.images.forEach((file) => {
+          data.append("images", file);
+        });
+      }
+
+      // Send Request
+      const res = await fetch(`${API_URL}/api/products/add`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: data,
+      });
+
+      const result = await res.json();
+      toast.dismiss(loadingToast); // Remove "Uploading..." message
+
+      if (!res.ok) {
+        throw new Error(result.message || "Failed to add product");
+      }
+
+      showSuccess("Product Listed Successfully! 🎉");
+      navigate("/Seller/dashboard");
+    } catch (error) {
+      console.error(error);
+      toast.dismiss(loadingToast);
+      showError(error.message || "Something went wrong");
+    } finally {
+      // ✅ CRITICAL: This ensures the button gets enabled again
+      setLoading(false);
+    }
+  };
 
   const inputStyle =
     "w-full px-5 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all font-medium";
@@ -440,14 +461,12 @@ export default function AddProduct() {
                 </div>
               </div>
 
-              {/* PRODUCT TAGS SECTION - MATCHING PRICING UI EXACTLY */}
+              {/* PRODUCT TAGS SECTION */}
               <div className="bg-slate-50 m-9 dark:bg-slate-800/30 rounded-2xl p-6 border border-slate-100 dark:border-slate-800 shadow-sm">
-                {/* Header: Matches "Pricing & Inventory" exactly */}
                 <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-6 flex items-center gap-2">
                   <Hash size={16} className="text-orange-500" /> Search Keywords
                 </h4>
 
-                {/* Input Area: Aligned with the content grid of the pricing section */}
                 <div className="space-y-4">
                   <div className="flex flex-wrap gap-2 items-center min-h-[45px] p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus-within:ring-2 focus-within:ring-orange-500/20 focus-within:border-orange-500 transition-all">
                     {tags.map((tag, index) => (
@@ -487,7 +506,6 @@ export default function AddProduct() {
                     />
                   </div>
 
-                  {/* Footer text: Matching the "labelStyle" font weight but smaller */}
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight flex items-center gap-2">
                     <span className="bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 rounded text-slate-500">
                       ENTER
