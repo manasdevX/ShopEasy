@@ -100,7 +100,6 @@ export default function EditProduct() {
         newFiles[index] = file; // Save File for upload
         setNewGalleryFiles(newFiles);
       }
-      showSuccess("Image preview updated");
     };
     reader.readAsDataURL(file);
   };
@@ -257,21 +256,6 @@ export default function EditProduct() {
             <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white flex items-center gap-3">
               Edit Product
             </h1>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleUpdate}
-              disabled={isUpdating}
-              className="flex items-center gap-2 px-6 py-2.5 bg-orange-500 text-white font-bold rounded-xl shadow-lg shadow-orange-500/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50"
-            >
-              {isUpdating ? (
-                <Loader2 className="animate-spin" size={18} />
-              ) : (
-                <Save size={18} />
-              )}
-              {isUpdating ? "Saving..." : "Save Changes"}
-            </button>
           </div>
         </div>
 
@@ -539,13 +523,17 @@ export default function EditProduct() {
                   Cancel
                 </button>
                 <button
-                  type="submit"
-                  disabled={isUpdating}
-                  className="px-8 py-2.5 bg-orange-500 text-white text-sm font-bold rounded-xl shadow-lg shadow-orange-500/30 flex items-center gap-2"
-                >
-                  {isUpdating && <Loader2 size={16} className="animate-spin" />}
-                  Update Listing
-                </button>
+              onClick={handleUpdate}
+              disabled={isUpdating}
+              className="flex items-center gap-2 px-6 py-2.5 bg-orange-500 text-white font-bold rounded-xl shadow-lg shadow-orange-500/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50"
+            >
+              {isUpdating ? (
+                <Loader2 className="animate-spin" size={18} />
+              ) : (
+                <Save size={18} />
+              )}
+              {isUpdating ? "Saving..." : "Save Changes"}
+            </button>
               </div>
             </form>
           </div>
