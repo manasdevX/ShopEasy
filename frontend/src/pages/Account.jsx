@@ -1241,15 +1241,6 @@ function PlaceholderTab({ icon, title, desc }) {
 }
 
 const handleDeleteAccount = async () => {
-  // 1. Confirm User Intent
-  if (
-    !window.confirm(
-      "Are you sure? This action cannot be undone and you will lose your order history."
-    )
-  ) {
-    return;
-  }
-
   try {
     const token = localStorage.getItem("token");
 
@@ -1271,11 +1262,12 @@ const handleDeleteAccount = async () => {
       // 3. Force Redirect to Home
       // This acts as both a redirect AND a page reload to clear memory
       window.location.href = "/";
+      showSuccess("Account deleted successfully");
     } else {
-      toast.error(data.message || "Failed to delete account");
+      showError(data.message || "Failed to delete account");
     }
   } catch (error) {
     console.error(error);
-    toast.error("Server error. Please try again.");
+    showError("Server error. Please try again.");
   }
 };
