@@ -734,6 +734,7 @@ export default function Account() {
 
                       {/* DELETE ACCOUNT BUTTON - Styled for both modes */}
                       <button
+                        onClick={handleDeleteAccount}
                         className="flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs 
                  bg-red-50 text-red-600 border border-red-100 
                  dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20 
@@ -1238,3 +1239,43 @@ function PlaceholderTab({ icon, title, desc }) {
     </div>
   );
 }
+
+const handleDeleteAccount = async () => {
+  // 1. Confirm User Intent
+  if (
+    !window.confirm(
+      "Are you sure? This action cannot be undone and you will lose your order history."
+    )
+  ) {
+    return;
+  }
+
+  try {
+    const token = localStorage.getItem("token");
+
+    const res = await fetch(`${API_URL}/api/user/profile`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    const data = await res.json();
+
+    if (res.ok) {
+      // 2. Clear All Local Data
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      localStorage.removeItem("cart");
+
+      // 3. Force Redirect to Home
+      // This acts as both a redirect AND a page reload to clear memory
+      window.location.href = "/";
+    } else {
+      toast.error(data.message || "Failed to delete account");
+    }
+  } catch (error) {
+    console.error(error);
+    toast.error("Server error. Please try again.");
+  }
+};
