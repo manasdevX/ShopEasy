@@ -1,4 +1,5 @@
 import User from "../models/User.js";
+import Cart from "../models/Cart.js";
 
 /* ======================================================
    1. GET USER PROFILE
@@ -271,5 +272,26 @@ export const setDefaultAddress = async (req, res) => {
   } catch (error) {
     console.error("SET DEFAULT ERROR:", error);
     res.status(500).json({ message: "Failed to set default address" });
+  }
+};
+
+export const deleteUserAccount = async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    // 1. Delete the user's cart first (clean up)
+    await Cart.findOneAndDelete({ user: userId });
+
+    // 2. Delete the user
+    const deletedUser = await User.findByIdAndDelete(userId);
+
+    if (deletedUser) {
+      res.json({ message: "Account deleted successfully" });
+    } else {
+      res.status(404).json({ message: "User not found" });
+    }
+  } catch (error) {
+    console.error("DELETE ACCOUNT ERROR:", error);
+    res.status(500).json({ message: "Server Error" });
   }
 };

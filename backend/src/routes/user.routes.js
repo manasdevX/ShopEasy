@@ -21,6 +21,7 @@ import {
   deleteAddress,
   updateAddress,
   setDefaultAddress,
+  deleteUserAccount,
 } from "../controllers/user.controller.js";
 
 // 3. Import Middleware (Keep the path that was working for you!)
@@ -59,5 +60,6 @@ router
   .delete(protect, deleteAddress);
 
 router.route("/address/:id/default").put(protect, setDefaultAddress);
+router.delete("/profile", protect, deleteUserAccount);
 
 export default router;
