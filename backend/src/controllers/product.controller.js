@@ -195,10 +195,6 @@ export const updateProduct = async (req, res) => {
         .json({ message: "Not authorized to edit this product" });
     }
 
-    // Debugging: See what frontend sent
-    // console.log("UPDATE REQ BODY:", req.body);
-    // console.log("UPDATE REQ FILES:", req.files);
-
     // --- 1. HANDLE THUMBNAIL ---
     // If new file uploaded, use it. Else if existing URL sent, keep it.
     if (req.files && req.files.thumbnail) {
@@ -232,7 +228,7 @@ export const updateProduct = async (req, res) => {
 
     // Part C: Update the product images array
     // We update IF there are final images OR if the user is explicitly sending new files/existing data
-    // This prevents wiping the gallery if the frontend sends nothing (though frontend should send existingImages)
+    // This prevents wiping the gallery if the frontend sends nothing
     if (finalImages.length > 0) {
       product.images = finalImages;
     } else if (
