@@ -112,57 +112,63 @@ export default function AddProduct() {
     }));
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
+ const handleSubmit = async (e) => {
+   e.preventDefault();
+   setLoading(true);
 
-    try {
-      const token = localStorage.getItem("sellerToken");
-      if (!token) {
-        showError("Please login first");
-        navigate("/Seller/login");
-        return;
-      }
+   try {
+     const token = localStorage.getItem("sellerToken");
+     if (!token) {
+       showError("Please login first");
+       navigate("/Seller/login");
+       return;
+     }
 
-      // 1. Create FormData (Required for File Uploads)
-      const data = new FormData();
+     const data = new FormData();
 
-      // 2. Append Text Fields
-      Object.keys(formData).forEach((key) => {
-        data.append(key, formData[key]);
-      });
+     // 1. Append Standard Text Fields
+     Object.keys(formData).forEach((key) => {
+       // Skip 'tags' from formData, we use the state variable 'tags' instead
+       if (key !== "tags") {
+         data.append(key, formData[key]);
+       }
+     });
 
-      // 3. Append Files
-      if (files.thumbnail) {
-        data.append("thumbnail", files.thumbnail);
-      }
-      files.images.forEach((file) => {
-        data.append("images", file);
-      });
+     // 2. ✅ FIX: Append Tags Correctly (as JSON string)
+     data.append("tags", JSON.stringify(tags));
 
-      // 4. Send Request
-      const res = await fetch(`${API_URL}/api/products/add`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          // Note: Do NOT set 'Content-Type' manually when using FormData
-        },
-        body: data,
-      });
+     // 3. Append Files
+     if (files.thumbnail) {
+       data.append("thumbnail", files.thumbnail);
+     }
+     if (files.images && files.images.length > 0) {
+       files.images.forEach((file) => {
+         data.append("images", file);
+       });
+     }
 
-      const result = await res.json();
+     const res = await fetch(`${API_URL}/api/products/add`, {
+       method: "POST",
+       headers: {
+         Authorization: `Bearer ${token}`,
+         // No 'Content-Type' header needed for FormData
+       },
+       body: data,
+     });
 
-      if (!res.ok) throw new Error(result.message || "Failed to add product");
+     const result = await res.json();
 
-      showSuccess("Product Listed Successfully! 🎉");
-      navigate("/Seller/dashboard");
-    } catch (error) {
-      console.error(error);
-      showError(error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+     if (!res.ok) throw new Error(result.message || "Failed to add product");
+
+     showSuccess("Product Listed Successfully! 🎉");
+     navigate("/Seller/dashboard");
+   } catch (error) {
+     console.error(error);
+     showError(error.message);
+   } finally {
+     setLoading(false);
+   }
+ };
 
   const inputStyle =
     "w-full px-5 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all font-medium";

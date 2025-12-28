@@ -10,8 +10,7 @@ import {
   Plus,
   Loader2,
   ChevronLeft,
-  MessageSquare,
-  ImageOff, // Import ImageOff icon
+  ImageOff,
 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import Navbar from "../components/Navbar";
@@ -25,6 +24,9 @@ export default function ProductDetails() {
   const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
   const [selectedImage, setSelectedImage] = useState(0);
+
+  // ✅ NEW: State to hold the merged list of all images
+  const [allImages, setAllImages] = useState([]);
 
   // 1. HARDCODED SAFETY CHECK FOR URL
   const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
@@ -52,6 +54,14 @@ export default function ProductDetails() {
 
         if (res.ok) {
           setProduct(data);
+
+          // ✅ FIX: SMART GALLERY MERGE
+          // Combines Thumbnail + Images, removes duplicates, filters out empty ones
+          const mergedImages = [data.thumbnail, ...(data.images || [])]
+            .filter((img) => img) // Remove null/undefined
+            .filter((img, index, self) => self.indexOf(img) === index); // Remove duplicates
+
+          setAllImages(mergedImages);
         } else {
           toast.error("Product not found");
           navigate("/");
@@ -71,7 +81,6 @@ export default function ProductDetails() {
     if (!product) return;
     const token = localStorage.getItem("token");
 
-    // Guest Logic
     if (!token) {
       const currentCart = JSON.parse(localStorage.getItem("cart") || "[]");
       const existingItemIndex = currentCart.findIndex(
@@ -88,9 +97,7 @@ export default function ProductDetails() {
       return;
     }
 
-    // Logged In Logic
     try {
-      // ⚠️ Note: Ensure server/app.js has app.use("/api/cart", cartRoutes)
       const res = await fetch(`${SAFE_API_URL}/api/cart/add`, {
         method: "POST",
         headers: {
@@ -130,27 +137,25 @@ export default function ProductDetails() {
         </button>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20">
-          {/* LEFT: IMAGE GALLERY */}
+          {/* LEFT: IMAGE GALLERY (Using 'allImages' now) */}
           <div className="space-y-6">
             <div className="aspect-square bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 overflow-hidden flex items-center justify-center p-8 relative group">
-              {/* ✅ ROBUST IMAGE LOADING */}
-              {getImageUrl(product.images?.[selectedImage]) ? (
+              {getImageUrl(allImages[selectedImage]) ? (
                 <img
-                  src={getImageUrl(product.images?.[selectedImage])}
+                  src={getImageUrl(allImages[selectedImage])}
                   alt={product.name}
                   className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-110"
                   onError={(e) => {
-                    e.target.style.display = "none"; // Hide broken image
-                    e.target.nextSibling.style.display = "flex"; // Show fallback icon
+                    e.target.style.display = "none";
+                    e.target.nextSibling.style.display = "flex";
                   }}
                 />
               ) : null}
 
-              {/* ✅ FALLBACK ICON (Shows if image fails or is missing) */}
               <div
                 className="hidden w-full h-full flex-col items-center justify-center text-slate-300"
                 style={{
-                  display: getImageUrl(product.images?.[selectedImage])
+                  display: getImageUrl(allImages[selectedImage])
                     ? "none"
                     : "flex",
                 }}
@@ -162,10 +167,10 @@ export default function ProductDetails() {
               </div>
             </div>
 
-            {/* Thumbnails */}
-            {product.images?.length > 1 && (
+            {/* Thumbnails Strip */}
+            {allImages.length > 1 && (
               <div className="flex gap-4 overflow-x-auto pb-2 no-scrollbar">
-                {product.images.map((img, idx) => (
+                {allImages.map((img, idx) => (
                   <button
                     key={idx}
                     onClick={() => setSelectedImage(idx)}
@@ -175,7 +180,6 @@ export default function ProductDetails() {
                         : "border-transparent hover:border-slate-200 dark:hover:border-slate-700 opacity-60 hover:opacity-100"
                     }`}
                   >
-                    {/* Safe Thumbnail Loading */}
                     {getImageUrl(img) ? (
                       <img
                         src={getImageUrl(img)}
@@ -199,7 +203,7 @@ export default function ProductDetails() {
             )}
           </div>
 
-          {/* RIGHT: PRODUCT INFO (Unchanged) */}
+          {/* RIGHT: PRODUCT INFO */}
           <div>
             <span className="text-orange-500 font-black tracking-widest uppercase text-xs mb-2 block">
               {product.category || "New Arrival"}
@@ -224,15 +228,37 @@ export default function ProductDetails() {
               </span>
             </div>
 
-            <div className="text-3xl font-black text-slate-900 dark:text-white mb-8">
-              ${product.price?.toFixed(2)}
+            {/* PRICE SECTION */}
+            <div className="mb-8">
+              <div className="flex items-baseline gap-4">
+                <span className="text-4xl font-black text-slate-900 dark:text-white">
+                  ₹{product.price?.toLocaleString()}
+                </span>
+
+                {product.mrp && product.mrp > product.price && (
+                  <>
+                    <span className="text-xl text-slate-400 line-through font-bold">
+                      ₹{product.mrp?.toLocaleString()}
+                    </span>
+                    <span className="text-xs font-bold text-green-500 bg-green-50 dark:bg-green-900/30 px-2 py-1 rounded-md">
+                      {Math.round(
+                        ((product.mrp - product.price) / product.mrp) * 100
+                      )}
+                      % OFF
+                    </span>
+                  </>
+                )}
+              </div>
+              <p className="text-xs text-slate-400 font-bold mt-1">
+                Inclusive of all taxes
+              </p>
             </div>
 
             <p className="text-slate-500 dark:text-slate-400 leading-relaxed font-medium mb-8">
-              {product.description ||
-                "No description available for this product."}
+              {product.description || "No description available."}
             </p>
 
+            {/* ACTION BUTTONS */}
             <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-6 mb-8 shadow-xl shadow-slate-200/50 dark:shadow-none">
               <div className="flex flex-col sm:flex-row gap-4">
                 <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-950 rounded-xl px-4 py-3 sm:w-1/3 border border-slate-100 dark:border-slate-800">
@@ -264,6 +290,7 @@ export default function ProductDetails() {
               </div>
             </div>
 
+            {/* FEATURES */}
             <div className="grid grid-cols-2 gap-4">
               <div className="flex items-start gap-3">
                 <Truck className="text-orange-500 shrink-0" size={20} />
@@ -272,7 +299,7 @@ export default function ProductDetails() {
                     Free Delivery
                   </h4>
                   <p className="text-[10px] text-slate-500 font-medium">
-                    On orders over $500
+                    On orders over ₹500
                   </p>
                 </div>
               </div>
