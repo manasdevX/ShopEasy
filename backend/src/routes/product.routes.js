@@ -66,10 +66,11 @@ router.get("/", getAllProducts);
 router.get("/:id", getProductById);
 
 /* =========================================
-   CUSTOMER ACTIONS
+   CUSTOMER ACTIONS (Reviews)
 ========================================= */
 
 // Matches: POST /api/products/:id/reviews
+// Uses 'protect' because standard users (customers) write reviews
 router.post("/:id/reviews", protect, createProductReview);
 
 export default router;

@@ -2,12 +2,13 @@ import mongoose from "mongoose";
 
 /* ======================================================
    1. REVIEW SCHEMA (Sub-document)
+   Stored inside the Product document for faster access
 ====================================================== */
 const reviewSchema = new mongoose.Schema(
   {
     user: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User", // Reviews are left by Customers (Users)
+      ref: "User", // Links to the Customer who wrote the review
       required: true,
     },
     name: {
@@ -25,7 +26,7 @@ const reviewSchema = new mongoose.Schema(
       required: true,
     },
   },
-  { timestamps: true }
+  { timestamps: true } // Auto-adds createdAt for the review
 );
 
 /* ======================================================
@@ -33,22 +34,14 @@ const reviewSchema = new mongoose.Schema(
 ====================================================== */
 const productSchema = new mongoose.Schema(
   {
-    // 🔗 LINK TO SELLER (The account owner)
-    // === CRITICAL FIX: Reference the 'Seller' Model ===
+    // 🔗 OWNERSHIP
     seller: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Seller", // Points to 'sellers' collection
+      ref: "Seller",
       required: true,
     },
 
-    // 🔗 LINK TO STORE (Optional: For future multi-store features)
-    store: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Store",
-      // required: true,
-    },
-
-    // 🔹 Basic Info
+    // 🔹 BASIC INFO
     name: {
       type: String,
       required: true,
@@ -65,19 +58,19 @@ const productSchema = new mongoose.Schema(
     category: {
       type: String,
       required: true,
-      index: true,
+      index: true, // Index for faster filtering
     },
     subCategory: {
       type: String,
     },
 
-    // 🔹 Pricing
+    // 🔹 PRICING
     price: {
-      type: Number, // This is usually the Selling Price
+      type: Number, // Selling Price (e.g., ₹2000)
       required: true,
     },
     mrp: {
-      type: Number, // Maximum Retail Price (Crossed out price)
+      type: Number, // List Price (e.g., ₹2500)
       required: true,
     },
     discountPercentage: {
@@ -85,7 +78,7 @@ const productSchema = new mongoose.Schema(
       default: 0,
     },
 
-    // 🔹 Media
+    // 🔹 MEDIA
     thumbnail: {
       type: String,
       required: true,
@@ -96,10 +89,15 @@ const productSchema = new mongoose.Schema(
       },
     ],
 
-    // 🔹 Inventory
+    // 🔹 INVENTORY
     stock: {
       type: Number,
       required: true,
+      default: 0,
+    },
+    // Optional alias to match some controller logic if needed
+    countInStock: {
+      type: Number,
       default: 0,
     },
     isAvailable: {
@@ -107,18 +105,18 @@ const productSchema = new mongoose.Schema(
       default: true,
     },
 
-    // 🔹 Ratings & Reviews
+    // 🔹 RATINGS & REVIEWS (Calculated Fields)
     rating: {
       type: Number,
-      default: 0,
+      default: 0, // Average Rating (e.g., 4.5)
     },
     numReviews: {
       type: Number,
-      default: 0,
+      default: 0, // Total number of reviews
     },
-    reviews: [reviewSchema],
+    reviews: [reviewSchema], // The array of review objects
 
-    // 🔹 Metadata
+    // 🔹 METADATA
     tags: [String],
     isFeatured: {
       type: Boolean,
@@ -136,12 +134,14 @@ const productSchema = new mongoose.Schema(
   }
 );
 
-// --- Virtual: Calculate Final Discounted Price (Optional Helper) ---
-productSchema.virtual("finalPrice").get(function () {
-  if (this.discountPercentage > 0) {
-    return this.price - this.price * (this.discountPercentage / 100);
+// --- Virtual: Calculate Discount % if not manually set ---
+productSchema.pre("save", function (next) {
+  if (this.mrp > this.price) {
+    this.discountPercentage = Math.round(
+      ((this.mrp - this.price) / this.mrp) * 100
+    );
   }
-  return this.price;
+  next();
 });
 
 export default mongoose.model("Product", productSchema);
