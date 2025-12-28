@@ -12,7 +12,7 @@ import {
   LogOut,
 } from "lucide-react";
 
-const API_URL = import.meta.env.VITE_API_URL;
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 const CATEGORY_DATA = {
   "Mobiles & Tablets": ["Smartphones", "Tablets", "Accessories", "Power Banks"],
@@ -58,56 +58,62 @@ export default function Navbar() {
     }
   });
 
-  // ✅ PRODUCTION CART COUNT (With 404 & Connection Fail-safes)
-  useEffect(() => {
-    const fetchCartCount = async () => {
-      if (isLoggedIn && token) {
-        try {
-          const res = await fetch(`${API_URL}/api/cart`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
+  // ✅ 1. Reusable Cart Fetch Function
+  const updateCartCount = async () => {
+    const currentToken = localStorage.getItem("token");
 
-          // Check if response is valid before parsing
-          if (res.ok) {
-            const data = await res.json();
-            const total =
-              data.items?.reduce((acc, item) => acc + item.quantity, 0) || 0;
-            setCartCount(total);
-          } else {
-            // If 404, fallback to local storage count
-            const localCart = JSON.parse(localStorage.getItem("cart")) || [];
-            setCartCount(
-              localCart.reduce((acc, item) => acc + item.quantity, 0)
-            );
-          }
-        } catch (err) {
-          console.debug("Backend connection pending...");
+    if (currentToken) {
+      try {
+        const res = await fetch(`${API_URL}/api/cart`, {
+          headers: { Authorization: `Bearer ${currentToken}` },
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          // Calculate total quantity of items
+          const total =
+            data.items?.reduce((acc, item) => acc + item.quantity, 0) || 0;
+          setCartCount(total);
+        } else {
+          // Fallback to local storage if API fails
+          const localCart = JSON.parse(localStorage.getItem("cart")) || [];
+          setCartCount(localCart.reduce((acc, item) => acc + item.quantity, 0));
         }
-      } else {
-        const localCart = JSON.parse(localStorage.getItem("cart")) || [];
-        setCartCount(localCart.reduce((acc, item) => acc + item.quantity, 0));
+      } catch (err) {
+        console.debug("Backend connection pending...");
       }
-    };
+    } else {
+      // Guest User: Check local storage
+      const localCart = JSON.parse(localStorage.getItem("cart")) || [];
+      setCartCount(localCart.reduce((acc, item) => acc + item.quantity, 0));
+    }
+  };
 
-    fetchCartCount();
+  // ✅ 2. Event Listeners for Real-time Updates
+  useEffect(() => {
+    // Initial fetch
+    updateCartCount();
 
-    // Listen for storage changes and custom events from Account.jsx
+    // Sync User Info on Login/Changes
     const syncHeader = () => {
       try {
         const updatedUser = JSON.parse(localStorage.getItem("user"));
         setUser(updatedUser);
-        fetchCartCount();
+        updateCartCount();
       } catch (e) {
         console.error("Header sync error", e);
       }
     };
 
-    window.addEventListener("storage", syncHeader);
-    window.addEventListener("user-info-updated", syncHeader);
+    // Listeners
+    window.addEventListener("storage", syncHeader); // Tabs sync
+    window.addEventListener("user-info-updated", syncHeader); // Profile update
+    window.addEventListener("cartUpdated", updateCartCount); // ✅ NEW: Cart update event
 
     return () => {
       window.removeEventListener("storage", syncHeader);
       window.removeEventListener("user-info-updated", syncHeader);
+      window.removeEventListener("cartUpdated", updateCartCount);
     };
   }, [isLoggedIn, token]);
 
@@ -119,8 +125,10 @@ export default function Navbar() {
   };
 
   const handleLogout = () => {
-    localStorage.clear(); // Clear all for security
-    window.location.href = "/";
+    localStorage.clear();
+    setCartCount(0);
+    setUser(null);
+    window.location.href = "/login";
   };
 
   return (
@@ -191,7 +199,7 @@ export default function Navbar() {
                 />
               </button>
 
-              {/* ✅ THE BRIDGE: pt-3 Fixes hover gap */}
+              {/* DROPDOWN MENU */}
               <div className="absolute top-full right-0 w-56 pt-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[99999]">
                 <div className="bg-white dark:bg-[#0f172a] rounded-2xl overflow-hidden shadow-2xl border border-gray-100 dark:border-slate-800 pointer-events-auto">
                   <Link
@@ -218,6 +226,7 @@ export default function Navbar() {
             </div>
           )}
 
+          {/* CART ICON WITH BADGE */}
           <Link
             to="/cart"
             className="relative group flex items-center gap-1 font-bold hover:text-orange-500"

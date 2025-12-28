@@ -25,21 +25,20 @@ export default function ProductDetails() {
   const [quantity, setQuantity] = useState(1);
   const [selectedImage, setSelectedImage] = useState(0);
 
-  // ✅ NEW: State to hold the merged list of all images
+  // Holds merged list of Thumbnail + Gallery images
   const [allImages, setAllImages] = useState([]);
 
-  // 1. HARDCODED SAFETY CHECK FOR URL
+  // Safety Checks for API URL
   const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
   const SAFE_API_URL = BASE_URL.startsWith("http")
     ? BASE_URL
     : `http://${BASE_URL}`;
 
-  // 2. IMAGE URL HELPER
+  // Helper to resolve image paths (Local vs Cloudinary)
   const getImageUrl = (imagePath) => {
     if (!imagePath) return null;
     if (imagePath.startsWith("data:")) return imagePath;
     if (imagePath.startsWith("http")) return imagePath;
-
     const cleanPath = imagePath.startsWith("/")
       ? imagePath.substring(1)
       : imagePath;
@@ -55,11 +54,10 @@ export default function ProductDetails() {
         if (res.ok) {
           setProduct(data);
 
-          // ✅ FIX: SMART GALLERY MERGE
-          // Combines Thumbnail + Images, removes duplicates, filters out empty ones
+          // ✅ MERGE IMAGES: Combine thumbnail + gallery, remove duplicates/nulls
           const mergedImages = [data.thumbnail, ...(data.images || [])]
-            .filter((img) => img) // Remove null/undefined
-            .filter((img, index, self) => self.indexOf(img) === index); // Remove duplicates
+            .filter((img) => img)
+            .filter((img, index, self) => self.indexOf(img) === index);
 
           setAllImages(mergedImages);
         } else {
@@ -77,26 +75,19 @@ export default function ProductDetails() {
     if (id) fetchProduct();
   }, [id, navigate, SAFE_API_URL]);
 
+  // ✅ ADD TO CART (Logged-in Only)
   const handleAddToCart = async () => {
     if (!product) return;
     const token = localStorage.getItem("token");
 
+    // 1. Check if User is Logged In
     if (!token) {
-      const currentCart = JSON.parse(localStorage.getItem("cart") || "[]");
-      const existingItemIndex = currentCart.findIndex(
-        (item) => item.product._id === product._id
-      );
-      let newCart = [...currentCart];
-      if (existingItemIndex > -1) {
-        newCart[existingItemIndex].quantity += quantity;
-      } else {
-        newCart.push({ product, quantity });
-      }
-      localStorage.setItem("cart", JSON.stringify(newCart));
-      toast.success(`Added ${quantity} ${product.name} to cart`);
+      toast("Please login to add items to your cart", { icon: "🔒" });
+      navigate("/login");
       return;
     }
 
+    // 2. Proceed with Backend Call
     try {
       const res = await fetch(`${SAFE_API_URL}/api/cart/add`, {
         method: "POST",
@@ -107,8 +98,14 @@ export default function ProductDetails() {
         body: JSON.stringify({ productId: product._id, quantity }),
       });
 
-      if (res.ok) toast.success("Added to cart!");
-      else toast.error("Failed to add item");
+      if (res.ok) {
+        toast.success("Added to cart!");
+
+        // 🚀 CRITICAL UPDATE: Trigger Navbar update immediately
+        window.dispatchEvent(new Event("cartUpdated"));
+      } else {
+        toast.error("Failed to add item");
+      }
     } catch (error) {
       toast.error("Server connection failed");
     }
@@ -137,7 +134,7 @@ export default function ProductDetails() {
         </button>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20">
-          {/* LEFT: IMAGE GALLERY (Using 'allImages' now) */}
+          {/* LEFT: IMAGE GALLERY */}
           <div className="space-y-6">
             <div className="aspect-square bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 overflow-hidden flex items-center justify-center p-8 relative group">
               {getImageUrl(allImages[selectedImage]) ? (
@@ -152,6 +149,7 @@ export default function ProductDetails() {
                 />
               ) : null}
 
+              {/* Fallback Icon */}
               <div
                 className="hidden w-full h-full flex-col items-center justify-center text-slate-300"
                 style={{
@@ -167,7 +165,7 @@ export default function ProductDetails() {
               </div>
             </div>
 
-            {/* Thumbnails Strip */}
+            {/* Thumbnails */}
             {allImages.length > 1 && (
               <div className="flex gap-4 overflow-x-auto pb-2 no-scrollbar">
                 {allImages.map((img, idx) => (
@@ -228,7 +226,7 @@ export default function ProductDetails() {
               </span>
             </div>
 
-            {/* PRICE SECTION */}
+            {/* PRICE SECTION (Rupees + MRP) */}
             <div className="mb-8">
               <div className="flex items-baseline gap-4">
                 <span className="text-4xl font-black text-slate-900 dark:text-white">
@@ -255,10 +253,10 @@ export default function ProductDetails() {
             </div>
 
             <p className="text-slate-500 dark:text-slate-400 leading-relaxed font-medium mb-8">
-              {product.description || "No description available."}
+              {product.description ||
+                "No description available for this product."}
             </p>
 
-            {/* ACTION BUTTONS */}
             <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-6 mb-8 shadow-xl shadow-slate-200/50 dark:shadow-none">
               <div className="flex flex-col sm:flex-row gap-4">
                 <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-950 rounded-xl px-4 py-3 sm:w-1/3 border border-slate-100 dark:border-slate-800">
@@ -290,7 +288,6 @@ export default function ProductDetails() {
               </div>
             </div>
 
-            {/* FEATURES */}
             <div className="grid grid-cols-2 gap-4">
               <div className="flex items-start gap-3">
                 <Truck className="text-orange-500 shrink-0" size={20} />
