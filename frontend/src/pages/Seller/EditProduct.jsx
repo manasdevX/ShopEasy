@@ -2,26 +2,19 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import SellerNavbar from "../../components/Seller/SellerNavbar";
 import SellerFooter from "../../components/Seller/SellerFooter";
-import { showSuccess , showError } from "../../utils/toast";
+import { showSuccess, showError } from "../../utils/toast";
 import {
   ArrowLeft,
-  RefreshCcw,
   Trash2,
-  Upload,
   Plus,
   X,
-  ChevronDown,
-  Package,
   Tag as TagIcon,
   Sparkles,
-  Eye,
   Save,
-  AlertCircle,
   TrendingUp,
   Image as ImageIcon,
   Loader2,
 } from "lucide-react";
-import toast from "react-hot-toast";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -42,11 +35,11 @@ export default function EditProduct() {
     mrp: 0,
     stock: 0,
     tags: [],
-    thumbnail: null,
-    images: [null, null, null, null],
+    thumbnail: null, // Stores URL (string) or Base64 (preview)
+    images: [null, null, null, null], // Stores URLs (string) or Base64 (previews)
   });
 
-  // File states for new uploads
+  // File states for NEW uploads (Files to be sent to backend)
   const [newThumbnail, setNewThumbnail] = useState(null);
   const [newGalleryFiles, setNewGalleryFiles] = useState([
     null,
@@ -86,11 +79,6 @@ export default function EditProduct() {
     fetchProduct();
   }, [id, navigate]);
 
-  const discount =
-    formData.mrp > 0
-      ? Math.round(((formData.mrp - formData.price) / formData.mrp) * 100)
-      : 0;
-
   // --- IMAGE LOGIC ---
   const handleImageChange = (e, index = -1) => {
     const file = e.target.files[0];
@@ -99,15 +87,17 @@ export default function EditProduct() {
     const reader = new FileReader();
     reader.onloadend = () => {
       if (index === -1) {
+        // Thumbnail Update
         setFormData((prev) => ({ ...prev, thumbnail: reader.result }));
-        setNewThumbnail(file); // Store file object for backend
+        setNewThumbnail(file); // Save File for upload
       } else {
+        // Gallery Update
         const newPreviews = [...formData.images];
         newPreviews[index] = reader.result;
         setFormData((prev) => ({ ...prev, images: newPreviews }));
 
         const newFiles = [...newGalleryFiles];
-        newFiles[index] = file; // Store file object for backend
+        newFiles[index] = file; // Save File for upload
         setNewGalleryFiles(newFiles);
       }
     };
@@ -125,7 +115,7 @@ export default function EditProduct() {
       setFormData((prev) => ({ ...prev, images: newImages }));
 
       const newFiles = [...newGalleryFiles];
-      newFiles[index] = null;
+      newFiles[index] = null; // Clear file if it was new
       setNewGalleryFiles(newFiles);
     }
   };
@@ -159,12 +149,13 @@ export default function EditProduct() {
     }));
   };
 
-  // --- BACKEND UPDATE ---
+  // --- ✅ FIX: ROBUST UPDATE HANDLER ---
   const handleUpdate = async (e) => {
     if (e) e.preventDefault();
     setIsUpdating(true);
 
     const updateData = new FormData();
+    // 1. Append Text Data
     updateData.append("name", formData.name);
     updateData.append("description", formData.description);
     updateData.append("price", formData.price);
@@ -172,12 +163,41 @@ export default function EditProduct() {
     updateData.append("stock", formData.stock);
     updateData.append("category", formData.category);
     updateData.append("brand", formData.brand);
-    updateData.append("tags", formData.tags.join(","));
+    updateData.append("tags", JSON.stringify(formData.tags));
 
-    if (newThumbnail) updateData.append("thumbnail", newThumbnail);
-    newGalleryFiles.forEach((file) => {
-      if (file) updateData.append("images", file);
-    });
+    // 2. Handle THUMBNAIL
+    // If a new file exists, send it as 'thumbnail' to replace the old one.
+    if (newThumbnail) {
+      updateData.append("thumbnail", newThumbnail);
+    }
+    // If no new file, but we have an old URL, send it as 'existingThumbnail'.
+    else if (
+      formData.thumbnail &&
+      typeof formData.thumbnail === "string" &&
+      formData.thumbnail.startsWith("http")
+    ) {
+      updateData.append("existingThumbnail", formData.thumbnail);
+    }
+
+    // 3. Handle GALLERY IMAGES
+    // We iterate through the 4 slots to see what we need to keep or upload.
+    for (let i = 0; i < 4; i++) {
+      const newFile = newGalleryFiles[i]; // Is there a new file?
+      const existingUrl = formData.images[i]; // Is there a preview/url?
+
+      if (newFile) {
+        // Case A: New File Upload -> Append to 'images' for Cloudinary upload
+        updateData.append("images", newFile);
+      } else if (
+        existingUrl &&
+        typeof existingUrl === "string" &&
+        existingUrl.startsWith("http")
+      ) {
+        // Case B: Existing URL -> Append to 'existingImages' so backend keeps it
+        updateData.append("existingImages", existingUrl);
+      }
+      // Case C: Null/Empty -> Do nothing, effectively deleting it from backend list
+    }
 
     try {
       const token = localStorage.getItem("sellerToken");
