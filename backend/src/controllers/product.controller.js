@@ -8,7 +8,7 @@ dotenv.config();
 
 /**
  * Helper: Upload Buffer to Cloudinary
- * Configured inside the function to ensure process.env variables are loaded
+ * Wraps the upload stream in a Promise for async/await usage
  */
 const uploadToCloudinary = (buffer) => {
   return new Promise((resolve, reject) => {
@@ -45,11 +45,13 @@ export const getAllProducts = async (req, res) => {
 
     // Global Search: Matches keyword against Name, Description, Category, or Tags
     if (keyword) {
+      const regex = { $regex: keyword, $options: "i" };
       query.$or = [
-        { name: { $regex: keyword, $options: "i" } },
-        { description: { $regex: keyword, $options: "i" } },
-        { category: { $regex: keyword, $options: "i" } },
-        { tags: { $regex: keyword, $options: "i" } },
+        { name: regex },
+        { description: regex },
+        { category: regex },
+        { brand: regex },
+        { tags: regex }, // Searches inside the tags array
       ];
     }
 
@@ -106,48 +108,57 @@ export const getSellerProducts = async (req, res) => {
 // @desc    Create a product (With Image Upload)
 // @route   POST /api/products/add
 // @access  Private (Seller Only)
+// ... imports
+
 export const createProduct = async (req, res) => {
   try {
     const {
-      name,
-      description,
-      price,
-      mrp,
-      stock,
-      category,
-      subCategory,
-      brand,
-      tags,
-      isFeatured,
-      isBestSeller,
+      name, description, price, mrp, stock, category, subCategory, brand, tags, isFeatured, isBestSeller
     } = req.body;
 
+    // 1. Upload Thumbnail
     let thumbnail = "";
     if (req.files && req.files.thumbnail) {
       thumbnail = await uploadToCloudinary(req.files.thumbnail[0].buffer);
     }
 
-    let images = [];
+    // 2. Upload Gallery Images
+    let galleryImages = [];
     if (req.files && req.files.images) {
       const uploadPromises = req.files.images.map((file) =>
         uploadToCloudinary(file.buffer)
       );
-      images = await Promise.all(uploadPromises);
+      galleryImages = await Promise.all(uploadPromises);
+    }
+
+    // ✅ FIX: Combine Thumbnail + Gallery into one "images" array
+    // This ensures the frontend slider shows ALL photos.
+    const allImages = [thumbnail, ...galleryImages].filter(Boolean);
+
+    // 3. Parse Tags
+    let parsedTags = [];
+    if (tags) {
+      try {
+        parsedTags = JSON.parse(tags);
+      } catch (e) {
+        parsedTags = tags.split(",").map((t) => t.trim());
+      }
     }
 
     const product = await Product.create({
       seller: req.seller._id,
       name,
       description,
-      price,
-      mrp,
-      stock,
+      price: Number(price),
+      mrp: Number(mrp),
+      stock: Number(stock),
+      countInStock: Number(stock),
       category,
       subCategory,
       brand,
       thumbnail,
-      images,
-      tags: tags ? tags.split(",").map((t) => t.trim()) : [],
+      images: allImages, // <--- SAVING THE COMBINED LIST HERE
+      tags: parsedTags,
       isFeatured: isFeatured === "true" || isFeatured === true,
       isBestSeller: isBestSeller === "true" || isBestSeller === true,
     });
@@ -155,9 +166,11 @@ export const createProduct = async (req, res) => {
     res.status(201).json(product);
   } catch (error) {
     console.error("ADD PRODUCT ERROR:", error);
-    res.status(500).json({ message: "Server Error" });
+    res.status(500).json({ message: "Server Error: " + error.message });
   }
 };
+
+// ... other functions (updateProduct etc)
 
 // @desc    Update a product
 // @route   PUT /api/products/:id
@@ -167,18 +180,21 @@ export const updateProduct = async (req, res) => {
     const product = await Product.findById(req.params.id);
 
     if (product) {
+      // Security Check: Only owner can update
       if (product.seller.toString() !== req.seller._id.toString()) {
         return res
           .status(403)
           .json({ message: "Not authorized to edit this product" });
       }
 
+      // Update Thumbnail if provided
       if (req.files && req.files.thumbnail) {
         product.thumbnail = await uploadToCloudinary(
           req.files.thumbnail[0].buffer
         );
       }
 
+      // Update Images if provided (Replaces old gallery)
       if (req.files && req.files.images) {
         const uploadPromises = req.files.images.map((file) =>
           uploadToCloudinary(file.buffer)
@@ -193,13 +209,23 @@ export const updateProduct = async (req, res) => {
       product.brand = req.body.brand || product.brand;
       product.category = req.body.category || product.category;
       product.stock = req.body.stock || product.stock;
+      product.countInStock = req.body.stock || product.countInStock;
 
       if (req.body.tags) {
-        product.tags = req.body.tags.split(",").map((t) => t.trim());
+        try {
+          product.tags = JSON.parse(req.body.tags);
+        } catch (e) {
+          product.tags = req.body.tags.split(",").map((t) => t.trim());
+        }
       }
 
-      product.isFeatured = req.body.isFeatured ?? product.isFeatured;
-      product.isBestSeller = req.body.isBestSeller ?? product.isBestSeller;
+      // Handle Booleans correctly (FormData sends strings)
+      if (req.body.isFeatured !== undefined) {
+        product.isFeatured = req.body.isFeatured === "true";
+      }
+      if (req.body.isBestSeller !== undefined) {
+        product.isBestSeller = req.body.isBestSeller === "true";
+      }
 
       const updatedProduct = await product.save();
       res.json(updatedProduct);

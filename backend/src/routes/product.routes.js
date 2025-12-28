@@ -14,19 +14,21 @@ import { protect, protectSeller } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
-// --- Multer Configuration ---
+// --- Multer Configuration (Memory Storage for Cloudinary) ---
+// We use memoryStorage so we can access file.buffer in the controller
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
 /* =========================================
    SELLER ROUTES (Manage Products)
-   NOTE: Specialized routes come before /:id to prevent routing conflicts
+   NOTE: Specialized routes come BEFORE /:id to prevent routing conflicts
 ========================================= */
 
 // Matches: GET /api/products/seller/all
 router.get("/seller/all", protectSeller, getSellerProducts);
 
 // Matches: POST /api/products/add
+// Uploads thumbnail + up to 5 gallery images
 router.post(
   "/add",
   protectSeller,
@@ -38,7 +40,7 @@ router.post(
 );
 
 // Matches: PUT /api/products/:id
-// Added upload middleware to handle image updates during editing
+// Allows updating images during edit
 router.put(
   "/:id",
   protectSeller,
@@ -56,11 +58,11 @@ router.delete("/:id", protectSeller, deleteProduct);
    PUBLIC ROUTES
 ========================================= */
 
-// Matches: GET /api/products
+// Matches: GET /api/products (Supports ?keyword=... search)
 router.get("/", getAllProducts);
 
 // Matches: GET /api/products/:id
-// Keep this at the bottom of the GET routes
+// Keep this at the bottom of the GET routes so "seller/all" isn't treated as an ID
 router.get("/:id", getProductById);
 
 /* =========================================
