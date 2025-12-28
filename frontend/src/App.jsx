@@ -10,6 +10,7 @@ import ForgotPassword from "./pages/ForgotPassword";
 import SearchResults from "./pages/SearchResults";
 import ProductDetails from "./pages/ProductDetails";
 import Cart from "./pages/Cart"; // ✅ Added Cart Import
+import Payment from "./pages/Payment";
 
 // --- SELLER PAGES ---
 import SellerLanding from "./pages/Seller/Landing";
@@ -53,6 +54,7 @@ export default function App() {
         {/* Search & Discovery */}
         <Route path="/search" element={<SearchResults />} />
         <Route path="/product/:id" element={<ProductDetails />} />
+        <Route path="/payment" element={<Payment />} />
 
         {/* ✅ Production Cart Route */}
         <Route path="/cart" element={<Cart />} />
