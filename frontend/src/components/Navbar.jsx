@@ -132,7 +132,7 @@ export default function Navbar() {
   };
 
   return (
-    <header className="relative w-full z-[100] transition-colors duration-300 shadow-sm">
+    <header className="sticky top-0 w-full z-[100] transition-colors duration-300 shadow-sm">
       <div className="bg-white dark:bg-[#030712] border-b border-gray-100 dark:border-gray-800 px-6 py-3 flex items-center gap-6">
         <Link
           to="/"
