@@ -83,7 +83,7 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
     localStorage.removeItem("seller_step2");
     setSeller(null);
     setToken(null);
-    navigate("/Seller/login");
+    navigate("/Seller/Landing");
   };
 
   const navLinks = [

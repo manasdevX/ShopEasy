@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate , useLocation } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import AuthFooter from "../components/AuthFooter";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
@@ -10,6 +10,8 @@ const API_URL = import.meta.env.VITE_API_URL;
 
 export default function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const from = location.state?.from || "/";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -79,7 +81,7 @@ export default function Login() {
       await syncGuestCart(data.token);
 
       showSuccess("Login successful!");
-      window.location.href = "/";
+      navigate(from);
     } catch (err) {
       console.error("Login Error:", err);
       showError("Server error. Please try again.");
@@ -125,7 +127,7 @@ export default function Login() {
           await syncGuestCart(data.token);
 
           showSuccess("Login successful!");
-          window.location.href = "/";
+          navigate(from);
         }
       } catch (err) {
         console.error("Google Login Error:", err);

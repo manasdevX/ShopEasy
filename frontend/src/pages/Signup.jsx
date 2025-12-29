@@ -11,6 +11,7 @@ const API_URL = import.meta.env.VITE_API_URL;
 export default function Signup() {
   const navigate = useNavigate();
   const location = useLocation();
+  const previousPath = location.state?.from || "/";
 
   // ================= STATE =================
   const [formData, setFormData] = useState({
@@ -252,7 +253,7 @@ export default function Signup() {
         await syncGuestCart(data.token);
 
         showSuccess("Registration complete!");
-        window.location.href = "/";
+        navigate(previousPath);
       } else {
         showError(data.message || "Registration failed");
       }
@@ -290,7 +291,7 @@ export default function Signup() {
             await syncGuestCart(data.token);
 
             showSuccess("Login successful!");
-            window.location.href = "/";
+            navigate(previousPath);
           }
         } else {
           showError(data.message);
@@ -527,7 +528,7 @@ export default function Signup() {
 
           <p className="mt-8 text-center text-sm text-gray-500">
             Already have an account?{" "}
-            <Link to="/login" className="text-orange-500 font-bold">
+            <Link to="/login" state={{ from: previousPath }} className="text-orange-500 font-bold">
               Login
             </Link>
           </p>

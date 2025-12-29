@@ -23,6 +23,8 @@ import { showError, showSuccess } from "../utils/toast";
 export default function ProductDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const token = localStorage.getItem("token");
+  const isLoggedIn = !!token;
 
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -74,8 +76,7 @@ export default function ProductDetails() {
     const token = localStorage.getItem("token");
 
     if (!token) {
-      toast("Please login to continue", { icon: "🔒" });
-      navigate("/login");
+      toast("Please login to add to cart", { icon: "🔒" });
       return;
     }
 
@@ -101,6 +102,28 @@ export default function ProductDetails() {
       }
     } catch (error) {
       showError("Server connection failed");
+    }
+  };
+
+  const handleBuyNow = () => {
+    if(isLoggedIn) {
+      navigate("/payment", {
+      state: {
+        items: [
+          {
+            _id: product._id,
+            name: product.name,
+            price: product.price,
+            mrp: product.mrp,
+            quantity: 1,
+            image: product.image,
+          },
+        ],
+      },
+    });
+    } else {
+      toast("Please signup to Buy Now", { icon: "🔒" });
+      navigate("/signup", { state: { from: location.pathname } });
     }
   };
 
@@ -182,22 +205,7 @@ export default function ProductDetails() {
                 </button>
 
                 <button
-                  onClick={() =>
-                    navigate("/payment", {
-                      state: {
-                        items: [
-                          {
-                            _id: product._id,
-                            name: product.name,
-                            price: product.price,
-                            mrp: product.mrp,
-                            quantity: 1,
-                            image: product.image,
-                          },
-                        ],
-                      },
-                    })
-                  }
+                  onClick={() => handleBuyNow()}
                   disabled={product.stock === 0}
                   className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-orange-500/20 transition-all active:scale-95 flex items-center justify-center gap-2 uppercase tracking-widest text-xs"
                 >

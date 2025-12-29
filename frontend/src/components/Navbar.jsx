@@ -11,6 +11,7 @@ import {
   Search,
   LogOut,
 } from "lucide-react";
+import toast from "react-hot-toast";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -128,8 +129,17 @@ export default function Navbar() {
     localStorage.clear();
     setCartCount(0);
     setUser(null);
-    window.location.href = "/login";
+    window.location.href = "/";
   };
+
+  const handleCart = () => {
+    if(isLoggedIn) {
+      navigate("/cart");
+    } else {
+      toast("Please login to view your cart", { icon: "🔒" });
+      return;
+    }
+  }
 
   return (
     <header className="sticky top-0 w-full z-[100] transition-colors duration-300 shadow-sm">
@@ -221,9 +231,9 @@ export default function Navbar() {
           )}
 
           {/* CART ICON WITH BADGE */}
-          <Link
-            to="/cart"
+          <button
             className="relative group flex items-center gap-1 font-bold hover:text-orange-500"
+            onClick={() => handleCart()}
           >
             <ShoppingCart size={24} />
             {cartCount > 0 && (
@@ -231,7 +241,7 @@ export default function Navbar() {
                 {cartCount}
               </span>
             )}
-          </Link>
+          </button>
 
           <Link
             to="/Seller/Landing"

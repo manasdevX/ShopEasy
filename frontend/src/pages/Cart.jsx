@@ -13,6 +13,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { toast } from "react-hot-toast";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
+import { showError, showSuccess } from "../utils/toast";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 const API_URL = BASE_URL.startsWith("http") ? BASE_URL : `http://${BASE_URL}`;
@@ -39,12 +40,6 @@ export default function Cart() {
 
   // 1. FETCH CART (Protected)
   useEffect(() => {
-    if (!isLoggedIn) {
-      toast("Please login to view your cart", { icon: "🔒" });
-      navigate("/login");
-      return;
-    }
-
     const fetchCart = async () => {
       setLoading(true);
       try {
@@ -61,7 +56,7 @@ export default function Cart() {
         }
       } catch (error) {
         console.error("Cart Fetch Error:", error);
-        toast.error("Could not load your cart");
+        showError("Could not load your cart");
       }
       setLoading(false);
     };
@@ -96,10 +91,10 @@ export default function Cart() {
         // 🚀 TRIGGER NAVBAR UPDATE
         window.dispatchEvent(new Event("cartUpdated"));
       } else {
-        toast.error("Failed to update quantity");
+        showError("Failed to update quantity");
       }
     } catch (err) {
-      toast.error("Server connection error");
+      showError("Server connection error");
     }
     setUpdating(false);
   };
@@ -116,15 +111,15 @@ export default function Cart() {
         setCartItems((prev) =>
           prev.filter((item) => item.product._id !== productId)
         );
-        toast.success("Item removed");
+        showSuccess("Item removed");
 
         // 🚀 TRIGGER NAVBAR UPDATE
         window.dispatchEvent(new Event("cartUpdated"));
       } else {
-        toast.error("Could not remove item");
+        showError("Could not remove item");
       }
     } catch (err) {
-      toast.error("Server Error");
+      showError("Server Error");
     }
   };
 
