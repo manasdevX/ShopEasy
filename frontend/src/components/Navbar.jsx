@@ -15,6 +15,7 @@ import toast from "react-hot-toast";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
+// (Category Data kept for potential future use)
 const CATEGORY_DATA = {
   "Mobiles & Tablets": ["Smartphones", "Tablets", "Accessories", "Power Banks"],
   Fashion: ["Men", "Women", "Kids", "Footwear", "Accessories"],
@@ -36,10 +37,11 @@ const CATEGORY_DATA = {
 };
 
 export default function Navbar() {
-  const [activeCategory, setActiveCategory] = useState(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [cartCount, setCartCount] = useState(0);
   const navigate = useNavigate();
+  const [searchTerm, setSearchTerm] = useState("");
+
+  // ✅ 1. Restore Local State (No Context)
+  const [cartCount, setCartCount] = useState(0);
 
   // ✅ DARK MODE LOGIC
   const [colorTheme, setTheme] = useDarkSide();
@@ -59,7 +61,7 @@ export default function Navbar() {
     }
   });
 
-  // ✅ 1. Reusable Cart Fetch Function
+  // ✅ 2. Reusable Cart Fetch Function
   const updateCartCount = async () => {
     const currentToken = localStorage.getItem("token");
 
@@ -76,21 +78,17 @@ export default function Navbar() {
             data.items?.reduce((acc, item) => acc + item.quantity, 0) || 0;
           setCartCount(total);
         } else {
-          // Fallback to local storage if API fails
-          const localCart = JSON.parse(localStorage.getItem("cart")) || [];
-          setCartCount(localCart.reduce((acc, item) => acc + item.quantity, 0));
+          setCartCount(0);
         }
       } catch (err) {
         console.debug("Backend connection pending...");
       }
     } else {
-      // Guest User: Check local storage
-      const localCart = JSON.parse(localStorage.getItem("cart")) || [];
-      setCartCount(localCart.reduce((acc, item) => acc + item.quantity, 0));
+      setCartCount(0);
     }
   };
 
-  // ✅ 2. Event Listeners for Real-time Updates
+  // ✅ 3. Event Listeners for Real-time Updates
   useEffect(() => {
     // Initial fetch
     updateCartCount();
@@ -109,7 +107,9 @@ export default function Navbar() {
     // Listeners
     window.addEventListener("storage", syncHeader); // Tabs sync
     window.addEventListener("user-info-updated", syncHeader); // Profile update
-    window.addEventListener("cartUpdated", updateCartCount); // ✅ NEW: Cart update event
+
+    // ✅ NEW: Listen for the custom event we added to ProductCard & Cart
+    window.addEventListener("cartUpdated", updateCartCount);
 
     return () => {
       window.removeEventListener("storage", syncHeader);
