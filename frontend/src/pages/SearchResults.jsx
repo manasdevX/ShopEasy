@@ -6,6 +6,11 @@ import {
   SlidersHorizontal,
   PackageSearch,
   Star,
+  ChevronLeft,
+  ChevronRight,
+  IndianRupee,
+  Check,
+  XCircle,
 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
@@ -17,43 +22,89 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 export default function SearchResults() {
   const [searchParams] = useSearchParams();
   const query = searchParams.get("q") || "";
+
+  // --- States ---
   const [products, setProducts] = useState([]);
+  const [facets, setFacets] = useState({ categories: [], ratings: [] });
   const [loading, setLoading] = useState(true);
+  const [totalCount, setTotalCount] = useState(0);
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+
+  // Filters
+  const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedRating, setSelectedRating] = useState(0);
+  const [minPrice, setMinPrice] = useState("");
+  const [maxPrice, setMaxPrice] = useState("");
 
-  // Filter states
-  const [priceRange, setPriceRange] = useState("all");
-  const RATING_OPTIONS = [
-    { label: "All Ratings", value: 0 },
-    { label: "4", value: 4 },
-    { label: "3", value: 3 },
-    { label: "2", value: 2 },
-  ];
+  // --- Effects ---
 
+  // 1. Reset Page on Filter Change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [query, selectedCategory, selectedRating, minPrice, maxPrice]);
+
+  // 2. Fetch Data
   useEffect(() => {
     const fetchSearchResults = async () => {
-      if (!query) return;
+      let link = `${API_URL}/api/products?keyword=${query}&pageNumber=${currentPage}`;
+
+      if (minPrice) link += `&minPrice=${minPrice}`;
+      if (maxPrice) link += `&maxPrice=${maxPrice}`;
+      if (selectedRating > 0) link += `&rating=${selectedRating}`;
+      if (selectedCategory) link += `&category=${selectedCategory}`;
+
       setLoading(true);
       try {
-        const res = await fetch(`${API_URL}/api/products?keyword=${query}`);
+        const res = await fetch(link);
         const data = await res.json();
 
         if (res.ok) {
-          // data should be an array of product objects
           setProducts(Array.isArray(data) ? data : data.products || []);
+          setTotalCount(data.total || 0);
+          setTotalPages(data.pages || 1);
+          if (data.facets) setFacets(data.facets);
         } else {
           throw new Error(data.message || "Failed to fetch");
         }
       } catch (err) {
         showError("Search failed. Please try again.");
-        console.error("Search Error:", err);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchSearchResults();
-  }, [query]);
+    const timeoutId = setTimeout(fetchSearchResults, 300);
+    return () => clearTimeout(timeoutId);
+  }, [
+    query,
+    selectedCategory,
+    selectedRating,
+    minPrice,
+    maxPrice,
+    currentPage,
+  ]);
+
+  // --- Handlers ---
+  const clearFilters = () => {
+    setMinPrice("");
+    setMaxPrice("");
+    setSelectedRating(0);
+    setSelectedCategory("");
+    setCurrentPage(1);
+  };
+
+  const handlePageChange = (newPage) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
+
+  const hasFilters =
+    minPrice || maxPrice || selectedRating > 0 || selectedCategory;
 
   return (
     <div className="bg-[#F8FAFC] dark:bg-[#020617] min-h-screen flex flex-col font-sans transition-colors duration-300">
@@ -61,200 +112,306 @@ export default function SearchResults() {
 
       <main className="flex-grow max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-10 w-full">
         <div className="flex flex-col lg:flex-row gap-8">
-          {/* --- LEFT SIDEBAR (Add this block) --- */}
-          <aside className="hidden lg:block w-72 flex-shrink-0 space-y-8 sticky top-24 h-fit">
-            <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 p-8 shadow-sm">
-              <h3 className="text-xl font-black text-slate-900 dark:text-white mb-6 flex items-center gap-2">
-                <SlidersHorizontal size={20} className="text-orange-500" />{" "}
-                Filters
-              </h3>
+          {/* --- LEFT SIDEBAR (PREMIUM UI) --- */}
+          <aside className="hidden lg:block w-80 flex-shrink-0 space-y-8 sticky top-24 h-fit">
+            <div className="bg-white dark:bg-[#0f172a] rounded-[2rem] border border-slate-100 dark:border-slate-800 p-8 shadow-2xl shadow-slate-200/50 dark:shadow-none">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-8">
+                <h3 className="text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2.5">
+                  <SlidersHorizontal
+                    size={20}
+                    className="text-orange-500"
+                    strokeWidth={2.5}
+                  />
+                  Filters
+                </h3>
+                {hasFilters && (
+                  <button
+                    onClick={clearFilters}
+                    className="flex items-center gap-1 text-[11px] font-bold text-red-500 hover:text-red-600 bg-red-50 dark:bg-red-500/10 px-2 py-1 rounded-full transition-colors"
+                  >
+                    <XCircle size={12} /> Clear
+                  </button>
+                )}
+              </div>
 
-              {/* Price Filter Section */}
-              <div className="space-y-4">
-                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              {/* 1. DYNAMIC CATEGORIES */}
+              {facets.categories?.length > 0 && (
+                <div className="mb-8">
+                  <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4">
+                    Categories
+                  </h4>
+                  <div className="space-y-3 max-h-64 overflow-y-auto custom-scrollbar pr-2">
+                    {facets.categories.map((cat) => (
+                      <button
+                        key={cat._id}
+                        onClick={() =>
+                          setSelectedCategory(
+                            selectedCategory === cat._id ? "" : cat._id
+                          )
+                        }
+                        className={`w-full flex items-center justify-between group py-2 px-3 rounded-xl transition-all border ${
+                          selectedCategory === cat._id
+                            ? "bg-orange-50 border-orange-200 dark:bg-orange-500/10 dark:border-orange-500/20"
+                            : "bg-transparent border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          {/* Custom Checkbox */}
+                          <div
+                            className={`w-5 h-5 rounded-[6px] border-[1.5px] flex items-center justify-center transition-all ${
+                              selectedCategory === cat._id
+                                ? "bg-orange-500 border-orange-500 shadow-md shadow-orange-500/20"
+                                : "border-slate-300 dark:border-slate-600 group-hover:border-orange-400"
+                            }`}
+                          >
+                            {selectedCategory === cat._id && (
+                              <Check
+                                size={12}
+                                className="text-white"
+                                strokeWidth={4}
+                              />
+                            )}
+                          </div>
+                          <span
+                            className={`text-sm font-medium capitalize ${
+                              selectedCategory === cat._id
+                                ? "text-slate-900 dark:text-white font-bold"
+                                : "text-slate-600 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white"
+                            }`}
+                          >
+                            {cat._id}
+                          </span>
+                        </div>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-1 rounded-full transition-colors ${
+                            selectedCategory === cat._id
+                              ? "bg-orange-200 text-orange-700 dark:bg-orange-500/20 dark:text-orange-400"
+                              : "bg-slate-100 dark:bg-slate-800 text-slate-400 group-hover:bg-white dark:group-hover:bg-slate-700"
+                          }`}
+                        >
+                          {cat.count}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 2. PRICE RANGE */}
+              <div className="mb-8 pt-6 border-t border-slate-100 dark:border-slate-800">
+                <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4">
                   Price Range
                 </h4>
-                <div className="space-y-3">
-                  {[
-                    { label: "All Prices", value: "all" },
-                    { label: "Under ₹1,000", value: "0-1000" },
-                    { label: "₹1,000 - ₹5,000", value: "1000-5000" },
-                    { label: "Over ₹5,000", value: "5000-above" },
-                  ].map((option) => (
-                    <label
-                      key={option.value}
-                      className="flex items-center gap-3 cursor-pointer group"
-                    >
-                      <input
-                        type="radio"
-                        name="price"
-                        checked={priceRange === option.value}
-                        onChange={() => setPriceRange(option.value)}
-                        className="hidden"
-                      />
-                      <div
-                        className={`w-5 h-5 rounded-md border-2 transition-all flex items-center justify-center ${
-                          priceRange === option.value
-                            ? "bg-orange-500 border-orange-500"
-                            : "border-slate-200 dark:border-slate-700 group-hover:border-orange-500"
-                        }`}
-                      >
-                        {priceRange === option.value && (
-                          <div className="w-2 h-2 bg-white rounded-full" />
-                        )}
-                      </div>
-                      <span
-                        className={`text-sm font-bold ${
-                          priceRange === option.value
-                            ? "text-slate-900 dark:text-white"
-                            : "text-slate-500"
-                        }`}
-                      >
-                        {option.label}
-                      </span>
-                    </label>
-                  ))}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="relative group">
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-orange-500 transition-colors">
+                      <IndianRupee size={14} />
+                    </div>
+                    <input
+                      type="number"
+                      placeholder="Min"
+                      value={minPrice}
+                      onChange={(e) => setMinPrice(e.target.value)}
+                      className="w-full pl-8 pr-3 py-2.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all placeholder:text-slate-400"
+                    />
+                  </div>
+                  <div className="relative group">
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-orange-500 transition-colors">
+                      <IndianRupee size={14} />
+                    </div>
+                    <input
+                      type="number"
+                      placeholder="Max"
+                      value={maxPrice}
+                      onChange={(e) => setMaxPrice(e.target.value)}
+                      className="w-full pl-8 pr-3 py-2.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all placeholder:text-slate-400"
+                    />
+                  </div>
                 </div>
               </div>
 
-              {/* rating Filter Section */}
-              {/* Ratings Filter Section */}
-              <div className="space-y-4 py-5">
-                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                  Customer Ratings
+              {/* 3. DYNAMIC RATINGS */}
+              <div className="pt-6 border-t border-slate-100 dark:border-slate-800">
+                <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4">
+                  Ratings
                 </h4>
                 <div className="space-y-3">
-                  {RATING_OPTIONS.map((option) => (
-                    <label
-                      key={option.value}
-                      className="flex items-center gap-3 cursor-pointer group"
-                    >
-                      <input
-                        type="radio"
-                        name="rating"
-                        checked={selectedRating === option.value}
-                        onChange={() => setSelectedRating(option.value)}
-                        className="hidden"
-                      />
+                  {[4, 3, 2, 1].map((star) => {
+                    const facetData = facets.ratings?.find(
+                      (r) => r._id === star
+                    );
+                    const count = facetData ? facetData.count : 0;
+                    if (count === 0 && selectedRating !== star) return null;
 
-                      {/* Custom Radio Circle */}
-                      <div
-                        className={`w-5 h-5 rounded-full border-2 transition-all flex items-center justify-center ${
-                          selectedRating === option.value
-                            ? "border-orange-500"
-                            : "border-slate-200 dark:border-slate-700 group-hover:border-orange-500"
+                    return (
+                      <button
+                        key={star}
+                        onClick={() =>
+                          setSelectedRating(selectedRating === star ? 0 : star)
+                        }
+                        className={`w-full flex items-center justify-between group py-1.5 px-2 -mx-2 rounded-lg transition-all ${
+                          selectedRating === star
+                            ? "bg-slate-50 dark:bg-slate-800/60"
+                            : "hover:bg-slate-50 dark:hover:bg-slate-800/40"
                         }`}
                       >
-                        {selectedRating === option.value && (
-                          <div className="w-2.5 h-2.5 bg-orange-500 rounded-full shadow-[0_0_8px_rgba(249,115,22,0.4)]" />
-                        )}
-                      </div>
+                        <div className="flex items-center gap-3">
+                          {/* Radio Circle */}
+                          <div
+                            className={`w-5 h-5 rounded-full border-[1.5px] flex items-center justify-center transition-all ${
+                              selectedRating === star
+                                ? "border-orange-500"
+                                : "border-slate-300 dark:border-slate-600 group-hover:border-orange-400"
+                            }`}
+                          >
+                            {selectedRating === star && (
+                              <div className="w-2.5 h-2.5 bg-orange-500 rounded-full shadow-sm" />
+                            )}
+                          </div>
 
-                      {/* Label Container: Number + Star */}
-                      <div className="flex items-center gap-1.5">
-                        <span
-                          className={`text-sm font-bold ${
-                            selectedRating === option.value
-                              ? "text-slate-900 dark:text-white"
-                              : "text-slate-500"
-                          }`}
-                        >
-                          {option.label}
-                        </span>
-
-                        {/* Only show Star and "& Up" for 4, 3, and 2 */}
-                        {option.value > 0 && (
-                          <div className="flex items-center gap-1">
-                            <Star
-                              size={14}
-                              className="text-amber-400"
-                              fill="currentColor"
-                              stroke="none"
-                            />
-                            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-tight">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`text-sm font-bold ${
+                                selectedRating === star
+                                  ? "text-slate-900 dark:text-white"
+                                  : "text-slate-600 dark:text-slate-400"
+                              }`}
+                            >
+                              {star}
+                            </span>
+                            <div className="flex items-center gap-0.5">
+                              {[...Array(5)].map((_, i) => (
+                                <Star
+                                  key={i}
+                                  size={12}
+                                  className={
+                                    i < star
+                                      ? "text-amber-400 fill-amber-400"
+                                      : "text-slate-200 dark:text-slate-700"
+                                  }
+                                />
+                              ))}
+                            </div>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight ml-1">
                               & Up
                             </span>
                           </div>
-                        )}
-                      </div>
-                    </label>
-                  ))}
+                        </div>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            selectedRating === star
+                              ? "bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200"
+                              : "bg-slate-100 dark:bg-slate-800 text-slate-400"
+                          }`}
+                        >
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
-              {/* Reset Button */}
-              <button
-                onClick={() => setPriceRange("all")}
-                className="w-full mt-8 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-red-500 transition-colors border-t border-slate-50 dark:border-slate-800 pt-6"
-              >
-                Clear All
-              </button>
             </div>
           </aside>
 
-          {/* --- MAIN CONTENT AREA (Wrap your existing code here) --- */}
+          {/* --- MAIN CONTENT AREA --- */}
           <div className="flex-grow">
-            {/* RESULTS HEADER */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-10">
+            {/* ... Content Header ... */}
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-orange-500 font-bold text-xs uppercase tracking-[0.2em]">
                   <Search size={14} /> Search Discovery
                 </div>
                 <h2 className="text-3xl md:text-4xl font-black text-slate-900 dark:text-white tracking-tight">
-                  Showing results for{" "}
-                  <span className="text-orange-500">"{query}"</span>
+                  Results for <span className="text-orange-500">"{query}"</span>
                 </h2>
                 <p className="text-slate-500 dark:text-slate-400 font-medium">
                   We found{" "}
-                  <span className="text-slate-900 dark:text-slate-200 font-bold">
-                    {products.length}
+                  <span className="text-slate-900 dark:text-white font-black text-lg">
+                    {totalCount}
                   </span>{" "}
-                  premium matches.
+                  products matching your criteria.
                 </p>
               </div>
             </div>
 
-            {/* CONTENT AREA */}
             {loading ? (
               <div className="flex flex-col items-center justify-center py-32">
-                <div className="relative">
-                  <Loader2
-                    className="animate-spin text-orange-500 mb-4"
-                    size={48}
-                  />
-                  <div className="absolute inset-0 blur-xl bg-orange-500/20 animate-pulse"></div>
-                </div>
-                <p className="text-slate-400 dark:text-slate-500 font-black uppercase tracking-[0.3em] text-[10px] mt-4">
-                  Analyzing Inventory...
-                </p>
+                <Loader2
+                  className="animate-spin text-orange-500 mb-4"
+                  size={48}
+                />
               </div>
             ) : products.length === 0 ? (
               <div className="text-center py-24 bg-white dark:bg-slate-900/50 rounded-[3rem] border border-dashed border-slate-200 dark:border-slate-800">
-                <div className="bg-slate-100 dark:bg-slate-800 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <PackageSearch
-                    className="text-slate-300 dark:text-slate-600"
-                    size={40}
-                  />
-                </div>
+                <PackageSearch
+                  className="text-slate-300 dark:text-slate-600 mx-auto mb-6"
+                  size={48}
+                />
                 <h3 className="text-2xl font-black text-slate-800 dark:text-white">
-                  No matches found
+                  No products found
                 </h3>
-                <p className="text-slate-400 dark:text-slate-500 mt-2 max-w-xs mx-auto font-medium">
-                  We couldn't find anything for "{query}". Try different
-                  keywords.
-                </p>
-                <Link
-                  to="/"
-                  className="inline-block mt-8 px-8 py-3 bg-orange-500 text-white font-black rounded-2xl shadow-lg shadow-orange-500/20 hover:scale-105 transition-all text-sm"
+                <button
+                  onClick={clearFilters}
+                  className="mt-8 px-8 py-3 bg-slate-900 text-white font-bold rounded-2xl hover:scale-105 transition-transform"
                 >
-                  Return Home
-                </Link>
+                  Clear All Filters
+                </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-                {products.map((product) => (
-                  <ProductCard key={product._id} product={product} />
-                ))}
-              </div>
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {products.map((product) => (
+                    <ProductCard key={product._id} product={product} />
+                  ))}
+                </div>
+
+                {/* --- UPDATED PAGINATION CONTROLS (HIGH VISIBILITY) --- */}
+                {totalPages > 1 && (
+                  <div className="flex justify-center items-center gap-4 mt-16 pb-8">
+                    {/* Previous Button */}
+                    <button
+                      onClick={() => handlePageChange(currentPage - 1)}
+                      disabled={currentPage === 1}
+                      className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-bold transition-all shadow-sm ${
+                        currentPage === 1
+                          ? "bg-slate-100 text-slate-300 dark:bg-slate-800 dark:text-slate-600 cursor-not-allowed"
+                          : "bg-white text-slate-700 hover:bg-orange-500 hover:text-white border border-slate-200 hover:border-orange-500 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 dark:hover:bg-orange-500"
+                      }`}
+                    >
+                      <ChevronLeft size={18} /> Previous
+                    </button>
+
+                    {/* Page Indicator */}
+                    <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800">
+                      <span className="text-slate-500 text-sm font-medium">
+                        Page
+                      </span>
+                      <span className="text-slate-900 dark:text-white font-black">
+                        {currentPage}
+                      </span>
+                      <span className="text-slate-300">of</span>
+                      <span className="text-slate-500 text-sm font-medium">
+                        {totalPages}
+                      </span>
+                    </div>
+
+                    {/* Next Button */}
+                    <button
+                      onClick={() => handlePageChange(currentPage + 1)}
+                      disabled={currentPage === totalPages}
+                      className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-bold transition-all shadow-sm ${
+                        currentPage === totalPages
+                          ? "bg-slate-100 text-slate-300 dark:bg-slate-800 dark:text-slate-600 cursor-not-allowed"
+                          : "bg-white text-slate-700 hover:bg-orange-500 hover:text-white border border-slate-200 hover:border-orange-500 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 dark:hover:bg-orange-500"
+                      }`}
+                    >
+                      Next <ChevronRight size={18} />
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
