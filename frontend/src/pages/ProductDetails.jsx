@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   Star,
   ShoppingCart,
@@ -181,9 +181,7 @@ export default function ProductDetails() {
                 </button>
 
                 <button
-                  onClick={() =>
-                    navigate("/payment", { state: { product, quantity } })
-                  }
+                  onClick={() => handleAddToCart(true)}
                   disabled={product.stock === 0}
                   className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-orange-500/20 transition-all active:scale-95 flex items-center justify-center gap-2 uppercase tracking-widest text-xs"
                 >
@@ -235,11 +233,10 @@ export default function ProductDetails() {
                         key={i}
                         size={12}
                         className={
-                          i < (product.rating || 4)
-                            ? "text-yellow-400"
+                          i < (product.rating || 0)
+                            ? "text-yellow-400 fill-yellow-400"
                             : "text-slate-300"
                         }
-                        fill="currentColor"
                       />
                     ))}
                   </div>
@@ -249,18 +246,17 @@ export default function ProductDetails() {
                 </div>
               </div>
 
-              {/* DESCRIPTION MOVED ABOVE PRICE */}
+              {/* DESCRIPTION */}
               <div className="space-y-2">
                 <h3 className="text-[12px] font-black text-slate-400 uppercase tracking-widest">
                   The Details
                 </h3>
                 <p className="text-slate-500 dark:text-slate-400 leading-relaxed text-sm max-w-prose">
-                  {product.description ||
-                    "Designed for excellence and crafted with the finest materials, this piece is a perfect blend of style and functionality."}
+                  {product.description || "No description available."}
                 </p>
               </div>
 
-              {/* PRICE SECTION: INTEGRATED UI (No BG) */}
+              {/* PRICE SECTION */}
               <div className="pt-4">
                 <div className="flex items-baseline gap-3">
                   <span className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">
@@ -286,7 +282,7 @@ export default function ProductDetails() {
               </div>
             </div>
 
-            {/* TRUST BADGES - MINIMALIST LIST */}
+            {/* TRUST BADGES */}
             <div className="space-y-4 pt-6 border-t border-slate-100 dark:border-slate-800">
               {[
                 {
@@ -329,17 +325,12 @@ export default function ProductDetails() {
                   <div className="flex items-center gap-3">
                     <div className="flex items-center gap-1.5 bg-green-500 text-white px-2 py-0.5 rounded-md shadow-sm">
                       <span className="text-sm font-black">
-                        {product.rating || 4.1}
+                        {product.rating?.toFixed(1) || 0}
                       </span>
                       <Star size={12} fill="currentColor" />
                     </div>
                     <p className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                      {product.numReviews?.toLocaleString() || "2,945"} Ratings
-                      &{" "}
-                      {product.numReviews
-                        ? Math.floor(product.numReviews / 10)
-                        : "130"}{" "}
-                      Reviews
+                      {product.numReviews} Ratings
                     </p>
                   </div>
                 </div>
@@ -349,7 +340,7 @@ export default function ProductDetails() {
                 </button>
               </div>
 
-              {/* VISUAL RATING BARS (Professional Insight) */}
+              {/* VISUAL RATING BARS */}
               <div className="grid grid-cols-1 gap-2 pt-2">
                 {[5, 4, 3, 2, 1].map((star) => (
                   <div key={star} className="flex items-center gap-3">
@@ -366,87 +357,116 @@ export default function ProductDetails() {
                             : "bg-orange-500"
                         }`}
                         style={{
-                          width: `${star === 5 ? 70 : star === 4 ? 20 : 5}%`,
+                          width: `${
+                            product.reviews && product.reviews.length > 0
+                              ? (product.reviews.filter(
+                                  (r) => Math.round(r.rating) === star
+                                ).length /
+                                  product.reviews.length) *
+                                100
+                              : 0
+                          }%`,
                         }}
                       />
                     </div>
                     <span className="text-[10px] font-bold text-slate-400 w-8">
-                      {star === 5 ? "70%" : star === 4 ? "20%" : "5%"}
+                      {product.reviews && product.reviews.length > 0
+                        ? Math.round(
+                            (product.reviews.filter(
+                              (r) => Math.round(r.rating) === star
+                            ).length /
+                              product.reviews.length) *
+                              100
+                          )
+                        : 0}
+                      %
                     </span>
                   </div>
                 ))}
               </div>
 
-              {/* RECENT REVIEW PREVIEW */}
+              {/* DYNAMIC REVIEWS LIST */}
               <div className="pt-4 space-y-4">
-                <div className="group p-5 bg-white dark:bg-slate-900/40 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-md transition-all duration-300">
-                  {/* TOP ROW: RATING & TITLE */}
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <div className="flex items-center gap-1 bg-green-600 dark:bg-green-500 text-white text-[10px] px-2 py-0.5 rounded-full font-black shadow-sm">
-                        5 <Star size={8} fill="currentColor" />
-                      </div>
-                      <span className="text-sm font-black text-slate-800 dark:text-white tracking-tight">
-                        Perfect Experience
-                      </span>
-                    </div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                      2 days ago
-                    </span>
-                  </div>
-
-                  {/* REVIEW TEXT */}
-                  <p className="text-[13px] italic text-slate-600 dark:text-slate-400 leading-relaxed font-medium">
-                    "Absolutely stunning quality. The attention to detail
-                    exceeded my expectations. Fast delivery too!"
-                  </p>
-
-                  {/* BOTTOM ROW: USER INFO & VOTING */}
-                  <div className="flex items-center justify-between mt-5 pt-4 border-t border-slate-50 dark:border-slate-800/50">
-                    <div className="flex items-center gap-3">
-                      <div className="flex flex-col">
-                        <span className="text-xs font-black text-slate-800 dark:text-slate-400">
-                          Rahul M.
+                {product.reviews && product.reviews.length > 0 ? (
+                  product.reviews.map((review) => (
+                    <div
+                      key={review._id}
+                      className="group p-5 bg-white dark:bg-slate-900/40 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-md transition-all duration-300"
+                    >
+                      {/* Top Row */}
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1 bg-green-600 dark:bg-green-500 text-white text-[10px] px-2 py-0.5 rounded-full font-black shadow-sm">
+                            {review.rating}{" "}
+                            <Star size={8} fill="currentColor" />
+                          </div>
+                          <span className="text-sm font-black text-slate-800 dark:text-white tracking-tight">
+                            {review.rating >= 4
+                              ? "Great!"
+                              : review.rating === 3
+                              ? "Good"
+                              : "Fair"}
+                          </span>
+                        </div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                          {new Date(review.createdAt).toLocaleDateString()}
                         </span>
-                        <div className="flex items-center gap-1 text-[9px] font-bold text-green-500 uppercase tracking-tighter">
-                          <ShieldCheck
-                            size={10}
-                            fill="currentColor"
-                            className="text-green-500/20"
-                          />
-                          Verified Buyer
+                      </div>
+
+                      {/* Comment */}
+                      <p className="text-[13px] italic text-slate-600 dark:text-slate-400 leading-relaxed font-medium">
+                        "{review.comment}"
+                      </p>
+
+                      {/* User Info */}
+                      <div className="flex items-center justify-between mt-5 pt-4 border-t border-slate-50 dark:border-slate-800/50">
+                        <div className="flex flex-col">
+                          <span className="text-xs font-black text-slate-800 dark:text-slate-400">
+                            {review.name}
+                          </span>
+                          <div className="flex items-center gap-1 text-[9px] font-bold text-green-500 uppercase tracking-tighter">
+                            <ShieldCheck
+                              size={10}
+                              fill="currentColor"
+                              className="text-green-500/20"
+                            />
+                            Verified Buyer
+                          </div>
+                        </div>
+
+                        {/* Interactive Buttons */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-black text-slate-400">
+                            Helpful?
+                          </span>
+                          <div className="flex items-center gap-1 group/like cursor-pointer">
+                            <button className="p-2 rounded-full bg-slate-50 dark:bg-slate-800 text-slate-400 group-hover/like:text-green-500 group-hover/like:bg-green-50 dark:group-hover/like:bg-green-500/10 transition-all">
+                              <ThumbsUp size={12} />
+                            </button>
+                          </div>
+                          <div className="flex items-center gap-1 group/dislike cursor-pointer">
+                            <button className="p-2 rounded-full bg-slate-50 dark:bg-slate-800 text-slate-400 group-hover/dislike:text-red-500 group-hover/dislike:bg-red-50 dark:group-hover/dislike:bg-red-500/10 transition-all">
+                              <ThumbsDown size={12} />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
-
-                    {/* INTERACTION: LIKE / DISLIKE */}
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-black text-slate-400">
-                        Helpful?
-                      </span>
-
-                      {/* LIKE */}
-                      <div className="flex items-center gap-1 group/like cursor-pointer">
-                        <button className="p-2 rounded-full bg-slate-50 dark:bg-slate-800 text-slate-400 group-hover/like:text-green-500 group-hover/like:bg-green-50 dark:group-hover/like:bg-green-500/10 transition-all">
-                          <ThumbsUp size={12} />
-                        </button>
-                        <span className="text-[10px] font-black text-slate-400 group-hover/like:text-slate-600 dark:group-hover/like:text-slate-200">
-                          24
-                        </span>
-                      </div>
-
-                      {/* DISLIKE */}
-                      <div className="flex items-center gap-1 group/dislike cursor-pointer">
-                        <button className="p-2 rounded-full bg-slate-50 dark:bg-slate-800 text-slate-400 group-hover/dislike:text-red-500 group-hover/dislike:bg-red-50 dark:group-hover/dislike:bg-red-500/10 transition-all">
-                          <ThumbsDown size={12} />
-                        </button>
-                        <span className="text-[10px] font-black text-slate-400 group-hover/dislike:text-slate-600 dark:group-hover/dislike:text-slate-200">
-                          2
-                        </span>
-                      </div>
-                    </div>
+                  ))
+                ) : (
+                  // ✅ CORRECTED EMPTY STATE
+                  <div className="text-center py-6">
+                    <p className="text-slate-400 text-xs font-bold mb-2">
+                      No reviews yet.
+                    </p>
+                    <Link
+                      to={`/product/${id}/Reviews`}
+                      className="text-orange-500 text-xs font-black uppercase tracking-widest hover:underline"
+                    >
+                      Be the first to write one!
+                    </Link>
                   </div>
-                </div>
+                )}
               </div>
             </div>
           </div>

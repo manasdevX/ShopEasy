@@ -1,9 +1,13 @@
 import React, { useState } from "react";
-import { Star, Camera, ShieldCheck, Loader2, Send, X } from "lucide-react";
+import { Star, ShieldCheck, Loader2, Send } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import { toast } from "react-hot-toast";
+
+// 1. Get API URL
+const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_URL = BASE_URL.startsWith("http") ? BASE_URL : `http://${BASE_URL}`;
 
 export default function ReviewSubmissionForm() {
   const { id } = useParams(); // Product ID from URL
@@ -13,26 +17,54 @@ export default function ReviewSubmissionForm() {
   const [hover, setHover] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
-    title: "",
     comment: "",
   });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // 2. Validate Inputs
     if (rating === 0) {
       toast.error("Please select a star rating");
       return;
     }
 
+    // 3. Check Authentication
+    const token = localStorage.getItem("token");
+    if (!token) {
+      toast.error("Please login to submit a review");
+      navigate("/login");
+      return;
+    }
+
     setIsSubmitting(true);
-    // Logic for API call would go here
+
     try {
-      // simulate delay
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      toast.success("Review submitted successfully!");
-      navigate(-1);
+      // 4. Send Request to Backend
+      const res = await fetch(`${API_URL}/api/products/${id}/reviews`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`, // Attach Token
+        },
+        body: JSON.stringify({
+          rating: rating,
+          comment: formData.comment,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        toast.success("Review submitted successfully!");
+        navigate(-1); // Go back to product page
+      } else {
+        // Show specific error (e.g., "Already reviewed")
+        toast.error(data.message || "Failed to submit review");
+      }
     } catch (error) {
-      toast.error("Failed to submit review");
+      console.error("Review Error:", error);
+      toast.error("Server error. Please try again later.");
     } finally {
       setIsSubmitting(false);
     }
@@ -107,7 +139,9 @@ export default function ReviewSubmissionForm() {
                 required
                 rows="6"
                 value={formData.comment}
-                onChange={(e) => setFormData({ ...formData, comment: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, comment: e.target.value })
+                }
                 placeholder="What did you like or dislike? How is the quality?"
                 className="w-full bg-slate-50 dark:bg-slate-950 border-2 border-slate-100 dark:border-slate-800 rounded-2xl px-6 py-4 text-sm font-medium text-slate-600 dark:text-slate-300 outline-none focus:border-orange-500 transition-all resize-none"
               ></textarea>
