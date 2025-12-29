@@ -21,14 +21,15 @@ const upload = multer({ storage: storage });
 
 /* =========================================
    SELLER ROUTES (Manage Products)
-   NOTE: Specialized routes come BEFORE /:id to prevent routing conflicts
+   NOTE: Specialized routes must come BEFORE /:id 
+   to prevent "seller/all" being interpreted as an ID
 ========================================= */
 
 // Matches: GET /api/products/seller/all
 router.get("/seller/all", protectSeller, getSellerProducts);
 
 // Matches: POST /api/products/add
-// Uploads thumbnail + up to 5 gallery images
+// Uploads thumbnail (1) + gallery images (up to 5)
 router.post(
   "/add",
   protectSeller,
@@ -58,11 +59,11 @@ router.delete("/:id", protectSeller, deleteProduct);
    PUBLIC ROUTES
 ========================================= */
 
-// Matches: GET /api/products (Supports ?keyword=... search)
+// Matches: GET /api/products
+// Supports: ?keyword=abc & minPrice=100 & rating=4 & category=electronics
 router.get("/", getAllProducts);
 
 // Matches: GET /api/products/:id
-// Keep this at the bottom of the GET routes so "seller/all" isn't treated as an ID
 router.get("/:id", getProductById);
 
 /* =========================================
@@ -70,7 +71,7 @@ router.get("/:id", getProductById);
 ========================================= */
 
 // Matches: POST /api/products/:id/reviews
-// Uses 'protect' because standard users (customers) write reviews
+// Uses 'protect' (any logged-in user) not 'protectSeller'
 router.post("/:id/reviews", protect, createProductReview);
 
 export default router;

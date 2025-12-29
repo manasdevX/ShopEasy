@@ -1,19 +1,60 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link } from "react-router-dom";
-import { ShoppingBag, Star, Heart } from "lucide-react";
-import toast from "react-hot-toast";
+import { ShoppingBag, Star, Heart, Loader2 } from "lucide-react";
+import { toast } from "react-hot-toast";
+
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export default function ProductCard({ product }) {
+  const [adding, setAdding] = useState(false);
+
   // Normalize Data
   const productId = product._id || product.id;
-  const price = typeof product.price === "number" ? product.price : parseFloat(product.price) || 0;
+  const price =
+    typeof product.price === "number"
+      ? product.price
+      : parseFloat(product.price) || 0;
   const mrp = product.mrp || price + 500;
-  const imageDisplay = product.thumbnail || product.image || (product.images && product.images[0]);
+  const imageDisplay =
+    product.thumbnail || product.image || (product.images && product.images[0]);
 
-  const handleQuickAdd = (e) => {
+  // Handle Quick Add to Cart (Connects to Backend)
+  const handleQuickAdd = async (e) => {
     e.preventDefault(); // Prevent navigating to product page
-    toast.success(`${product.name} added to cart!`);
-    // Add your cart logic here (dispatch or context)
+    e.stopPropagation();
+
+    const token = localStorage.getItem("token");
+    if (!token) {
+      toast.error("Please login to add items to cart", { icon: "🔒" });
+      return;
+    }
+
+    setAdding(true);
+    try {
+      const res = await fetch(`${API_URL}/api/cart/add`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ productId, quantity: 1 }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        toast.success(`${product.name} added to cart!`);
+        // 🚀 Trigger Navbar Update Instantly
+        window.dispatchEvent(new Event("cartUpdated"));
+      } else {
+        toast.error(data.message || "Failed to add item");
+      }
+    } catch (error) {
+      console.error("Add to cart error:", error);
+      toast.error("Something went wrong");
+    } finally {
+      setAdding(false);
+    }
   };
 
   return (
@@ -23,14 +64,22 @@ export default function ProductCard({ product }) {
     >
       <div className="relative h-64 rounded-[1.5rem] overflow-hidden mb-5 bg-slate-100 dark:bg-slate-900">
         {/* Discount Badge */}
-        <div className="absolute top-4 left-4 z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md px-3 py-1 rounded-full shadow-sm">
-          <p className="text-[10px] font-black text-green-600 uppercase tracking-tighter">
-            Save ₹{(mrp - price).toFixed(0)}
-          </p>
-        </div>
+        {mrp > price && (
+          <div className="absolute top-4 left-4 z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md px-3 py-1 rounded-full shadow-sm">
+            <p className="text-[10px] font-black text-green-600 uppercase tracking-tighter">
+              Save ₹{(mrp - price).toFixed(0)}
+            </p>
+          </div>
+        )}
 
         {/* Wishlist Button */}
-        <button className="absolute top-4 right-4 z-10 p-2.5 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md rounded-full shadow-sm text-slate-400 hover:text-red-500 transition-colors">
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            toast("Wishlist feature coming soon!", { icon: "❤️" });
+          }}
+          className="absolute top-4 right-4 z-10 p-2.5 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md rounded-full shadow-sm text-slate-400 hover:text-red-500 transition-colors"
+        >
           <Heart size={16} />
         </button>
 
@@ -42,12 +91,20 @@ export default function ProductCard({ product }) {
 
         {/* Quick Add Button Overlay */}
         <div className="absolute inset-x-0 bottom-0 p-4 translate-y-full group-hover:translate-y-0 transition-transform duration-500 ease-out">
-          <button 
+          <button
             onClick={handleQuickAdd}
-            className="w-full py-3 bg-slate-900 dark:bg-orange-500 text-white rounded-2xl shadow-xl font-bold text-sm flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95 transition-all"
+            disabled={adding}
+            className="w-full py-3 bg-slate-900 dark:bg-orange-500 text-white rounded-2xl shadow-xl font-bold text-sm flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
           >
-            <ShoppingBag size={18} />
-            Quick Add
+            {adding ? (
+              <>
+                <Loader2 size={18} className="animate-spin" /> Adding...
+              </>
+            ) : (
+              <>
+                <ShoppingBag size={18} /> Quick Add
+              </>
+            )}
           </button>
         </div>
       </div>
@@ -74,9 +131,11 @@ export default function ProductCard({ product }) {
           <p className="text-orange-600 dark:text-orange-400 font-black text-lg">
             ₹{price.toLocaleString()}
           </p>
-          <p className="text-slate-400 line-through text-xs font-medium">
-            ₹{mrp.toLocaleString()}
-          </p>
+          {mrp > price && (
+            <p className="text-slate-400 line-through text-xs font-medium">
+              ₹{mrp.toLocaleString()}
+            </p>
+          )}
         </div>
       </div>
     </Link>

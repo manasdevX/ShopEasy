@@ -76,16 +76,19 @@ export default function Cart() {
 
     setUpdating(true);
     try {
-      const res = await fetch(`${API_URL}/api/cart/update`, {
+      const res = await fetch(`${API_URL}/api/cart/${productId}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ productId, quantity: newQty }),
+        body: JSON.stringify({ quantity: newQty }),
       });
 
+      const data = await res.json();
+
       if (res.ok) {
+        // Update local state
         setCartItems((prev) =>
           prev.map((item) =>
             item.product._id === productId
@@ -93,10 +96,11 @@ export default function Cart() {
               : item
           )
         );
-        // 🚀 TRIGGER NAVBAR UPDATE
+
+        // 🚀 TRIGGER NAVBAR UPDATE INSTANTLY
         window.dispatchEvent(new Event("cartUpdated"));
       } else {
-        toast.error("Failed to update quantity");
+        toast.error(data.message || "Failed to update quantity");
       }
     } catch (err) {
       toast.error("Server connection error");
@@ -107,7 +111,7 @@ export default function Cart() {
   // 3. REMOVE ITEM
   const handleRemoveItem = async (productId) => {
     try {
-      const res = await fetch(`${API_URL}/api/cart/remove/${productId}`, {
+      const res = await fetch(`${API_URL}/api/cart/${productId}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -118,7 +122,7 @@ export default function Cart() {
         );
         toast.success("Item removed");
 
-        // 🚀 TRIGGER NAVBAR UPDATE
+        // 🚀 TRIGGER NAVBAR UPDATE INSTANTLY
         window.dispatchEvent(new Event("cartUpdated"));
       } else {
         toast.error("Could not remove item");
@@ -307,7 +311,7 @@ export default function Cart() {
                       _id: item.product._id,
                       name: item.product.name,
                       price: item.product.price,
-                      mrp: item.product.mrp || item.product.price, // Fallback to price if mrp is missing
+                      mrp: item.product.mrp || item.product.price,
                       quantity: item.quantity,
                       image: getImageUrl(
                         item.product.thumbnail || item.product.images?.[0]

@@ -33,48 +33,104 @@ const uploadToCloudinary = (buffer) => {
    PUBLIC ROUTES
 ========================================= */
 
-// @desc    Fetch all products with Search, Filter & Pagination
-// @route   GET /api/products?keyword=iphone&pageNumber=1
+// @desc    Fetch all products with Search, Filter & Dynamic Facets
+// @route   GET /api/products?keyword=iphone&minPrice=1000
 // @access  Public
 export const getAllProducts = async (req, res) => {
   try {
-    const pageSize = 12; // Number of products per page
+    const pageSize = Number(req.query.limit) || 12;
     const page = Number(req.query.pageNumber) || 1;
 
-    const keyword = req.query.keyword
-      ? {
-          $or: [
-            { name: { $regex: req.query.keyword, $options: "i" } },
-            { brand: { $regex: req.query.keyword, $options: "i" } },
-            { category: { $regex: req.query.keyword, $options: "i" } },
-            { description: { $regex: req.query.keyword, $options: "i" } },
-            { tags: { $regex: req.query.keyword, $options: "i" } }, // Search inside tags array
-          ],
-        }
-      : {};
+    // --- 1. Base Search Query (Keyword Only) ---
+    // We separate this so we can calculate facets based ONLY on the search term,
+    // ignoring the price/category filters currently applied.
+    let keywordQuery = {};
 
-    // Optional: Add Category Filter if provided separately
-    if (req.query.category) {
-      keyword.category = req.query.category;
+    if (req.query.keyword) {
+      keywordQuery.$or = [
+        { name: { $regex: req.query.keyword, $options: "i" } },
+        { brand: { $regex: req.query.keyword, $options: "i" } },
+        { description: { $regex: req.query.keyword, $options: "i" } },
+        { tags: { $regex: req.query.keyword, $options: "i" } },
+        { category: { $regex: req.query.keyword, $options: "i" } },
+      ];
     }
 
-    // 1. Get Total Count (for pagination)
-    const count = await Product.countDocuments({ ...keyword });
+    // --- 2. Filter Query (Sidebar Filters) ---
+    let filterQuery = {};
 
-    // 2. Fetch Products with Pagination
-    const products = await Product.find({ ...keyword })
-      .limit(pageSize)
-      .skip(pageSize * (page - 1))
-      .sort({ createdAt: -1 }); // Newest first
+    // Category Filter (Exact Match)
+    if (req.query.category) {
+      filterQuery.category = req.query.category;
+    }
 
-    // 3. Send Response with Pagination Data
+    // Price Filter (Range)
+    if (req.query.minPrice || req.query.maxPrice) {
+      filterQuery.price = {};
+      if (req.query.minPrice) {
+        filterQuery.price.$gte = Number(req.query.minPrice);
+      }
+      if (req.query.maxPrice) {
+        filterQuery.price.$lte = Number(req.query.maxPrice);
+      }
+    }
+
+    // Rating Filter
+    if (req.query.rating) {
+      filterQuery.rating = { $gte: Number(req.query.rating) };
+    }
+
+    // --- 3. Combined Query for Results ---
+    const finalQuery = { ...keywordQuery, ...filterQuery };
+
+    // --- 4. Execute Queries in Parallel ---
+    const [products, count, facetsResult] = await Promise.all([
+      // A. Get Actual Products (Paginated)
+      Product.find(finalQuery)
+        .limit(pageSize)
+        .skip(pageSize * (page - 1))
+        .sort({ createdAt: -1 }),
+
+      // B. Get Total Count (For Pagination)
+      Product.countDocuments(finalQuery),
+
+      // C. Get Dynamic Facets (Counts)
+      // We aggregate based on 'keywordQuery' only, so users see available
+      // categories even if they haven't selected one yet.
+      Product.aggregate([
+        { $match: keywordQuery },
+        {
+          $facet: {
+            // Count by Category
+            categories: [
+              { $group: { _id: "$category", count: { $sum: 1 } } },
+              { $sort: { count: -1 } },
+            ],
+            // Count by Rating (Floored)
+            ratings: [
+              {
+                $project: {
+                  rating: { $floor: "$rating" }, // Group 4.2 & 4.8 together as "4"
+                },
+              },
+              { $group: { _id: "$rating", count: { $sum: 1 } } },
+              { $sort: { _id: -1 } },
+            ],
+          },
+        },
+      ]),
+    ]);
+
+    // Send Response
     res.json({
       products,
       page,
       pages: Math.ceil(count / pageSize),
       total: count,
+      facets: facetsResult[0], // Send the counts to frontend
     });
   } catch (error) {
+    console.error("Search Error:", error);
     res.status(500).json({ message: error.message });
   }
 };
