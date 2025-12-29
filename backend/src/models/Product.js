@@ -2,13 +2,12 @@ import mongoose from "mongoose";
 
 /* ======================================================
    1. REVIEW SCHEMA (Sub-document)
-   Stored inside the Product document for faster access
 ====================================================== */
 const reviewSchema = new mongoose.Schema(
   {
     user: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User", // Links to the Customer who wrote the review
+      ref: "User",
       required: true,
     },
     name: {
@@ -26,7 +25,7 @@ const reviewSchema = new mongoose.Schema(
       required: true,
     },
   },
-  { timestamps: true } // Auto-adds createdAt for the review
+  { timestamps: true }
 );
 
 /* ======================================================
@@ -58,7 +57,7 @@ const productSchema = new mongoose.Schema(
     category: {
       type: String,
       required: true,
-      index: true, // Index for faster filtering
+      index: true,
     },
     subCategory: {
       type: String,
@@ -66,11 +65,11 @@ const productSchema = new mongoose.Schema(
 
     // 🔹 PRICING
     price: {
-      type: Number, // Selling Price (e.g., ₹2000)
+      type: Number,
       required: true,
     },
     mrp: {
-      type: Number, // List Price (e.g., ₹2500)
+      type: Number,
       required: true,
     },
     discountPercentage: {
@@ -95,7 +94,6 @@ const productSchema = new mongoose.Schema(
       required: true,
       default: 0,
     },
-    // Optional alias to match some controller logic if needed
     countInStock: {
       type: Number,
       default: 0,
@@ -105,16 +103,17 @@ const productSchema = new mongoose.Schema(
       default: true,
     },
 
-    // 🔹 RATINGS & REVIEWS (Calculated Fields)
+    // 🔹 RATINGS & REVIEWS
     rating: {
       type: Number,
-      default: 0, // Average Rating (e.g., 4.5)
+      default: 0,
+      index: true, // Added index for fast sorting/filtering
     },
     numReviews: {
       type: Number,
-      default: 0, // Total number of reviews
+      default: 0,
     },
-    reviews: [reviewSchema], // The array of review objects
+    reviews: [reviewSchema],
 
     // 🔹 METADATA
     tags: [String],
@@ -134,7 +133,11 @@ const productSchema = new mongoose.Schema(
   }
 );
 
-// --- Virtual: Calculate Discount % if not manually set ---
+/* ======================================================
+   3. MIDDLEWARE & INDEXES
+====================================================== */
+
+// Calculate Discount % automatically before saving
 productSchema.pre("save", function (next) {
   if (this.mrp > this.price) {
     this.discountPercentage = Math.round(
@@ -143,5 +146,18 @@ productSchema.pre("save", function (next) {
   }
   next();
 });
+
+// ⭐ KEY UPDATE: Text Index for Search Bar
+// This allows you to search "black" and find it in Name, Brand, OR Tags
+productSchema.index({
+  name: "text",
+  description: "text",
+  brand: "text",
+  tags: "text",
+});
+
+// ⭐ KEY UPDATE: Compound Index for Filters
+// Speeds up queries like "Price between 1000-5000 AND Rating >= 4"
+productSchema.index({ price: 1, rating: -1 });
 
 export default mongoose.model("Product", productSchema);

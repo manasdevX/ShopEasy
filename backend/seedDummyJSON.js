@@ -6,98 +6,84 @@ import Seller from "./src/models/seller.js";
 
 dotenv.config();
 
-const TARGET_COUNT = 2000; // How many products you want
-
-const seedMultiplier = async () => {
+const seedDummyJSON = async () => {
   try {
+    // 1. Connect to MongoDB
     await mongoose.connect(process.env.MONGO_URI);
     console.log("🔥 MongoDB Connected");
 
+    // 2. GET ALL REAL SELLERS
+    // We fetch every seller currently registered in your app
     const sellers = await Seller.find({});
-    if (!sellers.length) {
-      console.error("❌ No sellers found.");
+
+    if (sellers.length === 0) {
+      console.error(
+        "❌ No sellers found! Please register at least one seller in your app first."
+      );
       process.exit(1);
     }
 
-    console.log("⏳ Fetching base data from DummyJSON...");
-    const { data } = await axios.get("https://dummyjson.com/products?limit=0");
-    const baseProducts = data.products;
-
     console.log(
-      `📦 Got ${baseProducts.length} base products. Multiplying to reach ${TARGET_COUNT}...`
+      `👥 Found ${sellers.length} Real Sellers. Distributing products among them...`
     );
 
-    const finalProducts = [];
+    // 3. Fetch from DummyJSON (limit=0 gets ALL products)
+    console.log("⏳ Fetching 190+ products from DummyJSON...");
+    const { data } = await axios.get("https://dummyjson.com/products?limit=0");
 
-    // We loop until we reach the target count
-    while (finalProducts.length < TARGET_COUNT) {
-      for (const item of baseProducts) {
-        if (finalProducts.length >= TARGET_COUNT) break;
+    // 4. Transform and Distribute Data
+    const products = data.products.map((item, index) => {
+      // Round-Robin Assignment:
+      // Cycle through the sellers array using modulo operator (%)
+      // Product 1 -> Seller A, Product 2 -> Seller B, Product 3 -> Seller A...
+      const assignedSeller = sellers[index % sellers.length];
 
-        // Assign to random seller
-        const seller = sellers[Math.floor(Math.random() * sellers.length)];
+      // Convert Price (Approx USD -> INR conversion for realism)
+      const price = item.price * 84;
 
-        // Randomize price slightly (Variation between 90% and 110% of original)
-        const variance = Math.random() * 0.4 + 0.8;
-        const price = Math.floor(item.price * 84 * variance);
-        const discount = item.discountPercentage || 10;
-        const mrp = Math.floor(price * (100 / (100 - discount)));
+      // Calculate MRP based on the API's discount percentage
+      // Formula: MRP = Price / (1 - (discount / 100))
+      const discount = item.discountPercentage || 10;
+      const mrp = Math.floor(price * (100 / (100 - discount)));
 
-        // Create a unique name variation
-        const variations = [
-          "Pro",
-          "Max",
-          "Lite",
-          "2024",
-          "Refurbished",
-          "Limited Edition",
-          "Deal",
-        ];
-        const suffix =
-          variations[Math.floor(Math.random() * variations.length)];
-        const uniqueName = `${item.title} ${suffix}`;
+      return {
+        seller: assignedSeller._id, // <--- Assigned to a real seller ID
+        name: item.title,
+        description: item.description,
+        price: Math.floor(price),
+        mrp: mrp,
+        category: item.category, // e.g., "smartphones", "beauty", "furniture"
+        brand: item.brand || "Generic",
+        stock: item.stock,
+        countInStock: item.stock,
+        thumbnail: item.thumbnail, // High-quality specific thumbnail
+        images: item.images, // Array of real gallery images
+        tags: [
+          item.category,
+          item.brand || "",
+          ...item.title.toLowerCase().split(" "),
+        ].filter(Boolean),
+        rating: item.rating,
+        numReviews: Math.floor(Math.random() * 100) + 5, // Random reviews between 5-105
+        isFeatured: item.rating > 4.6, // Feature only highly-rated items
+        isBestSeller: item.stock < 40, // Mark low stock items as bestsellers
+      };
+    });
 
-        finalProducts.push({
-          seller: seller._id,
-          name: uniqueName, // Unique name
-          description: item.description,
-          price: price, // Unique price
-          mrp: mrp,
-          category: item.category,
-          brand: item.brand || "Generic",
-          stock: Math.floor(Math.random() * 100),
-          countInStock: 50,
-          thumbnail: item.thumbnail,
-          images: item.images,
-          tags: [
-            item.category,
-            item.brand,
-            ...item.title.toLowerCase().split(" "),
-          ],
-          rating: (Math.random() * 2 + 3).toFixed(1), // Random rating 3.0 - 5.0
-          numReviews: Math.floor(Math.random() * 500),
-          isFeatured: Math.random() > 0.9,
-          isBestSeller: Math.random() > 0.9,
-        });
-      }
-    }
-
+    // 5. Clear Old Data & Insert New
     await Product.deleteMany({});
-    console.log("🧹 Old products cleared");
+    console.log("🧹 Old products cleared from database");
 
-    // Bulk insert in chunks to prevent memory issues
-    const CHUNK_SIZE = 500;
-    for (let i = 0; i < finalProducts.length; i += CHUNK_SIZE) {
-      await Product.insertMany(finalProducts.slice(i, i + CHUNK_SIZE));
-      console.log(`💾 Inserted ${i} -> ${i + CHUNK_SIZE}`);
-    }
+    await Product.insertMany(products);
+    console.log(
+      `✅ SUCCESS: Seeded ${products.length} products across ${sellers.length} sellers!`
+    );
 
-    console.log(`✅ SUCCESS: Created ${finalProducts.length} products!`);
     process.exit();
   } catch (error) {
-    console.error("❌ Error:", error);
+    console.error("❌ Error seeding data:", error);
     process.exit(1);
   }
 };
 
-seedMultiplier();
+seedDummyJSON();
