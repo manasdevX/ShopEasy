@@ -343,7 +343,9 @@ export default function SellerSignup() {
                       {verifyingEmail ? (
                         <Loader2 className="animate-spin" size={16} />
                       ) : emailTimer > 0 ? (
-                        `${emailTimer}s`
+                        <span className="text-orange-600 dark:text-orange-400 font-black">
+                          {emailTimer}s
+                        </span>
                       ) : isEmailSent ? (
                         "Resend"
                       ) : (
@@ -410,7 +412,9 @@ export default function SellerSignup() {
                       {verifyingMobile ? (
                         <Loader2 className="animate-spin" size={16} />
                       ) : mobileTimer > 0 ? (
-                        `${mobileTimer}s`
+                        <span className="text-orange-600 dark:text-orange-400 font-black">
+                          {emailTimer}s
+                        </span>
                       ) : isMobileSent ? (
                         "Resend"
                       ) : (
@@ -499,7 +503,7 @@ export default function SellerSignup() {
             className={`w-full flex items-center justify-center gap-3 
               bg-[#e8f0fe] dark:bg-slate-800 hover:bg-[#dfe9fd] dark:hover:bg-slate-700
               text-[#1a73e8] dark:text-blue-400 font-medium 
-              py-3 rounded-lg transition
+              py-3 rounded-lg transition hover:bg-opacity-80
               ${loading ? "opacity-60 cursor-not-allowed" : ""}`}
           >
             <img

@@ -330,36 +330,40 @@ export default function Signup() {
               required
             />
 
-            {/* Email Field with Verification */}
+           {/* EMAIL INPUT */}
             <div className="space-y-3">
               <div className="relative flex items-center">
                 <input
                   type="email"
-                  autoComplete="off"
                   name="email"
+                  autoComplete="off"
                   placeholder="Email Address"
                   value={formData.email}
                   onChange={handleChange}
                   disabled={isEmailVerified || !!googleId}
                   className={`${inputBase} pr-24 ${
                     isEmailVerified
-                      ? "border-green-500 ring-1"
+                      ? "border-green-500 ring-1 ring-green-500/20"
                       : "focus:ring-2 focus:ring-orange-400"
-                  }`}
+                  } ${emailError ? "border-red-500" : ""}`}
                   required
                 />
-                <div className="absolute right-2">
+                <div className="absolute right-2 flex items-center">
                   {!isEmailVerified ? (
                     <button
                       type="button"
                       onClick={sendEmailOtp}
                       disabled={verifyingEmail || emailTimer > 0}
-                      className="text-xs font-bold text-orange-500 uppercase px-2"
+                      className="text-xs font-bold text-orange-500 hover:text-orange-600 disabled:text-gray-400 uppercase tracking-wider px-2"
                     >
                       {verifyingEmail ? (
                         <Loader2 className="animate-spin" size={16} />
                       ) : emailTimer > 0 ? (
-                        `${emailTimer}s`
+                        <span className="text-orange-600 dark:text-orange-400 font-black">
+                          {emailTimer}s
+                        </span>
+                      ) : isEmailSent ? (
+                        "Resend"
                       ) : (
                         "Verify"
                       )}
@@ -369,20 +373,25 @@ export default function Signup() {
                   )}
                 </div>
               </div>
+              {emailError && (
+                <p className="text-red-500 text-xs font-medium ml-1">
+                  {emailError}
+                </p>
+              )}
               {isEmailSent && !isEmailVerified && !googleId && (
-                <div className="flex gap-2 p-2 bg-gray-50 dark:bg-slate-800/50 rounded-lg border border-dashed border-slate-700">
+                <div className="flex gap-2 p-2 bg-gray-50 dark:bg-slate-800/50 rounded-lg border border-dashed dark:border-slate-700 animate-in zoom-in-95">
                   <input
-                    type="text"
                     autoComplete="off"
+                    type="text"
                     placeholder="Email OTP"
                     value={emailOtp}
                     onChange={(e) => setEmailOtp(e.target.value)}
-                    className="flex-grow bg-white dark:bg-slate-800 border px-3 py-1.5 rounded-md text-sm outline-none"
+                    className="flex-grow bg-white dark:bg-slate-800 border dark:border-slate-700 px-3 py-1.5 rounded-md text-sm outline-none focus:ring-2 focus:ring-green-400"
                   />
                   <button
                     type="button"
                     onClick={verifyEmailOtp}
-                    className="bg-green-600 text-white px-4 py-1.5 rounded-md text-xs font-bold"
+                    className="bg-green-600 text-white px-4 py-1.5 rounded-md text-xs font-bold hover:bg-green-700"
                   >
                     CONFIRM
                   </button>
@@ -390,12 +399,12 @@ export default function Signup() {
               )}
             </div>
 
-            {/* Phone Field with Verification */}
+            {/* PHONE INPUT */}
             <div className="space-y-3">
               <div className="relative flex items-center">
                 <input
-                  type="text"
                   autoComplete="off"
+                  type="text"
                   name="phone"
                   placeholder="Phone Number"
                   value={formData.phone}
@@ -403,23 +412,27 @@ export default function Signup() {
                   disabled={isMobileVerified}
                   className={`${inputBase} pr-24 ${
                     isMobileVerified
-                      ? "border-green-500 ring-1"
+                      ? "border-green-500 ring-1 ring-green-500/20"
                       : "focus:ring-2 focus:ring-orange-400"
-                  }`}
+                  } ${phoneError ? "border-red-500" : ""}`}
                   required
                 />
-                <div className="absolute right-2">
+                <div className="absolute right-2 flex items-center">
                   {!isMobileVerified ? (
                     <button
                       type="button"
                       onClick={sendMobileOtp}
                       disabled={verifyingMobile || mobileTimer > 0}
-                      className="text-xs font-bold text-orange-500 uppercase px-2"
+                      className="text-xs font-bold text-orange-500 hover:text-orange-600 disabled:text-gray-400 uppercase tracking-wider px-2"
                     >
                       {verifyingMobile ? (
-                        <Loader2 className="animate-spin" size={16} />
+                        <Loader2 className="text-orange-500 animate-spin" size={16} />
                       ) : mobileTimer > 0 ? (
-                        `${mobileTimer}s`
+                        <span className="text-orange-600 dark:text-orange-400 font-black">
+                          {emailTimer}s
+                        </span>
+                      ) : isMobileSent ? (
+                        "Resend"
                       ) : (
                         "Verify"
                       )}
@@ -429,20 +442,25 @@ export default function Signup() {
                   )}
                 </div>
               </div>
+              {phoneError && (
+                <p className="text-red-500 text-xs font-medium ml-1">
+                  {phoneError}
+                </p>
+              )}
               {isMobileSent && !isMobileVerified && (
-                <div className="flex gap-2 p-2 bg-gray-50 dark:bg-slate-800/50 rounded-lg border border-dashed border-slate-700">
+                <div className="flex gap-2 p-2 bg-gray-50 dark:bg-slate-800/50 rounded-lg border border-dashed dark:border-slate-700 animate-in zoom-in-95">
                   <input
-                    type="text"
                     autoComplete="off"
+                    type="text"
                     placeholder="Mobile OTP"
                     value={mobileOtp}
                     onChange={(e) => setMobileOtp(e.target.value)}
-                    className="flex-grow bg-white dark:bg-slate-800 border px-3 py-1.5 rounded-md text-sm outline-none"
+                    className="flex-grow bg-white dark:bg-slate-800 border dark:border-slate-700 px-3 py-1.5 rounded-md text-sm outline-none focus:ring-2 focus:ring-green-400"
                   />
                   <button
                     type="button"
                     onClick={verifyMobileOtp}
-                    className="bg-green-600 text-white px-4 py-1.5 rounded-md text-xs font-bold"
+                    className="bg-green-600 text-white px-4 py-1.5 rounded-md text-xs font-bold hover:bg-green-700"
                   >
                     CONFIRM
                   </button>
@@ -493,7 +511,11 @@ export default function Signup() {
             type="button"
             onClick={() => googleLogin()}
             disabled={loading}
-            className="w-full flex items-center justify-center gap-3 bg-[#e8f0fe] dark:bg-slate-800 hover:bg-[#dfe9fd] text-[#1a73e8] dark:text-blue-400 font-medium py-3 rounded-lg transition"
+            className={`w-full flex items-center justify-center gap-3 
+              bg-[#e8f0fe] dark:bg-slate-800 hover:bg-[#dfe9fd] dark:hover:bg-slate-700
+              text-[#1a73e8] dark:text-blue-400 font-medium 
+              py-3 rounded-lg transition hover:bg-opacity-80
+              ${loading ? "opacity-60 cursor-not-allowed" : ""}`}
           >
             <img
               src="https://developers.google.com/identity/images/g-logo.png"
