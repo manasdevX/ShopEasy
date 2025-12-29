@@ -91,7 +91,7 @@ export default function ProductDetails() {
       if (res.ok) {
         window.dispatchEvent(new Event("cartUpdated"));
         if (isBuyNow) {
-          navigate("/cart");
+          navigate("/payment");
         } else {
           toast.success("Added to cart!");
         }
