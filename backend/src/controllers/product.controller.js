@@ -33,35 +33,47 @@ const uploadToCloudinary = (buffer) => {
    PUBLIC ROUTES
 ========================================= */
 
-// @desc    Fetch all products with Search/Filter functionality
-// @route   GET /api/products
+// @desc    Fetch all products with Search, Filter & Pagination
+// @route   GET /api/products?keyword=iphone&pageNumber=1
 // @access  Public
 export const getAllProducts = async (req, res) => {
   try {
-    const { keyword, category } = req.query;
+    const pageSize = 12; // Number of products per page
+    const page = Number(req.query.pageNumber) || 1;
 
-    // 1. Build Query Object
-    let query = {};
+    const keyword = req.query.keyword
+      ? {
+          $or: [
+            { name: { $regex: req.query.keyword, $options: "i" } },
+            { brand: { $regex: req.query.keyword, $options: "i" } },
+            { category: { $regex: req.query.keyword, $options: "i" } },
+            { description: { $regex: req.query.keyword, $options: "i" } },
+            { tags: { $regex: req.query.keyword, $options: "i" } }, // Search inside tags array
+          ],
+        }
+      : {};
 
-    // Global Search: Matches keyword against Name, Description, Category, or Tags
-    if (keyword) {
-      const regex = { $regex: keyword, $options: "i" };
-      query.$or = [
-        { name: regex },
-        { description: regex },
-        { category: regex },
-        { brand: regex },
-        { tags: regex },
-      ];
+    // Optional: Add Category Filter if provided separately
+    if (req.query.category) {
+      keyword.category = req.query.category;
     }
 
-    // Direct Category Filter
-    if (category) {
-      query.category = category;
-    }
+    // 1. Get Total Count (for pagination)
+    const count = await Product.countDocuments({ ...keyword });
 
-    const products = await Product.find(query).sort({ createdAt: -1 });
-    res.json(products);
+    // 2. Fetch Products with Pagination
+    const products = await Product.find({ ...keyword })
+      .limit(pageSize)
+      .skip(pageSize * (page - 1))
+      .sort({ createdAt: -1 }); // Newest first
+
+    // 3. Send Response with Pagination Data
+    res.json({
+      products,
+      page,
+      pages: Math.ceil(count / pageSize),
+      total: count,
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -139,7 +151,6 @@ export const createProduct = async (req, res) => {
       galleryImages = await Promise.all(uploadPromises);
     }
 
-    // Combine Thumbnail + Gallery into one "images" array for frontend slider
     const allImages = [thumbnail, ...galleryImages].filter(Boolean);
 
     // 3. Parse Tags
@@ -188,7 +199,7 @@ export const updateProduct = async (req, res) => {
       return res.status(404).json({ message: "Product not found" });
     }
 
-    // Security Check: Only owner can update
+    // Security Check
     if (product.seller.toString() !== req.seller._id.toString()) {
       return res
         .status(403)
@@ -196,7 +207,6 @@ export const updateProduct = async (req, res) => {
     }
 
     // --- 1. HANDLE THUMBNAIL ---
-    // If new file uploaded, use it. Else if existing URL sent, keep it.
     if (req.files && req.files.thumbnail) {
       product.thumbnail = await uploadToCloudinary(
         req.files.thumbnail[0].buffer
@@ -205,19 +215,16 @@ export const updateProduct = async (req, res) => {
       product.thumbnail = req.body.existingThumbnail;
     }
 
-    // --- 2. HANDLE GALLERY IMAGES (MERGE LOGIC) ---
+    // --- 2. HANDLE GALLERY IMAGES ---
     let finalImages = [];
-
-    // Part A: Keep existing images sent from frontend
     if (req.body.existingImages) {
       if (Array.isArray(req.body.existingImages)) {
         finalImages = req.body.existingImages;
       } else {
-        finalImages = [req.body.existingImages]; // Handle single URL string case
+        finalImages = [req.body.existingImages];
       }
     }
 
-    // Part B: Upload and add new images
     if (req.files && req.files.images) {
       const uploadPromises = req.files.images.map((file) =>
         uploadToCloudinary(file.buffer)
@@ -226,18 +233,14 @@ export const updateProduct = async (req, res) => {
       finalImages = [...finalImages, ...newImageUrls];
     }
 
-    // Part C: Update the product images array
-    // We update IF there are final images OR if the user is explicitly sending new files/existing data
-    // This prevents wiping the gallery if the frontend sends nothing
     if (finalImages.length > 0) {
       product.images = finalImages;
     } else if (
       req.body.existingImages === undefined &&
       req.files?.images === undefined
     ) {
-      // If both are undefined, do NOT touch product.images (user didn't edit gallery)
+      // Do nothing (user didn't touch gallery)
     } else {
-      // If fields were present but empty, it means user deleted everything
       product.images = [];
     }
 
@@ -259,7 +262,6 @@ export const updateProduct = async (req, res) => {
       }
     }
 
-    // Handle Booleans
     if (req.body.isFeatured !== undefined) {
       product.isFeatured = req.body.isFeatured === "true";
     }
