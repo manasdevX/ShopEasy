@@ -18,6 +18,7 @@ import {
 import { toast } from "react-hot-toast";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
+import { showError, showSuccess } from "../utils/toast";
 
 export default function ProductDetails() {
   const { id } = useParams();
@@ -56,11 +57,11 @@ export default function ProductDetails() {
             .filter((img, index, self) => self.indexOf(img) === index);
           setAllImages(mergedImages);
         } else {
-          toast.error("Product not found");
+          showError("Product not found");
           navigate("/");
         }
       } catch (error) {
-        toast.error("Could not load product");
+        showError("Could not load product");
       } finally {
         setLoading(false);
       }
@@ -93,13 +94,13 @@ export default function ProductDetails() {
         if (isBuyNow) {
           navigate("/payment");
         } else {
-          toast.success("Added to cart!");
+          showSuccess("Added to cart!");
         }
       } else {
-        toast.error("Failed to update cart");
+        showError("Failed to update cart");
       }
     } catch (error) {
-      toast.error("Server connection failed");
+      showError("Server connection failed");
     }
   };
 
@@ -181,7 +182,22 @@ export default function ProductDetails() {
                 </button>
 
                 <button
-                  onClick={() => handleAddToCart(true)}
+                  onClick={() =>
+                    navigate("/payment", {
+                      state: {
+                        items: [
+                          {
+                            _id: product._id,
+                            name: product.name,
+                            price: product.price,
+                            mrp: product.mrp,
+                            quantity: 1,
+                            image: product.image,
+                          },
+                        ],
+                      },
+                    })
+                  }
                   disabled={product.stock === 0}
                   className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-orange-500/20 transition-all active:scale-95 flex items-center justify-center gap-2 uppercase tracking-widest text-xs"
                 >
@@ -335,13 +351,14 @@ export default function ProductDetails() {
                   </div>
                 </div>
 
-                {/* ✅ CORRECTED LINK */}
-                <Link
-                  to={`/product/${id}/Reviews`}
+                <button
                   className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 hover:border-orange-500 dark:hover:border-orange-500 text-slate-900 dark:text-white font-black py-2.5 px-6 rounded-xl transition-all active:scale-95 text-xs uppercase tracking-widest shadow-sm"
+                  onClick={() =>
+                    (window.location.href = "/product/${product._id}/reviews")
+                  }
                 >
                   Rate Product
-                </Link>
+                </button>
               </div>
 
               {/* VISUAL RATING BARS */}

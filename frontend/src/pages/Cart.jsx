@@ -301,7 +301,22 @@ export default function Cart() {
                 </div>
 
                 <button
-                  onClick={() => navigate("/payment" , { state: { cartItems } })}
+                  onClick={() => {
+                    // 1. Transform the cart items to the format CheckoutPage expects
+                    const itemsToCheckout = cartItems.map((item) => ({
+                      _id: item.product._id,
+                      name: item.product.name,
+                      price: item.product.price,
+                      mrp: item.product.mrp || item.product.price, // Fallback to price if mrp is missing
+                      quantity: item.quantity,
+                      image: getImageUrl(
+                        item.product.thumbnail || item.product.images?.[0]
+                      ),
+                    }));
+
+                    // 2. Navigate using the "items" key
+                    navigate("/payment", { state: { items: itemsToCheckout } });
+                  }}
                   className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-3 shadow-lg shadow-orange-500/20 transition-all hover:-translate-y-1"
                 >
                   CHECKOUT NOW <ArrowRight size={20} />

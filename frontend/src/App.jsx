@@ -56,7 +56,7 @@ export default function App() {
         <Route path="/search" element={<SearchResults />} />
         <Route path="/product/:id" element={<ProductDetails />} />
         <Route path="/payment" element={<Payment />} />
-        <Route path="product/:id/Reviews" element={<Reviews />} />
+        <Route path="/product/:id/reviews" element={<Reviews />} />
 
         {/* ✅ Production Cart Route */}
         <Route path="/cart" element={<Cart />} />
