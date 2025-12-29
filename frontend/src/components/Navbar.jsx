@@ -208,12 +208,6 @@ export default function Navbar() {
                   >
                     My Profile
                   </Link>
-                  <Link
-                    to="/orders"
-                    className="block px-5 py-3.5 hover:bg-orange-500 hover:text-white font-bold text-sm text-slate-700 dark:text-slate-200"
-                  >
-                    My Orders
-                  </Link>
                   <div className="border-t border-gray-100 dark:border-slate-800" />
                   <button
                     onClick={handleLogout}

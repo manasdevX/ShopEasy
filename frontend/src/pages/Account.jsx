@@ -1396,9 +1396,12 @@ export default function Account() {
                           </p>
                         </div>
                       </div>
-                      <button className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline uppercase tracking-widest">
+                      <Link
+                        to="/update-password"
+                        className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline uppercase tracking-widest"
+                      >
                         Update
-                      </button>
+                      </Link>
                     </div>
                     <p className="text-xs text-slate-400 leading-relaxed">
                       Ensure your account is using a long, random password to

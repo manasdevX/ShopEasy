@@ -169,7 +169,7 @@ export default function Dashboard() {
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          {/* <div className="flex items-center gap-3">
             <button
               onClick={() => navigate("/Seller/Products")}
               className="flex items-center gap-2 px-6 py-4 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
@@ -182,7 +182,7 @@ export default function Dashboard() {
             >
               <Plus size={18} strokeWidth={3} /> Add Product
             </button>
-          </div>
+          </div> */}
         </div>
 
         {/* STATS GRID */}
