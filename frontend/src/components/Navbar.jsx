@@ -138,7 +138,7 @@ export default function Navbar() {
           to="/"
           className="text-orange-500 text-2xl font-black tracking-tighter shrink-0"
         >
-          ShopEasy<span className="text-slate-900 dark:text-white">.</span>
+          ShopEasy
         </Link>
 
         {/* SEARCH BAR */}

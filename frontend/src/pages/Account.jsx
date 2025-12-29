@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { Link } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { showSuccess, showError } from "../utils/toast";
 import Footer from "../components/Footer";
@@ -10,7 +11,6 @@ import {
   MapPin,
   Pencil,
   ChevronRight,
-  Package,
   Heart,
   Lock,
   Globe,
@@ -28,6 +28,8 @@ import {
   Star,
   Info,
   LocateFixed,
+  Package,
+  ShoppingBag,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -72,6 +74,10 @@ export default function Account() {
       country: "India",
       type: "Home",
     },
+    orders: [],
+    order: {},
+    wishlist: [],
+    product: {},
   });
 
   const [formData, setFormData] = useState({ ...user });
@@ -135,6 +141,8 @@ export default function Account() {
               country: data.address?.country || primaryAddr.country || "India",
               type: data.address?.type || primaryAddr.type || "Home",
             },
+            orders: [],
+            wishlist: [],
           };
           setUser(userData);
           setFormData(userData);
@@ -859,7 +867,223 @@ export default function Account() {
               </div>
             )}
 
-            {/* 2. MANAGE ADDRESSES TAB */}
+            {/* 2. ORDER HISTORY TAB */}
+            {activeTab === "orders" && (
+              <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500 min-h-[500px]">
+                <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                    Order History
+                  </h3>
+                  <span className="text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-500 px-3 py-1 rounded-full">
+                    {user.orders.length} Orders Total
+                  </span>
+                </div>
+
+                <div className="p-6">
+                  {user.orders.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-20 text-center">
+                      <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-full mb-4">
+                        <Package
+                          size={40}
+                          className="text-slate-300 dark:text-slate-600"
+                        />
+                      </div>
+                      <h4 className="text-slate-900 dark:text-white font-bold">
+                        No orders found
+                      </h4>
+                      <p className="text-slate-500 text-sm mt-1">
+                        Looks like you haven't placed any orders yet.
+                      </p>
+                      <Link
+                        to="/"
+                        className="mt-6 bg-blue-600 text-white px-6 py-2 rounded-lg font-bold text-sm hover:bg-blue-700 transition-all"
+                      >
+                        Start Shopping
+                      </Link>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {user.orders.map((order) => (
+                        <div
+                          key={order._id}
+                          className="group border border-slate-100 dark:border-slate-800 rounded-2xl p-5 hover:border-blue-200 dark:hover:border-blue-900/50 hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-all"
+                        >
+                          <div className="flex flex-col md:flex-row justify-between gap-4">
+                            {/* Order Info */}
+                            <div className="flex gap-4">
+                              <div className="h-16 w-16 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center flex-shrink-0">
+                                <ShoppingBag
+                                  size={24}
+                                  className="text-slate-400"
+                                />
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="text-xs font-black uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                                    Order #
+                                    {user.order._id.slice(-8).toUpperCase()}
+                                  </span>
+                                  <span
+                                    className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                                      user.order.status === "Delivered"
+                                        ? "bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400"
+                                        : "bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400"
+                                    }`}
+                                  >
+                                    {user.order.status}
+                                  </span>
+                                </div>
+                                <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                                  {order.orderItems.length}{" "}
+                                  {order.orderItems.length === 1
+                                    ? "Item"
+                                    : "Items"}
+                                </h4>
+                                <p className="text-xs text-slate-500 mt-1">
+                                  Placed on{" "}
+                                  {new Date(order.createdAt).toLocaleDateString(
+                                    "en-IN",
+                                    {
+                                      day: "numeric",
+                                      month: "short",
+                                      year: "numeric",
+                                    }
+                                  )}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Price & Action */}
+                            <div className="flex flex-row md:flex-col justify-between md:items-end gap-2">
+                              <div className="text-right">
+                                <p className="text-xs text-slate-400 font-medium">
+                                  Total Amount
+                                </p>
+                                <p className="text-lg font-black text-slate-900 dark:text-white">
+                                  ₹{order.totalPrice.toLocaleString()}
+                                </p>
+                              </div>
+                              <Link
+                                to={`/order/${order._id}`}
+                                className="flex items-center gap-1 text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline group-hover:gap-2 transition-all"
+                              >
+                                VIEW DETAILS <ChevronRight size={14} />
+                              </Link>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* 3. WISHLIST TAB */}
+            {activeTab === "wishlist" && (
+              <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500 min-h-[500px]">
+                {/* Header - Matches Order History Style */}
+                <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                    My Wishlist
+                  </h3>
+                  <span className="text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-500 px-3 py-1 rounded-full">
+                    {user.wishlist.length} Items Saved
+                  </span>
+                </div>
+
+                <div className="p-6">
+                  {user.wishlist.length === 0 ? (
+                    /* Empty State - Matches Order History Style */
+                    <div className="flex flex-col items-center justify-center py-20 text-center">
+                      <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-full mb-4">
+                        <Heart
+                          size={40}
+                          className="text-slate-300 dark:text-slate-600"
+                        />
+                      </div>
+                      <h4 className="text-slate-900 dark:text-white font-bold">
+                        Your wishlist is empty
+                      </h4>
+                      <p className="text-slate-500 text-sm mt-1">
+                        Save items you like to find them easily later.
+                      </p>
+                      <Link
+                        to="/"
+                        className="mt-6 bg-blue-600 text-white px-6 py-2 rounded-lg font-bold text-sm hover:bg-blue-700 transition-all"
+                      >
+                        Explore Products
+                      </Link>
+                    </div>
+                  ) : (
+                    /* Wishlist Grid */
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {user.wishlist.map((product) => (
+                        <div
+                          key={product._id}
+                          className="group border border-slate-100 dark:border-slate-800 rounded-2xl p-4 hover:border-blue-200 dark:hover:border-blue-900/50 hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-all"
+                        >
+                          <div className="flex justify-between gap-4">
+                            {/* Product Info */}
+                            <div className="flex gap-4">
+                              <div className="h-20 w-20 bg-slate-100 dark:bg-slate-800 rounded-xl overflow-hidden flex-shrink-0">
+                                <img
+                                  src={product.image}
+                                  alt={product.name}
+                                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                                />
+                              </div>
+                              <div className="flex flex-col justify-between py-1">
+                                <div>
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                                      {product.category || "Product"}
+                                    </span>
+                                  </div>
+                                  <h4 className="text-sm font-bold text-slate-900 dark:text-white line-clamp-1">
+                                    {product.name}
+                                  </h4>
+                                </div>
+
+                                <button
+                                  onClick={() =>
+                                    handleRemoveFromWishlist(product._id)
+                                  }
+                                  className="flex items-center gap-1.5 text-[10px] font-bold text-red-500 hover:text-red-600 transition-colors uppercase tracking-tight"
+                                >
+                                  <Trash2 size={12} /> Remove Item
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Price & Action */}
+                            <div className="flex flex-col justify-between items-end">
+                              <div className="text-right">
+                                <p className="text-xs text-slate-400 font-medium">
+                                  Price
+                                </p>
+                                <p className="text-lg font-black text-slate-900 dark:text-white">
+                                  ₹{product.price.toLocaleString()}
+                                </p>
+                              </div>
+
+                              <Link
+                                to={`/product/${product._id}`}
+                                className="flex items-center gap-1 text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline group-hover:gap-2 transition-all"
+                              >
+                                BUY NOW <ChevronRight size={14} />
+                              </Link>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* 4. MANAGE ADDRESSES TAB */}
             {activeTab === "addresses" && (
               <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500 min-h-[500px]">
                 <div className="p-6 border-b border-slate-100 dark:border-slate-800">
@@ -1132,27 +1356,101 @@ export default function Account() {
               </div>
             )}
 
-            {/* Other Tabs */}
-            {activeTab === "orders" && (
-              <PlaceholderTab
-                icon={<Package size={40} />}
-                title="No Orders Yet"
-                desc="Start shopping to see your orders here."
-              />
-            )}
-            {activeTab === "wishlist" && (
-              <PlaceholderTab
-                icon={<Heart size={40} />}
-                title="Wishlist Empty"
-                desc="Save items you love here."
-              />
-            )}
+            {/* 5. PRIVACY & SECURITY TAB */}
             {activeTab === "security" && (
-              <PlaceholderTab
-                icon={<Lock size={40} />}
-                title="Security"
-                desc="Password settings coming soon."
-              />
+              <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500 min-h-[500px]">
+                {/* Header - EXACT MATCH to Orders/Wishlist */}
+                <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/20">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                      Privacy & Security
+                    </h3>
+                    <p className="text-xs text-slate-500 font-medium">
+                      Manage your password and account protection
+                    </p>
+                  </div>
+                  <div className="h-10 w-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center text-blue-600">
+                    <ShieldCheck size={20} />
+                  </div>
+                </div>
+
+                <div className="p-6 space-y-6">
+                  {/* Section 1: Password Change */}
+                  <div className="group border border-slate-100 dark:border-slate-800 rounded-2xl p-5 hover:border-blue-200 dark:hover:border-blue-900/50 transition-all">
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="flex gap-4">
+                        <div className="h-12 w-12 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center flex-shrink-0">
+                          <Lock size={20} className="text-slate-400" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                            Password
+                          </h4>
+                          <p className="text-xs text-slate-500 mt-1">
+                            Last changed:{" "}
+                            {user.passwordChangedAt
+                              ? new Date(
+                                  user.passwordChangedAt
+                                ).toLocaleDateString()
+                              : "Never"}
+                          </p>
+                        </div>
+                      </div>
+                      <button className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline uppercase tracking-widest">
+                        Update
+                      </button>
+                    </div>
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                      Ensure your account is using a long, random password to
+                      stay secure.
+                    </p>
+                  </div>
+
+                  {/* Section 2: Two-Factor Authentication */}
+                  <div className="group border border-slate-100 dark:border-slate-800 rounded-2xl p-5 hover:border-blue-200 dark:hover:border-blue-900/50 transition-all">
+                    <div className="flex justify-between items-center">
+                      <div className="flex gap-4">
+                        <div className="h-12 w-12 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center flex-shrink-0">
+                          <ShieldCheck size={20} className="text-slate-400" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                            Two-Factor Authentication
+                          </h4>
+                          <p className="text-xs text-slate-500 mt-1">
+                            Add an extra layer of security to your account.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" className="sr-only peer" />
+                        <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Section 3: Danger Zone */}
+                  <div className="mt-10 pt-6 border-t border-slate-100 dark:border-slate-800">
+                    <h4 className="text-xs font-black text-red-500 uppercase tracking-[0.2em] mb-4">
+                      Danger Zone
+                    </h4>
+                    <div className="border border-red-100 dark:border-red-900/20 bg-red-50/30 dark:bg-red-900/10 rounded-2xl p-5 flex flex-col md:flex-row justify-between items-center gap-4">
+                      <div>
+                        <h5 className="text-sm font-bold text-red-600 dark:text-red-400">
+                          Delete Account
+                        </h5>
+                        <p className="text-xs text-red-500/70 mt-1">
+                          Once you delete your account, there is no going back.
+                          Please be certain.
+                        </p>
+                      </div>
+                      <button className="whitespace-nowrap bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg font-bold text-xs uppercase tracking-widest transition-all active:scale-95 shadow-sm shadow-red-200 dark:shadow-none">
+                        Deactivate
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
         </div>
