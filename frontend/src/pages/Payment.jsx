@@ -9,7 +9,7 @@ import {
   Info,
   CheckCircle2,
   LocateFixed,
-  ShoppingBag
+  ShoppingBag,
 } from "lucide-react";
 import PaymentHeader from "../components/PaymentHeader";
 import PaymentFooter from "../components/PaymentFooter";
@@ -30,17 +30,29 @@ export default function CheckoutPage() {
     landmark: "",
     city: "",
     pincode: "",
-    phone: ""
+    phone: "",
   });
 
   // Handle calculation for multiple items
-  const totalMRP = items.reduce((acc, item) => acc + (item.mrp || item.price) * item.quantity, 0);
-  const totalDiscount = items.reduce((acc, item) => acc + ((item.mrp || item.price) - item.price) * item.quantity, 0);
-  const subtotal = items.reduce((acc, item) => acc + item.price * item.quantity, 0);
-  
+  const totalMRP = items.reduce(
+    (acc, item) => acc + (item.mrp || item.price) * item.quantity,
+    0
+  );
+  const totalDiscount = items.reduce(
+    (acc, item) =>
+      acc + ((item.mrp || item.price) - item.price) * item.quantity,
+    0
+  );
+  const subtotal = items.reduce(
+    (acc, item) => acc + item.price * item.quantity,
+    0
+  );
+
   const platformFee = items.length > 0 ? 3 : 0;
   const deliveryFee = subtotal > 500 || items.length === 0 ? 0 : 40;
   const totalPayable = subtotal + platformFee + deliveryFee;
+
+  const [saveAddress, setSaveAddress] = useState(false);
 
   const handleInputChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -51,9 +63,14 @@ export default function CheckoutPage() {
       toast.error("Please fill in the required shipping details");
       return;
     }
-    
+
     // Logic to send to Backend
-    console.log("Order Data:", { items, address: formData, paymentMode, totalPayable });
+    console.log("Order Data:", {
+      items,
+      address: formData,
+      paymentMode,
+      totalPayable,
+    });
     toast.success("Order Placed Successfully!");
     // navigate("/order-success");
   };
@@ -62,8 +79,13 @@ export default function CheckoutPage() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-[#030712]">
         <ShoppingBag size={64} className="text-slate-300 mb-4" />
-        <h2 className="text-xl font-bold dark:text-white">Your checkout is empty</h2>
-        <button onClick={() => navigate("/")} className="mt-4 text-indigo-600 font-bold hover:underline">
+        <h2 className="text-xl font-bold dark:text-white">
+          Your checkout is empty
+        </h2>
+        <button
+          onClick={() => navigate("/")}
+          className="mt-4 text-indigo-600 font-bold hover:underline"
+        >
           Return to Shop
         </button>
       </div>
@@ -81,39 +103,53 @@ export default function CheckoutPage() {
           </h1>
           <button
             onClick={() => navigate(-1)}
-            className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 text-sm font-bold transition-colors"
+            className="flex items-center gap-2 text-slate-500 hover:text-orange-600 dark:hover:text-orange-400 text-sm font-bold transition-colors"
           >
             <ChevronLeft size={18} /> Back to Shopping
           </button>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
-          
           {/* LEFT SIDE: SHIPPING & PAYMENT */}
           <div className="lg:col-span-7 space-y-8">
-            
             {/* 1. Item Summary (New Section) */}
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
-               <div className="flex items-center gap-3 mb-6">
+              <div className="flex items-center gap-3 mb-6">
                 <div className="w-8 h-8 rounded-lg bg-orange-50 dark:bg-orange-500/10 flex items-center justify-center text-orange-600">
                   <ShoppingBag size={18} />
                 </div>
                 <h2 className="font-bold text-slate-900 dark:text-white uppercase tracking-wider text-xs">
-                  Order Summary ({items.length} {items.length > 1 ? 'Items' : 'Item'})
+                  Order Summary ({items.length}{" "}
+                  {items.length > 1 ? "Items" : "Item"})
                 </h2>
               </div>
               <div className="space-y-4 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
                 {items.map((item, index) => (
-                  <div key={index} className="flex items-center gap-4 p-3 rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800">
-                    <img src={item.image} alt={item.name} className="w-16 h-16 object-contain rounded-lg bg-white" />
+                  <div
+                    key={index}
+                    className="flex items-center gap-4 p-3 rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800"
+                  >
+                    <img
+                      src={item.image}
+                      alt={item.name}
+                      className="w-16 h-16 object-contain rounded-lg bg-white"
+                    />
                     <div className="flex-1">
-                      <h4 className="text-sm font-bold dark:text-white line-clamp-1">{item.name}</h4>
-                      <p className="text-[11px] font-bold text-slate-500">QTY: {item.quantity}</p>
+                      <h4 className="text-sm font-bold dark:text-white line-clamp-1">
+                        {item.name}
+                      </h4>
+                      <p className="text-[11px] font-bold text-slate-500">
+                        QTY: {item.quantity}
+                      </p>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm font-black dark:text-white">₹{(item.price * item.quantity).toLocaleString()}</p>
+                      <p className="text-sm font-black dark:text-white">
+                        ₹{(item.price * item.quantity).toLocaleString()}
+                      </p>
                       {item.mrp > item.price && (
-                         <p className="text-[10px] text-slate-400 line-through">₹{(item.mrp * item.quantity).toLocaleString()}</p>
+                        <p className="text-[10px] text-slate-400 line-through">
+                          ₹{(item.mrp * item.quantity).toLocaleString()}
+                        </p>
                       )}
                     </div>
                   </div>
@@ -134,7 +170,15 @@ export default function CheckoutPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <button
+                type="button"
+                className="bg-indigo-600 m-1 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 font-bold text-sm mb-6 shadow-sm transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
+              >
+                <LocateFixed size={18} />
+                "Use my current location"
+              </button>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 ">
                 <div className="md:col-span-2">
                   <input
                     name="fullName"
@@ -169,6 +213,40 @@ export default function CheckoutPage() {
                   className="w-full px-4 py-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 outline-none text-sm dark:text-white font-medium"
                 />
               </div>
+              <div
+                onClick={() => setSaveAddress(!saveAddress)}
+                className="flex px-2 mt-2 items-center gap-3 cursor-pointer group pt-2"
+              >
+                <div
+                  className={`
+    w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all duration-200
+    ${
+      saveAddress
+        ? "bg-indigo-600 border-indigo-600 scale-110"
+        : "border-slate-300 dark:border-slate-700 scale-100"
+    }
+  `}
+                >
+                  {saveAddress && (
+                    <svg
+                      className="w-3 h-3 text-white"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M5 13l4 4L19 7"
+                      />
+                    </svg>
+                  )}
+                </div>
+                <span className="text-xs font-bold text-slate-500 uppercase">
+                  Save Address
+                </span>
+              </div>
             </div>
 
             {/* 3. Payment Method */}
@@ -183,14 +261,40 @@ export default function CheckoutPage() {
               </div>
               <div className="space-y-3">
                 {["upi", "card", "cod"].map((mode) => (
-                  <label key={mode} className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${paymentMode === mode ? "border-indigo-600 bg-indigo-50/30 dark:bg-indigo-500/5" : "border-slate-100 dark:border-slate-800"}`}>
+                  <label
+                    key={mode}
+                    className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                      paymentMode === mode
+                        ? "border-indigo-600 bg-indigo-50/30 dark:bg-indigo-500/5"
+                        : "border-slate-100 dark:border-slate-800"
+                    }`}
+                  >
                     <div className="flex items-center gap-4">
-                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${paymentMode === mode ? "border-indigo-600" : "border-slate-300"}`}>
-                        {paymentMode === mode && <div className="w-2.5 h-2.5 bg-indigo-600 rounded-full" />}
+                      <div
+                        className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                          paymentMode === mode
+                            ? "border-indigo-600"
+                            : "border-slate-300"
+                        }`}
+                      >
+                        {paymentMode === mode && (
+                          <div className="w-2.5 h-2.5 bg-indigo-600 rounded-full" />
+                        )}
                       </div>
-                      <span className="text-sm font-bold dark:text-white uppercase tracking-tight">{mode === 'upi' ? 'UPI / Netbanking' : mode === 'card' ? 'Credit / Debit Card' : 'Cash on Delivery'}</span>
+                      <span className="text-sm font-bold dark:text-white uppercase tracking-tight">
+                        {mode === "upi"
+                          ? "UPI / Netbanking"
+                          : mode === "card"
+                          ? "Credit / Debit Card"
+                          : "Cash on Delivery"}
+                      </span>
                     </div>
-                    <input type="radio" className="hidden" checked={paymentMode === mode} onChange={() => setPaymentMode(mode)} />
+                    <input
+                      type="radio"
+                      className="hidden"
+                      checked={paymentMode === mode}
+                      onChange={() => setPaymentMode(mode)}
+                    />
                   </label>
                 ))}
               </div>
@@ -201,41 +305,63 @@ export default function CheckoutPage() {
           <div className="lg:col-span-5 lg:sticky lg:top-24">
             <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xl">
               <div className="p-6 border-b border-slate-100 dark:border-slate-800">
-                <h2 className="font-black text-slate-900 dark:text-white uppercase tracking-widest text-xs">Price Details</h2>
+                <h2 className="font-black text-slate-900 dark:text-white uppercase tracking-widest text-xs">
+                  Price Details
+                </h2>
               </div>
 
               <div className="p-6 space-y-4">
                 <div className="flex justify-between text-sm font-medium">
-                  <span className="text-slate-500">Price ({items.length} items)</span>
-                  <span className="text-slate-900 dark:text-white">₹{totalMRP.toLocaleString()}</span>
+                  <span className="text-slate-500">
+                    Price ({items.length} items)
+                  </span>
+                  <span className="text-slate-900 dark:text-white">
+                    ₹{totalMRP.toLocaleString()}
+                  </span>
                 </div>
                 <div className="flex justify-between text-sm font-medium">
                   <span className="text-slate-500">Discount</span>
-                  <span className="text-green-500">- ₹{totalDiscount.toLocaleString()}</span>
+                  <span className="text-green-500">
+                    - ₹{totalDiscount.toLocaleString()}
+                  </span>
                 </div>
                 <div className="flex justify-between text-sm font-medium">
                   <span className="text-slate-500">Platform Fee</span>
-                  <span className="text-slate-900 dark:text-white">₹{platformFee}</span>
+                  <span className="text-slate-900 dark:text-white">
+                    ₹{platformFee}
+                  </span>
                 </div>
                 <div className="flex justify-between text-sm font-medium border-b border-dashed border-slate-200 dark:border-slate-800 pb-4">
                   <span className="text-slate-500">Delivery Charges</span>
-                  <span className={deliveryFee === 0 ? "text-green-500 font-bold" : "text-slate-900 dark:text-white"}>
+                  <span
+                    className={
+                      deliveryFee === 0
+                        ? "text-green-500 font-bold"
+                        : "text-slate-900 dark:text-white"
+                    }
+                  >
                     {deliveryFee === 0 ? "FREE" : `₹${deliveryFee}`}
                   </span>
                 </div>
                 <div className="flex justify-between pt-2">
-                  <span className="text-lg font-bold text-slate-900 dark:text-white">Total Payable</span>
-                  <span className="text-xl font-black text-slate-900 dark:text-white">₹{totalPayable.toLocaleString()}</span>
+                  <span className="text-lg font-bold text-slate-900 dark:text-white">
+                    Total Payable
+                  </span>
+                  <span className="text-xl font-black text-slate-900 dark:text-white">
+                    ₹{totalPayable.toLocaleString()}
+                  </span>
                 </div>
               </div>
 
               <div className="bg-green-500/10 p-4 mx-6 mb-6 rounded-2xl flex items-center gap-3 border border-green-500/20">
                 <CheckCircle2 size={18} className="text-green-500" />
-                <p className="text-xs font-bold text-green-600">You will save ₹{totalDiscount.toLocaleString()} on this order</p>
+                <p className="text-xs font-bold text-green-600">
+                  You will save ₹{totalDiscount.toLocaleString()} on this order
+                </p>
               </div>
 
               <div className="p-6 pt-0">
-                <button 
+                <button
                   onClick={handlePlaceOrder}
                   className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-2xl shadow-lg shadow-indigo-500/20 transition-all active:scale-95 flex items-center justify-center gap-2 uppercase tracking-widest text-xs mb-4"
                 >
