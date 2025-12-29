@@ -92,7 +92,7 @@ export default function ProductDetails() {
       if (res.ok) {
         window.dispatchEvent(new Event("cartUpdated"));
         if (isBuyNow) {
-          navigate("/cart");
+          navigate("/payment");
         } else {
           showSuccess("Added to cart!");
         }
