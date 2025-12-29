@@ -171,10 +171,10 @@ export default function Navbar() {
           {!isLoggedIn ? (
             <Link
               to="/login"
-              className="flex items-center gap-1 font-bold hover:text-orange-500"
+              className="hidden md:block font-bold text-md text-slate-600 dark:text-slate-300 hover:text-orange-500 transition-colors"
             >
-              <User size={18} />
-              <span>Login</span>
+              <User size={16} className="inline-block mr-1" />
+              Login
             </Link>
           ) : (
             <div className="relative group flex items-center h-full">
