@@ -171,9 +171,9 @@ export default function Navbar() {
           {!isLoggedIn ? (
             <Link
               to="/login"
-              className="hidden md:block font-bold text-md text-slate-600 dark:text-slate-300 hover:text-orange-500 transition-colors"
+              className="hidden md:block font-bold text-lg text-slate-600 dark:text-slate-300 hover:text-orange-500 transition-colors"
             >
-              <User size={16} className="inline-block mr-1" />
+              <User size={20} className="inline-block mr-1" />
               Login
             </Link>
           ) : (
@@ -225,7 +225,7 @@ export default function Navbar() {
             to="/cart"
             className="relative group flex items-center gap-1 font-bold hover:text-orange-500"
           >
-            <ShoppingCart size={22} />
+            <ShoppingCart size={24} />
             {cartCount > 0 && (
               <span className="absolute -top-2 -right-2 bg-orange-500 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-white dark:border-[#030712]">
                 {cartCount}
@@ -237,7 +237,7 @@ export default function Navbar() {
             to="/Seller/Landing"
             className="hidden lg:flex px-5 py-2.5 rounded-2xl border-2 border-orange-500/20 text-orange-500 hover:bg-orange-500 hover:text-white font-black text-xs uppercase tracking-widest transition-all"
           >
-            <Store size={16} className="mr-2" /> Sell
+            <Store size={16} className="mr-2" /> Become a seller
           </Link>
         </div>
       </div>

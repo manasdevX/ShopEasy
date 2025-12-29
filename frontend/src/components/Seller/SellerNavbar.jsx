@@ -288,9 +288,9 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
               <div className="flex items-center gap-3">
                 <Link
                   to="/Seller/login"
-                  className="hidden md:block font-bold text-md text-slate-600 dark:text-slate-300 hover:text-orange-500 transition-colors"
+                  className="hidden md:block font-bold text-lg text-slate-600 dark:text-slate-300 hover:text-orange-500 transition-colors"
                 >
-                  <User size={18} className="inline-block mr-1" />
+                  <User size={20} className="inline-block mr-1" />
                   Login
                 </Link>
               </div>
