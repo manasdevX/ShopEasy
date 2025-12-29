@@ -335,13 +335,9 @@ export default function ProductDetails() {
                   </div>
                 </div>
 
-                {/* ✅ CORRECTED LINK */}
-                <Link
-                  to={`/product/${id}/Reviews`}
-                  className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 hover:border-orange-500 dark:hover:border-orange-500 text-slate-900 dark:text-white font-black py-2.5 px-6 rounded-xl transition-all active:scale-95 text-xs uppercase tracking-widest shadow-sm"
-                >
+                <button className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 hover:border-orange-500 dark:hover:border-orange-500 text-slate-900 dark:text-white font-black py-2.5 px-6 rounded-xl transition-all active:scale-95 text-xs uppercase tracking-widest shadow-sm" onClick={() => window.location.href = '/product/${product._id}/reviews'}>
                   Rate Product
-                </Link>
+                </button>
               </div>
 
               {/* VISUAL RATING BARS */}
