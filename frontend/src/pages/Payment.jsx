@@ -14,13 +14,12 @@ import {
 import PaymentHeader from "../components/PaymentHeader";
 import PaymentFooter from "../components/PaymentFooter";
 import { toast } from "react-hot-toast";
+import {showSuccess , showError} from "../utils/toast"
 
 export default function CheckoutPage() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Handle both single product and cart array
-  // We expect state.items to be an array: [{_id, name, price, mrp, image, quantity}]
   const items = location.state?.items || [];
 
   const [paymentMode, setPaymentMode] = useState("upi");
@@ -71,7 +70,7 @@ export default function CheckoutPage() {
       paymentMode,
       totalPayable,
     });
-    toast.success("Order Placed Successfully!");
+    showSuccess("Order Placed Successfully!");
     // navigate("/order-success");
   };
 

@@ -5,14 +5,15 @@ import { Toaster } from "react-hot-toast";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
-import Update from "./pages/UpdatePassword"
+import UpdatePassword from "./pages/UpdatePassword"
+import UpdateEmail from "./pages/UpdateEmail"
 import Account from "./pages/Account";
 import ForgotPassword from "./pages/ForgotPassword";
 import SearchResults from "./pages/SearchResults";
 import ProductDetails from "./pages/ProductDetails";
 import Cart from "./pages/Cart"; // ✅ Added Cart Import
 import Payment from "./pages/Payment";
-import Reviews from "./pages/Reviews.jsx";
+import Reviews from "./pages/Reviews";
 
 // --- SELLER PAGES ---
 import SellerLanding from "./pages/Seller/Landing";
@@ -50,7 +51,8 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
-        <Route path="/update-password" element={<Update />} />
+        <Route path="/update-password" element={<UpdatePassword />} />
+        <Route path="/update-email" element={<UpdateEmail />} />
         <Route path="/account" element={<Account />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
 

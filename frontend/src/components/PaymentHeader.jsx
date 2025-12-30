@@ -1,13 +1,17 @@
 import React from 'react';
 import { ShieldCheck, Lock, Sparkles } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const ShopEasyHeader = () => {
+
+  const navigate = useNavigate();
+
   return (
     <header className="bg-white dark:bg-[#030712] border-b border-gray-100 dark:border-gray-800 px-6 py-3 flex items-center gap-6">
       <div className="max-w-6xl mx-auto w-full px-6 flex items-center justify-between">
         
         {/* BRAND LOGO AREA */}
-        <div className="flex flex-col items-start leading-none group cursor-pointer">
+        <div className="flex flex-col items-start leading-none group cursor-pointer" onClick={() => navigate("/")}>
           <span className="text-orange-500 text-2xl font-black tracking-tighter shrink-0">
             ShopEasy
           </span>

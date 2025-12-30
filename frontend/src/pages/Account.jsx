@@ -1409,27 +1409,37 @@ export default function Account() {
                     </p>
                   </div>
 
-                  {/* Section 2: Two-Factor Authentication */}
+                  {/* Section 2: Change Email */}
                   <div className="group border border-slate-100 dark:border-slate-800 rounded-2xl p-5 hover:border-blue-200 dark:hover:border-blue-900/50 transition-all">
-                    <div className="flex justify-between items-center">
+                    <div className="flex justify-between items-start mb-4">
                       <div className="flex gap-4">
                         <div className="h-12 w-12 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center flex-shrink-0">
-                          <ShieldCheck size={20} className="text-slate-400" />
+                          <Mail size={20} className="text-slate-400" />
                         </div>
                         <div>
                           <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                            Two-Factor Authentication
+                            Email Address
                           </h4>
                           <p className="text-xs text-slate-500 mt-1">
-                            Add an extra layer of security to your account.
+                            Current:{" "}
+                            <span className="font-medium text-slate-700 dark:text-slate-300">
+                              {user.email}
+                            </span>
                           </p>
                         </div>
                       </div>
-                      <div className="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" className="sr-only peer" />
-                        <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                      </div>
+                      <Link
+                        to="/update-email"
+                        state={{ user }} 
+                        className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline uppercase tracking-widest"
+                      >
+                        Update
+                      </Link>
                     </div>
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                      Your email address is used for order notifications,
+                      security alerts, and account recovery.
+                    </p>
                   </div>
 
                   {/* Section 3: Danger Zone */}
