@@ -76,7 +76,7 @@ export default function CheckoutPage() {
       totalPayable,
     });
     showSuccess("Order Placed Successfully!");
-    // navigate("/order-success");
+    navigate("/OrderSummary");
   };
 
   if (items.length === 0) {
