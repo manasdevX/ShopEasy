@@ -1,7 +1,6 @@
 import express from "express";
 
-// 1. 👇 Import the Auth Controller (This was missing)
-// Make sure your auth controller file is named 'auth.controller.js'
+// 1. Import Auth Controller
 import {
   sendEmailOtp,
   sendMobileOtp,
@@ -11,7 +10,7 @@ import {
   googleAuth,
   sendForgotPasswordOTP,
   resetPasswordWithOTP,
-} from "../controllers/auth.controller.js";
+} from "../controllers/auth.controller.js"; // Ensure filename matches your project
 
 // 2. Import User Profile Controller
 import {
@@ -22,16 +21,17 @@ import {
   updateAddress,
   setDefaultAddress,
   deleteUserAccount,
-} from "../controllers/user.controller.js";
+  addToWishlist, // ✅ NEW
+  removeFromWishlist, // ✅ NEW
+} from "../controllers/user.controller.js"; // Ensure filename matches your project
 
-// 3. Import Middleware (Keep the path that was working for you!)
-// If your folder is 'middleware' (singular), use that.
+// 3. Import Middleware
 import { protect } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
 /* ======================================================
-   A. AUTH ROUTES (The missing part causing 404)
+   A. AUTH ROUTES
 ====================================================== */
 router.post("/register", registerVerifiedUser);
 router.post("/login", loginUser);
@@ -45,13 +45,17 @@ router.post("/forgot-password", sendForgotPasswordOTP);
 router.post("/reset-password", resetPasswordWithOTP);
 
 /* ======================================================
-   B. PROFILE & ADDRESS ROUTES (Existing)
+   B. PROFILE & ACCOUNT ROUTES
 ====================================================== */
 router
   .route("/profile")
-  .get(protect, getUserProfile)
-  .put(protect, updateUserProfile);
+  .get(protect, getUserProfile) // Fetch Profile + Wishlist + Addresses
+  .put(protect, updateUserProfile) // Update Info + Primary Address
+  .delete(protect, deleteUserAccount); // Delete Account
 
+/* ======================================================
+   C. ADDRESS MANAGEMENT ROUTES
+====================================================== */
 router.route("/address").post(protect, addAddress);
 
 router
@@ -60,6 +64,13 @@ router
   .delete(protect, deleteAddress);
 
 router.route("/address/:id/default").put(protect, setDefaultAddress);
-router.delete("/profile", protect, deleteUserAccount);
+
+/* ======================================================
+   D. WISHLIST ROUTES (New)
+====================================================== */
+router
+  .route("/wishlist/:id")
+  .post(protect, addToWishlist) // Add item
+  .delete(protect, removeFromWishlist); // Remove item
 
 export default router;
