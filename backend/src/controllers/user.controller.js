@@ -412,3 +412,69 @@ export const verifyUserPassword = async (req, res) => {
 };
 
 // ... existing functions (updateUserPassword, etc.)
+
+// ... existing imports
+
+/* ======================================================
+   12. UPDATE EMAIL
+   Route: PUT /api/user/update-email
+====================================================== */
+// ... existing imports
+
+/* ======================================================
+   12. UPDATE EMAIL
+   Route: PUT /api/user/update-email
+====================================================== */
+/* ======================================================
+   12. UPDATE EMAIL (Fixed & Safer)
+   Route: PUT /api/user/update-email
+====================================================== */
+export const updateUserEmail = async (req, res) => {
+  try {
+
+    const { newEmail, password } = req.body;
+    
+    // 1. Validate Input Presence
+    if (!newEmail || !password) {
+      return res.status(400).json({ 
+        message: "Please provide both new email and your current password." 
+      });
+    }
+
+    // 2. Get user with password for verification
+    const user = await User.findById(req.user._id).select("+password");
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // 3. Verify Password (Safe check)
+    const isMatch = await user.matchPassword(password);
+    if (!isMatch) {
+      return res.status(401).json({ message: "Incorrect password" });
+    }
+
+    // 4. Check if new email is already taken
+    const emailExists = await User.findOne({ email: newEmail });
+    if (emailExists) {
+      return res.status(400).json({ message: "Email address already in use" });
+    }
+
+    // 5. Update Email
+    user.email = newEmail;
+    await user.save();
+
+    // 6. Return updated user info
+    res.json({
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      profilePicture: user.profilePicture,
+    });
+
+  } catch (error) {
+    console.error("UPDATE EMAIL ERROR:", error);
+    res.status(500).json({ message: "Server error updating email" });
+  }
+};
