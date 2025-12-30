@@ -18,7 +18,6 @@ const ShopEasyFooter = () => {
           </div>
         </div>
     </footer>
-  );
-};
-
+  )
+}
 export default ShopEasyFooter;
