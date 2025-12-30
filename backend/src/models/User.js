@@ -38,7 +38,6 @@ const cartItemSchema = new mongoose.Schema(
       required: true,
       min: 1,
     },
-    // Optional: store price at time of adding to cart if needed
     price: { type: Number },
   },
   { _id: false }
@@ -68,8 +67,7 @@ const userSchema = new mongoose.Schema(
     },
     phone: {
       type: String,
-      unique: true,
-      sparse: true, // Allows null/duplicate nulls
+      sparse: true, // Allows null/duplicate nulls for OAuth users
     },
 
     // --- PROFILE PICTURE ---
@@ -97,7 +95,7 @@ const userSchema = new mongoose.Schema(
       default: false,
     },
     passwordChangedAt: {
-      type: Date, // Tracks when password was last changed for security invalidation
+      type: Date,
     },
 
     /* =========================
@@ -116,20 +114,16 @@ const userSchema = new mongoose.Schema(
     emailVerificationToken: { type: String },
     emailVerificationExpire: { type: Date },
 
-    isMobileVerified: {
-      type: Boolean,
-      default: false,
-    },
-    mobileOtp: { type: String },
-    mobileOtpExpire: { type: Date },
-
     /* =========================
        📦 USER DATA
     ========================= */
+    // ✅ Updated Address Management
     addresses: [addressSchema],
 
+    // ✅ Embedded Cart (Optional if using separate Cart model)
     cart: [cartItemSchema],
 
+    // ✅ Wishlist Feature
     wishlist: [
       {
         type: mongoose.Schema.Types.ObjectId,
@@ -146,7 +140,7 @@ const userSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-    toJSON: { virtuals: true }, // Ensure virtuals are included when converting to JSON
+    toJSON: { virtuals: true },
     toObject: { virtuals: true },
   }
 );
@@ -172,7 +166,6 @@ userSchema.virtual("isSeller").get(function () {
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
 
-  // If password is modified, update the timestamp (but skip for new users)
   if (!this.isNew) {
     this.passwordChangedAt = Date.now() - 1000;
   }
@@ -196,12 +189,10 @@ userSchema.methods.changedPasswordAfter = function (JWTTimestamp) {
     );
     return JWTTimestamp < changedTimestamp;
   }
-  // False means password NOT changed
   return false;
 };
 
-// === CRITICAL FIX: PREVENT OVERWRITE ERROR ===
-// If mongoose.models.User exists, use it. Otherwise, create it.
+// Check if model exists to prevent overwrite error in HMR environments
 const User = mongoose.models.User || mongoose.model("User", userSchema);
 
 export default User;
