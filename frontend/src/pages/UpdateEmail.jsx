@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useNavigate, useLocation, Navigate } from "react-router-dom";
 import { Mail, ArrowLeft, Loader2, Lock } from "lucide-react";
 import { toast } from "react-hot-toast";
-import { showSuccess } from "../utils/toast";
+import { showError, showSuccess } from "../utils/toast";
 
 // COMPONENTS IMPORT
 import Navbar from "../components/Navbar";
@@ -26,9 +26,12 @@ export default function UpdateEmail() {
 
   const handleUpdateEmail = async (e) => {
     e.preventDefault();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(newEmail))
+      return showError("Invalid email address");
 
     if (!newEmail || !currentPassword) {
-      toast.error("Please fill in all fields");
+      showError("Please fill in all fields");
       return;
     }
 
@@ -54,22 +57,22 @@ export default function UpdateEmail() {
       const data = await res.json();
 
       if (res.ok) {
-        showSuccess("Email updated successfully!");
-
+        
         // Update local storage so Navbar and other components reflect the change
         const updatedUser = { ...user, email: newEmail };
         localStorage.setItem("user", JSON.stringify(updatedUser));
-
+        
         // Dispatch event to update Navbar immediately
         window.dispatchEvent(new Event("user-info-updated"));
-
+        
+        showSuccess("Email updated successfully!");
         navigate("/account");
       } else {
-        toast.error(data.message || "Failed to update email");
+        showError(data.message || "Failed to update email");
       }
     } catch (err) {
       console.error(err);
-      toast.error("Server connection failed. Please try again.");
+      showError("Server connection failed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -126,7 +129,7 @@ export default function UpdateEmail() {
                 />
                 <input
                   required
-                  type="email"
+                  // type="email"
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
                   placeholder="Enter new email"

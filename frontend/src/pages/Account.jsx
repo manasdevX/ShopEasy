@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link , useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { showSuccess, showError } from "../utils/toast";
 import Footer from "../components/Footer";
@@ -14,6 +14,7 @@ import {
   Heart,
   Lock,
   Globe,
+  X,
   Check,
   AlertCircle,
   Loader2,
@@ -24,10 +25,13 @@ import {
   Trash2,
   Home,
   Briefcase,
+  Star,
+  Info,
+  LocateFixed,
   Package,
   ShoppingBag,
-  LocateFixed,
 } from "lucide-react";
+import toast from "react-hot-toast";
 
 export default function Account() {
   const fileInputRef = useRef(null);
@@ -35,6 +39,7 @@ export default function Account() {
   // STATE
   const [activeTab, setActiveTab] = useState("profile");
   const [isEditing, setIsEditing] = useState(false);
+  const navigate = useNavigate();
 
   // Address State
   const [showAddAddress, setShowAddAddress] = useState(false);
@@ -78,6 +83,7 @@ export default function Account() {
   });
 
   const [formData, setFormData] = useState({ ...user });
+  const [errors, setErrors] = useState({});
   const [status, setStatus] = useState("loading");
 
   // ================= FETCH LOGIC =================
@@ -175,7 +181,7 @@ export default function Account() {
     }
   };
 
-  // ================= GEOLOCATION HANDLER =================
+  // ================= GEOLOCATION HANDLER (HIGH ACCURACY) =================
   const handleUseCurrentLocation = () => {
     if (!navigator.geolocation) {
       showError("Geolocation is not supported by your browser");
@@ -184,6 +190,7 @@ export default function Account() {
 
     setIsLocating(true);
 
+    // Request high accuracy from the browser
     const options = {
       enableHighAccuracy: true,
       timeout: 10000,
@@ -194,6 +201,7 @@ export default function Account() {
       async (position) => {
         const { latitude, longitude } = position.coords;
         try {
+          // Use OpenStreetMap Nominatim with jsonv2 for detailed address breakdown
           const res = await fetch(
             `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`
           );
@@ -201,6 +209,8 @@ export default function Account() {
 
           if (data && data.address) {
             const addr = data.address;
+
+            // 👇 1. Construct DETAILED Street Address (Flipkart Style)
             const streetComponents = [
               addr.house_number,
               addr.building,
@@ -215,9 +225,11 @@ export default function Account() {
               addr.city_district,
             ].filter((part) => part);
 
+            // Remove duplicates and join with commas
             const uniqueStreetComponents = [...new Set(streetComponents)];
             const fullStreet = uniqueStreetComponents.join(", ");
 
+            // 👇 2. Determine City (Fallback cascade)
             const city =
               addr.city ||
               addr.town ||
@@ -249,7 +261,7 @@ export default function Account() {
         setIsLocating(false);
         showError("Location access denied. Please enable GPS.");
       },
-      options
+      options // Pass high accuracy options
     );
   };
 
@@ -304,15 +316,23 @@ export default function Account() {
       return;
     }
 
+    // Validate Phone Number
     if (!phoneRegex.test(newAddress.phone)) {
       showError("Enter a valid 10-digit phone number");
       return;
     }
 
+    // Validate Pincode
     if (!pincodeRegex.test(newAddress.pincode)) {
       showError("Enter a valid 6-digit pincode");
       return;
     }
+
+    // Validate Street Address Length
+    // if (newAddress.street.trim().length < 5) {
+    //   showError("Street address is too short");
+    //   return;
+    // }
 
     setIsAddressSaving(true);
 
@@ -508,54 +528,25 @@ export default function Account() {
     }
   };
 
-  const handleDeleteAccount = async () => {
-    if (
-      !window.confirm(
-        "Are you absolutely sure? This will delete your account and all data."
-      )
-    )
-      return;
-
-    try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(`${API_URL}/api/user/profile`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const data = await res.json();
-
-      if (res.ok) {
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-        localStorage.removeItem("cart");
-        window.location.href = "/";
-        showSuccess("Account deleted successfully");
-      } else {
-        showError(data.message || "Failed to delete account");
-      }
-    } catch (error) {
-      console.error(error);
-      showError("Server error. Please try again.");
-    }
-  };
-
+  // 👇 UPDATED: Handle QuotaExceededError
   const handleSave = async () => {
+    // 1. --- VALIDATION LOGIC ---
     const phoneRegex = /^[0-9]{10}$/;
     const pincodeRegex = /^[0-9]{6}$/;
 
+    // Validate Main Profile Phone (without +91)
     if (!phoneRegex.test(formData.phone)) {
       showError("Please enter a valid 10-digit profile phone number");
       return;
     }
 
+    // Validate Address Phone (if address exists)
     if (formData.address.phone && !phoneRegex.test(formData.address.phone)) {
       showError("Please enter a valid 10-digit address phone number");
       return;
     }
 
+    // Validate Pincode
     if (
       formData.address.pincode &&
       !pincodeRegex.test(formData.address.pincode)
@@ -589,6 +580,7 @@ export default function Account() {
       const data = await res.json();
 
       if (res.ok) {
+        // 1. Update State
         setUser({
           ...formData,
           avatar: data.profilePicture || formData.avatar,
@@ -600,18 +592,31 @@ export default function Account() {
           address: data.address,
         }));
 
+        // 2. Safe Local Storage Update
         try {
           const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
           const updatedUser = {
             ...storedUser,
             name: formData.name,
+            // Only save picture if it's NOT a massive base64 string, or try to save it
             profilePicture: data.profilePicture || formData.avatar,
           };
           localStorage.setItem("user", JSON.stringify(updatedUser));
         } catch (storageErr) {
-          // Fallback logic
+          console.warn(
+            "LocalStorage quota exceeded. Saving minimal user data."
+          );
+          // Fallback: Save ONLY name (skip image) to ensure Navbar updates
+          try {
+            const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
+            const safeUser = { ...storedUser, name: formData.name }; // Skip profilePicture
+            localStorage.setItem("user", JSON.stringify(safeUser));
+          } catch (e) {
+            console.error("Critical: LocalStorage completely full", e);
+          }
         }
 
+        // 3. Dispatch Custom Event
         window.dispatchEvent(new Event("user-info-updated"));
         window.dispatchEvent(new Event("storage"));
 
@@ -629,28 +634,25 @@ export default function Account() {
     }
   };
 
+  const handleRemoveImg = () => {};
+
   const navItems = [
     { id: "profile", label: "Profile Settings", icon: <User size={18} /> },
     { id: "orders", label: "Order History", icon: <Package size={18} /> },
     { id: "wishlist", label: "My Wishlist", icon: <Heart size={18} /> },
-    {
-      id: "addresses",
-      label: "Manage Addresses",
-      icon: <MapPin size={18} />,
-    },
-    {
-      id: "security",
-      label: "Privacy & Security",
-      icon: <Lock size={18} />,
-    },
+    { id: "addresses", label: "Manage Addresses", icon: <MapPin size={18} /> },
+    { id: "security", label: "Privacy & Security", icon: <Lock size={18} /> },
   ];
-
+  
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#030712] text-slate-900 dark:text-slate-100 transition-colors duration-300 font-sans">
       <Navbar />
 
+      {/* Reduced top/bottom padding from py-12 to py-8 */}
       <main className="max-w-6xl mx-auto px-6 py-8">
+        {/* Reduced gap between sidebar and main content from gap-8 to gap-6 */}
         <div className="flex flex-col lg:flex-row gap-6">
+          {/* SIDEBAR - Slightly tighter spacing */}
           <aside className="w-full lg:w-80 space-y-4">
             <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border border-slate-200 dark:border-slate-800 text-center transition-colors">
               <div className="relative w-28 h-28 mx-auto mb-4">
@@ -668,12 +670,20 @@ export default function Account() {
                   />
                 </div>
                 {isEditing && (
-                  <button
-                    onClick={() => fileInputRef.current.click()}
-                    className="absolute bottom-1 right-1 bg-orange-600 text-white p-2 rounded-full shadow-lg hover:bg-orange-500 transition-all active:scale-90 z-10"
-                  >
-                    <Pencil size={14} />
-                  </button>
+                  <div>
+                    <button
+                      onClick={() => fileInputRef.current.click()}
+                      className="absolute bottom-1 right-1 bg-orange-600 text-white p-2 rounded-full shadow-lg hover:bg-orange-500 transition-all active:scale-90 z-10"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                    <button
+                      onClick={() => handleRemoveImg()}
+                      className="absolute top-1 right-1 bg-red-500 text-white p-2 rounded-full shadow-lg hover:bg-orange-500 transition-all active:scale-90 z-10"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
                 )}
                 <input
                   autoComplete="off"
@@ -716,10 +726,13 @@ export default function Account() {
             </nav>
           </aside>
 
+          {/* MAIN CONTENT */}
           <div className="flex-1">
+            {/* 1. PROFILE SETTINGS */}
             {activeTab === "profile" && (
               <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden relative">
+                  {/* Header */}
                   <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between sticky top-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm z-10 transition-colors duration-500">
                     <div>
                       <h3 className="text-lg font-bold text-slate-900 dark:text-white">
@@ -733,10 +746,14 @@ export default function Account() {
                     </div>
 
                     <div className="flex items-center gap-2">
+                      {/* EDIT / SAVE BUTTON - Fixed Dark Mode Visibility */}
                       {!isEditing ? (
                         <button
                           onClick={() => setIsEditing(true)}
-                          className="flex items-center gap-2 px-5 py-2 rounded-xl font-bold text-xs bg-slate-900 text-white dark:bg-white dark:text-slate-900 hover:opacity-90 shadow-lg transition-all active:scale-95"
+                          className="flex items-center gap-2 px-5 py-2 rounded-xl font-bold text-xs 
+                   bg-slate-900 text-white 
+                   dark:bg-white dark:text-slate-900 
+                   hover:opacity-90 shadow-lg transition-all active:scale-95"
                         >
                           <Edit2 size={14} /> Edit
                         </button>
@@ -744,7 +761,10 @@ export default function Account() {
                         <button
                           onClick={handleSave}
                           disabled={status === "saving"}
-                          className="flex items-center gap-2 px-6 py-2 rounded-xl font-bold text-xs bg-orange-500 text-white shadow-lg hover:bg-orange-600 transition-all disabled:opacity-50 active:scale-95"
+                          className="flex items-center gap-2 px-6 py-2 rounded-xl font-bold text-xs 
+                   bg-orange-500 text-white shadow-lg 
+                   hover:bg-orange-600 transition-all 
+                   disabled:opacity-50 active:scale-95"
                         >
                           {status === "saving" ? (
                             <Loader2 className="animate-spin" size={14} />
@@ -754,16 +774,10 @@ export default function Account() {
                           Save
                         </button>
                       )}
-
-                      <button
-                        onClick={handleDeleteAccount}
-                        className="flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs bg-red-50 text-red-600 border border-red-100 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20 hover:bg-red-600 hover:text-white dark:hover:bg-red-600 dark:hover:text-white transition-all shadow-sm active:scale-95"
-                      >
-                        <Trash2 size={14} /> Delete Account
-                      </button>
                     </div>
                   </div>
 
+                  {/* Body - Compact */}
                   <div className="p-6 space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <InputField
@@ -876,6 +890,7 @@ export default function Account() {
               </div>
             )}
 
+            {/* 2. ORDER HISTORY TAB */}
             {activeTab === "orders" && (
               <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500 min-h-[500px]">
                 <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
@@ -917,6 +932,7 @@ export default function Account() {
                           className="group border border-slate-100 dark:border-slate-800 rounded-2xl p-5 hover:border-blue-200 dark:hover:border-blue-900/50 hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-all"
                         >
                           <div className="flex flex-col md:flex-row justify-between gap-4">
+                            {/* Order Info */}
                             <div className="flex gap-4">
                               <div className="h-16 w-16 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center flex-shrink-0">
                                 <ShoppingBag
@@ -959,6 +975,7 @@ export default function Account() {
                               </div>
                             </div>
 
+                            {/* Price & Action */}
                             <div className="flex flex-row md:flex-col justify-between md:items-end gap-2">
                               <div className="text-right">
                                 <p className="text-xs text-slate-400 font-medium">
@@ -984,8 +1001,10 @@ export default function Account() {
               </div>
             )}
 
+            {/* 3. WISHLIST TAB */}
             {activeTab === "wishlist" && (
               <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500 min-h-[500px]">
+                {/* Header - Matches Order History Style */}
                 <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
                   <h3 className="text-lg font-bold text-slate-900 dark:text-white">
                     My Wishlist
@@ -997,6 +1016,7 @@ export default function Account() {
 
                 <div className="p-6">
                   {user.wishlist.length === 0 ? (
+                    /* Empty State - Matches Order History Style */
                     <div className="flex flex-col items-center justify-center py-20 text-center">
                       <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-full mb-4">
                         <Heart
@@ -1018,6 +1038,7 @@ export default function Account() {
                       </Link>
                     </div>
                   ) : (
+                    /* Wishlist Grid */
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {user.wishlist.map((product) => (
                         <div
@@ -1025,14 +1046,11 @@ export default function Account() {
                           className="group border border-slate-100 dark:border-slate-800 rounded-2xl p-4 hover:border-blue-200 dark:hover:border-blue-900/50 hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-all"
                         >
                           <div className="flex justify-between gap-4">
+                            {/* Product Info */}
                             <div className="flex gap-4">
                               <div className="h-20 w-20 bg-slate-100 dark:bg-slate-800 rounded-xl overflow-hidden flex-shrink-0">
                                 <img
-                                  src={
-                                    product.thumbnail ||
-                                    product.images?.[0] ||
-                                    product.image
-                                  }
+                                  src={product.image}
                                   alt={product.name}
                                   className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                                 />
@@ -1060,6 +1078,7 @@ export default function Account() {
                               </div>
                             </div>
 
+                            {/* Price & Action */}
                             <div className="flex flex-col justify-between items-end">
                               <div className="text-right">
                                 <p className="text-xs text-slate-400 font-medium">
@@ -1086,6 +1105,7 @@ export default function Account() {
               </div>
             )}
 
+            {/* 4. MANAGE ADDRESSES TAB */}
             {activeTab === "addresses" && (
               <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500 min-h-[500px]">
                 <div className="p-6 border-b border-slate-100 dark:border-slate-800">
@@ -1107,6 +1127,7 @@ export default function Account() {
                         {editingAddressId ? "Edit Address" : "Add New Address"}
                       </h4>
 
+                      {/* 👇 "Use my current location" Button (Left Aligned & Compact) */}
                       <button
                         onClick={handleUseCurrentLocation}
                         disabled={isLocating}
@@ -1270,6 +1291,7 @@ export default function Account() {
                     </div>
                   )}
 
+                  {/* ADDRESS LIST */}
                   <div className="mt-6 space-y-4">
                     {user.addresses && user.addresses.length > 0 ? (
                       user.addresses.map((addr, index) => {
@@ -1356,8 +1378,10 @@ export default function Account() {
               </div>
             )}
 
+            {/* 5. PRIVACY & SECURITY TAB */}
             {activeTab === "security" && (
               <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500 min-h-[500px]">
+                {/* Header - EXACT MATCH to Orders/Wishlist */}
                 <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/20">
                   <div>
                     <h3 className="text-lg font-bold text-slate-900 dark:text-white">
@@ -1373,11 +1397,12 @@ export default function Account() {
                 </div>
 
                 <div className="p-6 space-y-6">
+                  {/* Section 1: Password Change */}
                   <div className="group border border-slate-100 dark:border-slate-800 rounded-2xl p-5 hover:border-blue-200 dark:hover:border-blue-900/50 transition-all">
                     <div className="flex justify-between items-start mb-4">
                       <div className="flex gap-4">
                         <div className="h-12 w-12 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center flex-shrink-0">
-                          <Lock size={20} className="text-slate-400" />
+                          <Lock size={20} className="text-slate-400 group-hover:text-blue-500 transition-colors" />
                         </div>
                         <div>
                           <h4 className="text-sm font-bold text-slate-900 dark:text-white">
@@ -1394,12 +1419,13 @@ export default function Account() {
                           </p>
                         </div>
                       </div>
-                      <Link
-                        to="/update-password"
-                        className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline uppercase tracking-widest"
+                      <button
+                        onClick={() => navigate("/update-password??4 ko")}
+                        className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-blue-500 hover:text-white text-slate-600 dark:text-slate-300 text-xs font-bold rounded-lg transition-all active:scale-95"
                       >
-                        Update
-                      </Link>
+                        Change Password
+                        <ChevronRight size={14} />
+                      </button>
                     </div>
                     <p className="text-xs text-slate-400 leading-relaxed">
                       Ensure your account is using a long, random password to
@@ -1407,38 +1433,36 @@ export default function Account() {
                     </p>
                   </div>
 
+                  {/* Section 2: Email Update */}
                   <div className="group border border-slate-100 dark:border-slate-800 rounded-2xl p-5 hover:border-blue-200 dark:hover:border-blue-900/50 transition-all">
-                    <div className="flex justify-between items-start mb-4">
+                    <div className="flex justify-between items-center">
                       <div className="flex gap-4">
                         <div className="h-12 w-12 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center flex-shrink-0">
-                          <Mail size={20} className="text-slate-400" />
+                          <Mail
+                            size={20}
+                            className="text-slate-400 group-hover:text-blue-500 transition-colors"
+                          />
                         </div>
                         <div>
                           <h4 className="text-sm font-bold text-slate-900 dark:text-white">
                             Email Address
                           </h4>
                           <p className="text-xs text-slate-500 mt-1">
-                            Current:{" "}
-                            <span className="font-medium text-slate-700 dark:text-slate-300">
-                              {user.email}
-                            </span>
+                            {user?.email || "Update your email address"}
                           </p>
                         </div>
                       </div>
-                      <Link
-                        to="/update-email"
-                        state={{ user }}
-                        className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline uppercase tracking-widest"
+                      <button
+                        onClick={() => navigate("/update-email??4 ko")}
+                        className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-blue-500 hover:text-white text-slate-600 dark:text-slate-300 text-xs font-bold rounded-lg transition-all active:scale-95"
                       >
-                        Update
-                      </Link>
+                        Change email
+                        <ChevronRight size={14} />
+                      </button>
                     </div>
-                    <p className="text-xs text-slate-400 leading-relaxed">
-                      Your email address is used for order notifications,
-                      security alerts, and account recovery.
-                    </p>
                   </div>
 
+                  {/* Section 3: Danger Zone */}
                   <div className="mt-10 pt-6 border-t border-slate-100 dark:border-slate-800">
                     <h4 className="text-xs font-black text-red-500 uppercase tracking-[0.2em] mb-4">
                       Danger Zone
@@ -1453,10 +1477,7 @@ export default function Account() {
                           Please be certain.
                         </p>
                       </div>
-                      <button
-                        onClick={handleDeleteAccount}
-                        className="whitespace-nowrap bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg font-bold text-xs uppercase tracking-widest transition-all active:scale-95 shadow-sm shadow-red-200 dark:shadow-none"
-                      >
+                      <button className="whitespace-nowrap bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg font-bold text-xs uppercase tracking-widest transition-all active:scale-95 shadow-sm shadow-red-200 dark:shadow-none">
                         Deactivate
                       </button>
                     </div>
@@ -1472,6 +1493,7 @@ export default function Account() {
   );
 }
 
+// ... Helper Components ...
 function InputField({
   label,
   name,
@@ -1531,6 +1553,20 @@ function InputField({
           } ${error ? "!border-red-400" : ""}`}
         />
       </div>
+    </div>
+  );
+}
+
+function PlaceholderTab({ icon, title, desc }) {
+  return (
+    <div className="bg-white dark:bg-slate-900 rounded-3xl p-10 shadow-sm border border-slate-200 dark:border-slate-800 text-center animate-in fade-in zoom-in duration-300">
+      <div className="w-20 h-20 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-6 text-slate-400 dark:text-slate-500">
+        {icon}
+      </div>
+      <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
+        {title}
+      </h2>
+      <p className="text-slate-500 dark:text-slate-400">{desc}</p>
     </div>
   );
 }

@@ -12,6 +12,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { toast } from "react-hot-toast";
+import { showError, showSuccess } from "../utils/toast";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -19,7 +20,12 @@ export default function UpdatePassword() {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [showPass, setShowPass] = useState(false);
+  // 1. Track visibility for multiple fields
+  const [showPass, setShowPass] = useState({
+    current: false,
+    new: false,
+    confirm: false,
+  });
 
   const [formData, setFormData] = useState({
     currentPassword: "",
@@ -27,11 +33,16 @@ export default function UpdatePassword() {
     confirmPassword: "",
   });
 
+  const isValidPassword = (pass) =>
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/.test(
+      pass
+    );
+
   // --- STEP 1: VERIFY OLD PASSWORD ---
   const handleVerify = async (e) => {
     e.preventDefault();
     if (!formData.currentPassword) {
-      toast.error("Please enter your current password");
+      showError("Please enter your current password");
       return;
     }
 
@@ -51,13 +62,13 @@ export default function UpdatePassword() {
       const data = await res.json();
 
       if (res.ok) {
-        toast.success("Identity Verified");
+        showSuccess("Identity Verified");
         setStep(2); // Move to Next Step
       } else {
-        toast.error(data.message || "Incorrect password");
+        showError(data.message || "Incorrect password");
       }
     } catch (error) {
-      toast.error("Server connection failed");
+      showError("Server connection failed");
     } finally {
       setLoading(false);
     }
@@ -67,13 +78,15 @@ export default function UpdatePassword() {
   const handleUpdate = async (e) => {
     e.preventDefault();
 
-    // 1. Validation
-    if (formData.newPassword.length < 6) {
-      toast.error("Password must be at least 6 characters");
+    // USING YOUR PROVIDED CHECK
+    if (!isValidPassword(formData.newPassword)) {
+      showError(
+        "Password must be 8+ characters with uppercase, lowercase, number, and special char."
+      );
       return;
     }
     if (formData.newPassword !== formData.confirmPassword) {
-      toast.error("Passwords do not match");
+      showError("Passwords do not match");
       return;
     }
 
@@ -98,14 +111,14 @@ export default function UpdatePassword() {
       const data = await res.json();
 
       if (res.ok) {
-        toast.success("Password Updated Successfully!");
+        showSuccess("Password Updated Successfully!");
         // 3. ✅ REDIRECT TO PROFILE
         navigate("/account");
       } else {
-        toast.error(data.message || "Failed to update password");
+        showError(data.message || "Failed to update password");
       }
     } catch (error) {
-      toast.error("Server error");
+      showError("Server error");
     } finally {
       setLoading(false);
     }
@@ -173,7 +186,7 @@ export default function UpdatePassword() {
               className="space-y-6"
             >
               {step === 1 ? (
-                /* STEP 1 FORM */
+                /* STEP 1: Current Password */
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">
@@ -185,8 +198,8 @@ export default function UpdatePassword() {
                         size={18}
                       />
                       <input
-                        type={showPass ? "text" : "password"}
-                        className="w-full bg-black/40 border border-slate-800 rounded-xl py-3.5 pl-12 pr-12 text-sm font-medium outline-none focus:border-orange-500 focus:bg-slate-900/80 transition-all placeholder:text-slate-600"
+                        type={showPass.current ? "text" : "password"} // Logic fixed here
+                        className="w-full bg-black/40 border border-slate-800 rounded-xl py-3.5 pl-12 pr-12 text-sm font-medium outline-none focus:border-orange-500 transition-all"
                         placeholder="••••••••"
                         value={formData.currentPassword}
                         onChange={(e) =>
@@ -195,53 +208,134 @@ export default function UpdatePassword() {
                             currentPassword: e.target.value,
                           })
                         }
+                        // Prevent Pasting
+                        onPaste={(e) => {
+                          e.preventDefault();
+                          showError(
+                            "Pasting is disabled for security reasons."
+                          );
+                        }}
+                        // Optional: Prevent Copying from the field as well
+                        onCopy={(e) => {
+                          e.preventDefault();
+                          showError("Copying is disabled for this field.");
+                        }}
                       />
                       <button
                         type="button"
-                        onClick={() => setShowPass(!showPass)}
+                        onClick={() =>
+                          setShowPass({
+                            ...showPass,
+                            current: !showPass.current,
+                          })
+                        } // Logic fixed here
                         className="absolute right-4 top-3.5 text-slate-500 hover:text-white transition-colors"
                       >
-                        {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
+                        {showPass.current ? (
+                          <Eye size={18} />
+                        ) : (
+                          <EyeOff size={18} />
+                        )}
                       </button>
                     </div>
                   </div>
                 </div>
               ) : (
-                /* STEP 2 FORM */
+                /* STEP 2: New & Confirm Passwords */
                 <div className="space-y-4 animate-in fade-in slide-in-from-right-8 duration-300">
+                  {/* New Password Field */}
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">
                       New Password
                     </label>
-                    <input
-                      type="password"
-                      className="w-full bg-black/40 border border-slate-800 rounded-xl py-3.5 px-4 text-sm font-medium outline-none focus:border-orange-500 transition-all placeholder:text-slate-600"
-                      placeholder="••••••••"
-                      value={formData.newPassword}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          newPassword: e.target.value,
-                        })
-                      }
-                    />
+                    <div className="relative">
+                      <input
+                        type={showPass.new ? "text" : "password"} // Logic fixed here
+                        className="w-full bg-black/40 border border-slate-800 rounded-xl py-3.5 px-4 pr-12 text-sm font-medium outline-none focus:border-orange-500 transition-all"
+                        placeholder="••••••••"
+                        value={formData.newPassword}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            newPassword: e.target.value,
+                          })
+                        }
+                        // Prevent Pasting
+                        onPaste={(e) => {
+                          e.preventDefault();
+                          showError(
+                            "Pasting is disabled for security reasons."
+                          );
+                        }}
+                        // Optional: Prevent Copying from the field as well
+                        onCopy={(e) => {
+                          e.preventDefault();
+                          showError("Copying is disabled for this field.");
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setShowPass({ ...showPass, new: !showPass.new })
+                        } // Logic fixed here
+                        className="absolute right-4 top-3.5 text-slate-500 hover:text-white"
+                      >
+                        {showPass.new ? (
+                          <Eye size={18} />
+                        ) : (
+                          <EyeOff size={18} />
+                        )}
+                      </button>
+                    </div>
                   </div>
+
+                  {/* Confirm Password Field */}
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">
                       Confirm New Password
                     </label>
-                    <input
-                      type="password"
-                      className="w-full bg-black/40 border border-slate-800 rounded-xl py-3.5 px-4 text-sm font-medium outline-none focus:border-orange-500 transition-all placeholder:text-slate-600"
-                      placeholder="••••••••"
-                      value={formData.confirmPassword}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          confirmPassword: e.target.value,
-                        })
-                      }
-                    />
+                    <div className="relative">
+                      <input
+                        type={showPass.confirm ? "text" : "password"} // Logic fixed here
+                        className="w-full bg-black/40 border border-slate-800 rounded-xl py-3.5 px-4 pr-12 text-sm font-medium outline-none focus:border-orange-500 transition-all"
+                        placeholder="••••••••"
+                        value={formData.confirmPassword}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            confirmPassword: e.target.value,
+                          })
+                        }
+                        // Prevent Pasting
+                        onPaste={(e) => {
+                          e.preventDefault();
+                          showError(
+                            "Pasting is disabled for security reasons."
+                          );
+                        }}
+                        // Optional: Prevent Copying from the field as well
+                        onCopy={(e) => {
+                          e.preventDefault();
+                          showError("Copying is disabled for this field.");
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setShowPass({
+                            ...showPass,
+                            confirm: !showPass.confirm,
+                          })
+                        } // Logic fixed here
+                        className="absolute right-4 top-3.5 text-slate-500 hover:text-white"
+                      >
+                        {showPass.confirm ? (
+                          <Eye size={18} />
+                        ) : (
+                          <EyeOff size={18} />
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -254,13 +348,9 @@ export default function UpdatePassword() {
                 {loading ? (
                   <Loader2 className="animate-spin" size={20} />
                 ) : step === 1 ? (
-                  <>
-                    Verify Identity <ChevronRight size={18} />
-                  </>
+                  "Verify Identity"
                 ) : (
-                  <>
-                    Update Password <ShieldCheck size={18} />
-                  </>
+                  "Update Password"
                 )}
               </button>
             </form>
