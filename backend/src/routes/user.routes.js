@@ -10,7 +10,7 @@ import {
   googleAuth,
   sendForgotPasswordOTP,
   resetPasswordWithOTP,
-} from "../controllers/auth.controller.js"; // Ensure filename matches your project
+} from "../controllers/auth.controller.js";
 
 // 2. Import User Profile Controller
 import {
@@ -21,9 +21,11 @@ import {
   updateAddress,
   setDefaultAddress,
   deleteUserAccount,
-  addToWishlist, // ✅ NEW
-  removeFromWishlist, // ✅ NEW
-} from "../controllers/user.controller.js"; // Ensure filename matches your project
+  addToWishlist,
+  removeFromWishlist,
+  updateUserPassword,
+  verifyUserPassword, // ✅ NEW: Import password controller
+} from "../controllers/user.controller.js";
 
 // 3. Import Middleware
 import { protect } from "../middlewares/auth.middleware.js";
@@ -66,11 +68,17 @@ router
 router.route("/address/:id/default").put(protect, setDefaultAddress);
 
 /* ======================================================
-   D. WISHLIST ROUTES (New)
+   D. WISHLIST ROUTES
 ====================================================== */
 router
   .route("/wishlist/:id")
   .post(protect, addToWishlist) // Add item
   .delete(protect, removeFromWishlist); // Remove item
+
+/* ======================================================
+   E. SECURITY ROUTES (New)
+====================================================== */
+router.post("/verify-password", protect, verifyUserPassword);
+router.put("/password", protect, updateUserPassword); // Update Password
 
 export default router;

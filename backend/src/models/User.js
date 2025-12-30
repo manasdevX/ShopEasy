@@ -164,8 +164,10 @@ userSchema.virtual("isSeller").get(function () {
 
 // Encrypt password before saving
 userSchema.pre("save", async function (next) {
+  // 🛑 CRITICAL FIX: 'return next()' prevents continued execution if password isn't modified
   if (!this.isModified("password")) return next();
 
+  // If this isn't a new user (i.e. update), set the passwordChangedAt date
   if (!this.isNew) {
     this.passwordChangedAt = Date.now() - 1000;
   }
