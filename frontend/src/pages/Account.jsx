@@ -24,10 +24,9 @@ import {
   Trash2,
   Home,
   Briefcase,
-  Star,
-  LocateFixed,
   Package,
   ShoppingBag,
+  LocateFixed,
 } from "lucide-react";
 
 export default function Account() {
@@ -60,7 +59,7 @@ export default function Account() {
     email: "",
     phone: "",
     avatar: null,
-    passwordChangedAt: null,
+    passwordChangedAt: null, // Stores the date from DB
     addresses: [],
     address: {
       name: "",
@@ -82,78 +81,78 @@ export default function Account() {
   const [status, setStatus] = useState("loading");
 
   // ================= FETCH LOGIC =================
- useEffect(() => {
-   const fetchProfile = async () => {
-     try {
-       const token = localStorage.getItem("token");
-       if (!token) {
-         setStatus("idle");
-         return;
-       }
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) {
+          setStatus("idle");
+          return;
+        }
 
-       const res = await fetch(`${API_URL}/api/user/profile`, {
-         method: "GET",
-         headers: {
-           "Content-Type": "application/json",
-           Authorization: `Bearer ${token}`,
-         },
-       });
+        const res = await fetch(`${API_URL}/api/user/profile`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        });
 
-       if (res.status === 401) {
-         localStorage.removeItem("token");
-         setStatus("idle");
-         return;
-       }
+        if (res.status === 401) {
+          localStorage.removeItem("token");
+          setStatus("idle");
+          return;
+        }
 
-       const data = await res.json();
-       if (res.ok) {
-         const allAddresses = data.addresses || [];
-         const primaryAddr =
-           allAddresses.find((a) => a.isDefault) ||
-           allAddresses[allAddresses.length - 1] ||
-           {};
+        const data = await res.json();
+        if (res.ok) {
+          const allAddresses = data.addresses || [];
+          const primaryAddr =
+            allAddresses.find((a) => a.isDefault) ||
+            allAddresses[allAddresses.length - 1] ||
+            {};
 
-         const userData = {
-           name: data.name || "",
-           email: data.email || "",
-           phone: (data.phone || "").replace(/^\+91/, ""),
-           avatar:
-             data.profilePicture ||
-             `https://ui-avatars.com/api/?name=${encodeURIComponent(
-               data.name || "User"
-             )}&background=random&color=fff`,
-           // ✅ FIX: Capture the passwordChangedAt date
-           passwordChangedAt: data.passwordChangedAt,
-           addresses: allAddresses,
-           address: {
-             name: data.address?.name || primaryAddr.fullName || data.name,
-             phone: (
-               data.address?.phone ||
-               primaryAddr.phone ||
-               data.phone ||
-               ""
-             ).replace(/^\+91/, ""),
-             street: data.address?.street || primaryAddr.addressLine || "",
-             city: data.address?.city || primaryAddr.city || "",
-             state: data.address?.state || primaryAddr.state || "",
-             pincode: data.address?.pincode || primaryAddr.pincode || "",
-             country: data.address?.country || primaryAddr.country || "India",
-             type: data.address?.type || primaryAddr.type || "Home",
-           },
-           orders: [], // You can fetch orders here if you have an endpoint
-           wishlist: data.wishlist || [],
-         };
-         setUser(userData);
-         setFormData(userData);
-       }
-     } catch (err) {
-       console.error(err);
-     } finally {
-       setStatus("idle");
-     }
-   };
-   fetchProfile();
- }, []);
+          const userData = {
+            name: data.name || "",
+            email: data.email || "",
+            phone: (data.phone || "").replace(/^\+91/, ""),
+            avatar:
+              data.profilePicture ||
+              `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                data.name || "User"
+              )}&background=random&color=fff`,
+            // ✅ FIX: Capture the passwordChangedAt date
+            passwordChangedAt: data.passwordChangedAt,
+            addresses: allAddresses,
+            address: {
+              name: data.address?.name || primaryAddr.fullName || data.name,
+              phone: (
+                data.address?.phone ||
+                primaryAddr.phone ||
+                data.phone ||
+                ""
+              ).replace(/^\+91/, ""),
+              street: data.address?.street || primaryAddr.addressLine || "",
+              city: data.address?.city || primaryAddr.city || "",
+              state: data.address?.state || primaryAddr.state || "",
+              pincode: data.address?.pincode || primaryAddr.pincode || "",
+              country: data.address?.country || primaryAddr.country || "India",
+              type: data.address?.type || primaryAddr.type || "Home",
+            },
+            orders: data.orders || [],
+            wishlist: data.wishlist || [],
+          };
+          setUser(userData);
+          setFormData(userData);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setStatus("idle");
+      }
+    };
+    fetchProfile();
+  }, []);
 
   // ================= WISHLIST HANDLER =================
   const handleRemoveFromWishlist = async (productId) => {
@@ -610,16 +609,7 @@ export default function Account() {
           };
           localStorage.setItem("user", JSON.stringify(updatedUser));
         } catch (storageErr) {
-          console.warn(
-            "LocalStorage quota exceeded. Saving minimal user data."
-          );
-          try {
-            const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
-            const safeUser = { ...storedUser, name: formData.name };
-            localStorage.setItem("user", JSON.stringify(safeUser));
-          } catch (e) {
-            console.error("Critical: LocalStorage completely full", e);
-          }
+          // Fallback logic
         }
 
         window.dispatchEvent(new Event("user-info-updated"));
@@ -937,17 +927,16 @@ export default function Account() {
                               <div>
                                 <div className="flex items-center gap-2 mb-1">
                                   <span className="text-xs font-black uppercase tracking-wider text-blue-600 dark:text-blue-400">
-                                    Order #
-                                    {user.order._id.slice(-8).toUpperCase()}
+                                    Order #{order._id.slice(-8).toUpperCase()}
                                   </span>
                                   <span
                                     className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
-                                      user.order.status === "Delivered"
+                                      order.status === "Delivered"
                                         ? "bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400"
                                         : "bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400"
                                     }`}
                                   >
-                                    {user.order.status}
+                                    {order.status}
                                   </span>
                                 </div>
                                 <h4 className="text-sm font-bold text-slate-900 dark:text-white">
@@ -1314,7 +1303,7 @@ export default function Account() {
                                       onClick={() => handleSetDefault(addr._id)}
                                       className="w-full text-left px-4 py-2.5 text-xs font-medium text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 transition-colors"
                                     >
-                                      <Star size={12} /> Default
+                                      <Check size={12} /> Default
                                     </button>
                                   )}
                                   <button
@@ -1394,12 +1383,13 @@ export default function Account() {
                           <h4 className="text-sm font-bold text-slate-900 dark:text-white">
                             Password
                           </h4>
+                          {/* ✅ FIX: Force DD/MM/YYYY using en-GB */}
                           <p className="text-xs text-slate-500 mt-1">
                             Last changed:{" "}
                             {user.passwordChangedAt
                               ? new Date(
                                   user.passwordChangedAt
-                                ).toLocaleDateString()
+                                ).toLocaleDateString("en-GB")
                               : "Never"}
                           </p>
                         </div>
@@ -1437,7 +1427,7 @@ export default function Account() {
                       </div>
                       <Link
                         to="/update-email"
-                        state={{ user }} 
+                        state={{ user }}
                         className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline uppercase tracking-widest"
                       >
                         Update

@@ -12,7 +12,6 @@ export default function UpdateEmail() {
   const navigate = useNavigate();
   const { state } = useLocation();
 
-  // HOOK RULES: Define user at the top level, not inside the handler
   // Fallback to localStorage so the page doesn't break on refresh
   const user = state?.user || JSON.parse(localStorage.getItem("user"));
 
@@ -27,6 +26,12 @@ export default function UpdateEmail() {
 
   const handleUpdateEmail = async (e) => {
     e.preventDefault();
+
+    if (!newEmail || !currentPassword) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -38,7 +43,11 @@ export default function UpdateEmail() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${localStorage.getItem("token")}`,
           },
-          body: JSON.stringify({ newEmail, currentPassword }),
+          // ✅ FIX: Map 'currentPassword' to 'password' to match Backend Controller
+          body: JSON.stringify({
+            newEmail,
+            password: currentPassword,
+          }),
         }
       );
 
@@ -51,12 +60,16 @@ export default function UpdateEmail() {
         const updatedUser = { ...user, email: newEmail };
         localStorage.setItem("user", JSON.stringify(updatedUser));
 
+        // Dispatch event to update Navbar immediately
+        window.dispatchEvent(new Event("user-info-updated"));
+
         navigate("/account");
       } else {
         toast.error(data.message || "Failed to update email");
       }
     } catch (err) {
-      toast.error("An error occurred. Please try again.");
+      console.error(err);
+      toast.error("Server connection failed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -117,7 +130,7 @@ export default function UpdateEmail() {
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
                   placeholder="Enter new email"
-                  className="w-full pl-12 pr-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-all dark:text-white"
+                  className="w-full pl-12 pr-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-all dark:text-white placeholder:text-slate-500"
                 />
               </div>
             </div>
@@ -137,7 +150,7 @@ export default function UpdateEmail() {
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
                   placeholder="Enter password to confirm"
-                  className="w-full pl-12 pr-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-all dark:text-white"
+                  className="w-full pl-12 pr-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-all dark:text-white placeholder:text-slate-500"
                 />
               </div>
             </div>
@@ -145,7 +158,7 @@ export default function UpdateEmail() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white py-4 rounded-xl font-bold text-sm uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-200 dark:shadow-none mt-4"
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white py-4 rounded-xl font-bold text-sm uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-200 dark:shadow-none mt-4 active:scale-95"
             >
               {loading ? (
                 <Loader2 className="animate-spin" size={18} />

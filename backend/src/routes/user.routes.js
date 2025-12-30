@@ -23,6 +23,7 @@ import {
   deleteUserAccount,
   addToWishlist,
   removeFromWishlist,
+  updateUserEmail,
   updateUserPassword,
   verifyUserPassword, // ✅ NEW: Import password controller
 } from "../controllers/user.controller.js";
@@ -80,5 +81,6 @@ router
 ====================================================== */
 router.post("/verify-password", protect, verifyUserPassword);
 router.put("/password", protect, updateUserPassword); // Update Password
+router.put("/update-email", protect, updateUserEmail);
 
 export default router;

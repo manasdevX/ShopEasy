@@ -13,16 +13,12 @@ import {
 import PaymentHeader from "../components/PaymentHeader";
 import PaymentFooter from "../components/PaymentFooter";
 import { toast } from "react-hot-toast";
-import {showSuccess , showError} from "../utils/toast"
+import { showSuccess, showError } from "../utils/toast";
 
 export default function CheckoutPage() {
   const location = useLocation();
   const navigate = useNavigate();
 
-<<<<<<< HEAD
-=======
-  // Get items from navigation state
->>>>>>> 8fb7e9508bc38891c26a1deeaad073fff4ffa07c
   const items = location.state?.items || [];
 
   const [paymentMode, setPaymentMode] = useState("upi");
