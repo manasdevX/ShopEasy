@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, Link, useLocation } from "react-router-dom"; // Added useLocation
 import {
   Star,
   ShoppingCart,
@@ -23,6 +23,7 @@ import { showError, showSuccess } from "../utils/toast";
 export default function ProductDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation(); // Added for login redirect state
   const token = localStorage.getItem("token");
   const isLoggedIn = !!token;
 
@@ -106,24 +107,24 @@ export default function ProductDetails() {
   };
 
   const handleBuyNow = () => {
-    if(isLoggedIn) {
+    if (isLoggedIn) {
       navigate("/payment", {
-      state: {
-        items: [
-          {
-            _id: product._id,
-            name: product.name,
-            price: product.price,
-            mrp: product.mrp,
-            quantity: 1,
-            image: product.image,
-          },
-        ],
-      },
-    });
+        state: {
+          items: [
+            {
+              _id: product._id,
+              name: product.name,
+              price: product.price,
+              mrp: product.mrp,
+              quantity: quantity, // ✅ FIX: Use selected quantity, not hardcoded 1
+              image: getImageUrl(product.thumbnail || product.images?.[0]),
+            },
+          ],
+        },
+      });
     } else {
       toast("Please signup to Buy Now", { icon: "🔒" });
-      navigate("/signup", { state: { from: location.pathname } });
+      navigate("/login", { state: { from: location.pathname } }); // Redirect to login
     }
   };
 
@@ -198,7 +199,7 @@ export default function ProductDetails() {
                 <button
                   onClick={() => handleAddToCart(false)}
                   disabled={product.stock === 0}
-                  className="flex-1 bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white font-black py-4 rounded-2xl transition-all active:scale-95 flex items-center justify-center gap-2 uppercase tracking-widest text-xs"
+                  className="flex-1 bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white font-black py-4 rounded-2xl transition-all active:scale-95 flex items-center justify-center gap-2 uppercase tracking-widest text-xs disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <ShoppingCart size={18} />
                   Add to Cart
@@ -207,7 +208,7 @@ export default function ProductDetails() {
                 <button
                   onClick={() => handleBuyNow()}
                   disabled={product.stock === 0}
-                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-orange-500/20 transition-all active:scale-95 flex items-center justify-center gap-2 uppercase tracking-widest text-xs"
+                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-orange-500/20 transition-all active:scale-95 flex items-center justify-center gap-2 uppercase tracking-widest text-xs disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Zap size={18} fill="currentColor" />
                   Buy Now
@@ -361,9 +362,7 @@ export default function ProductDetails() {
 
                 <button
                   className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 hover:border-orange-500 dark:hover:border-orange-500 text-slate-900 dark:text-white font-black py-2.5 px-6 rounded-xl transition-all active:scale-95 text-xs uppercase tracking-widest shadow-sm"
-                  onClick={() =>
-                    (window.location.href = "/product/${product._id}/reviews")
-                  }
+                  onClick={() => navigate(`/product/${product._id}/reviews`)}
                 >
                   Rate Product
                 </button>
@@ -422,7 +421,7 @@ export default function ProductDetails() {
                       key={review._id}
                       className="group p-5 bg-white dark:bg-slate-900/40 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-md transition-all duration-300"
                     >
-                      {/* Top Row */}
+                      {/* Review Content */}
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
                           <div className="flex items-center gap-1 bg-green-600 dark:bg-green-500 text-white text-[10px] px-2 py-0.5 rounded-full font-black shadow-sm">
@@ -442,12 +441,10 @@ export default function ProductDetails() {
                         </span>
                       </div>
 
-                      {/* Comment */}
                       <p className="text-[13px] italic text-slate-600 dark:text-slate-400 leading-relaxed font-medium">
                         "{review.comment}"
                       </p>
 
-                      {/* User Info */}
                       <div className="flex items-center justify-between mt-5 pt-4 border-t border-slate-50 dark:border-slate-800/50">
                         <div className="flex flex-col">
                           <span className="text-xs font-black text-slate-800 dark:text-slate-400">
@@ -483,13 +480,13 @@ export default function ProductDetails() {
                     </div>
                   ))
                 ) : (
-                  // ✅ CORRECTED EMPTY STATE
+                  // ✅ FIX: Corrected Empty State Link
                   <div className="text-center py-6">
                     <p className="text-slate-400 text-xs font-bold mb-2">
                       No reviews yet.
                     </p>
                     <Link
-                      to={`/product/${id}/Reviews`}
+                      to={`/product/${id}/reviews`}
                       className="text-orange-500 text-xs font-black uppercase tracking-widest hover:underline"
                     >
                       Be the first to write one!

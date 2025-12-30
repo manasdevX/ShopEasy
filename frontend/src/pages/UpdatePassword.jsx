@@ -1,178 +1,205 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
-import AuthFooter from "../components/AuthFooter";
 import {
   Lock,
-  ShieldCheck,
   Eye,
   EyeOff,
-  Loader2,
+  Check,
   ChevronRight,
-  CheckCircle2,
+  ShieldCheck,
+  AlertCircle,
+  Loader2,
 } from "lucide-react";
-import toast from "react-hot-toast";
-import { showError, showSuccess } from "../utils/toast";
+import { toast } from "react-hot-toast";
 
-const API_URL = import.meta.env.VITE_API_URL;
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export default function UpdatePassword() {
   const navigate = useNavigate();
-
-  // States
-  const [step, setStep] = useState(1); // 1: Old Pass, 2: New Pass
-  const [showPass, setShowPass] = useState(false);
+  const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [showPass, setShowPass] = useState(false);
 
   const [formData, setFormData] = useState({
-    oldPassword: "",
+    currentPassword: "",
     newPassword: "",
     confirmPassword: "",
   });
 
-  // Handle Input Changes
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
-
-  // Step 1: Frontend logic for Old Password Verification
-  const handleVerifyStep = async (e) => {
+  // --- STEP 1: VERIFY OLD PASSWORD ---
+  const handleVerify = async (e) => {
     e.preventDefault();
-    if (!formData.oldPassword)
-      return showError("Please enter current password");
+    if (!formData.currentPassword) {
+      toast.error("Please enter your current password");
+      return;
+    }
 
     setLoading(true);
     try {
-      // Logic: Call your verify route
-      const res = await fetch(`${API_URL}/api/users/verify-password`, {
+      const token = localStorage.getItem("token");
+      // Call the verify endpoint we just fixed
+      const res = await fetch(`${API_URL}/api/user/verify-password`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ password: formData.oldPassword }),
+        body: JSON.stringify({ password: formData.currentPassword }),
       });
 
+      const data = await res.json();
+
       if (res.ok) {
-        setStep(2);
-        showSuccess("Identity Verified");
+        toast.success("Identity Verified");
+        setStep(2); // Move to Next Step
       } else {
-        showError("Incorrect current password");
+        toast.error(data.message || "Incorrect password");
       }
     } catch (error) {
-      showError("Connection error");
+      toast.error("Server connection failed");
     } finally {
       setLoading(false);
     }
   };
 
-  // Step 2: Frontend logic for Password Update
-  const handleUpdatePassword = async (e) => {
+  // --- STEP 2: UPDATE NEW PASSWORD ---
+  const handleUpdate = async (e) => {
     e.preventDefault();
 
-    if (formData.newPassword !== formData.confirmPassword) {
-      return showError("Passwords do not match");
+    // 1. Validation
+    if (formData.newPassword.length < 6) {
+      toast.error("Password must be at least 6 characters");
+      return;
     }
-    if (formData.newPassword.length < 8) {
-      return showError("Password must be at least 8 characters");
+    if (formData.newPassword !== formData.confirmPassword) {
+      toast.error("Passwords do not match");
+      return;
     }
 
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/users/update-password`, {
+      const token = localStorage.getItem("token");
+
+      // 2. Call Update Endpoint
+      // Note: We send currentPassword again because the backend requires it for the final double-check
+      const res = await fetch(`${API_URL}/api/user/password`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          oldPassword: formData.oldPassword,
+          currentPassword: formData.currentPassword,
           newPassword: formData.newPassword,
         }),
       });
 
+      const data = await res.json();
+
       if (res.ok) {
-        showSuccess("Password Updated Successfully!");
-        // Standard security practice: Redirect to login after password change
-        setTimeout(() => navigate("/login"), 2000);
+        toast.success("Password Updated Successfully!");
+        // 3. ✅ REDIRECT TO PROFILE
+        navigate("/account");
       } else {
-        showError("Update failed. Please try again.");
+        toast.error(data.message || "Failed to update password");
       }
     } catch (error) {
-      showError("Server error");
+      toast.error("Server error");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col">
+    <div className="min-h-screen bg-[#030712] text-white font-sans selection:bg-orange-500/30">
       <Navbar />
 
-      <main className="flex-grow flex items-center justify-center p-4">
-        <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-xl shadow-slate-200/50 dark:shadow-none border border-slate-100 dark:border-slate-800 overflow-hidden">
-          {/* Progress Header */}
-          <div className="bg-slate-900 dark:bg-slate-800 p-8 text-white">
-            <div className="flex justify-between items-center mb-4">
+      <main className="flex items-center justify-center min-h-[calc(100vh-80px)] px-4">
+        <div className="w-full max-w-md">
+          {/* Stepper Header */}
+          <div className="flex items-center justify-between mb-8 px-4">
+            <div
+              className={`flex items-center gap-2 ${
+                step >= 1 ? "text-orange-500" : "text-slate-700"
+              }`}
+            >
               <div
-                className={`h-8 w-8 rounded-full flex items-center justify-center font-bold text-xs ${
-                  step === 1 ? "bg-blue-500" : "bg-green-500"
+                className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 ${
+                  step >= 1
+                    ? "border-orange-500 bg-orange-500/10"
+                    : "border-slate-800 bg-slate-900"
                 }`}
               >
-                {step === 1 ? "1" : <CheckCircle2 size={16} />}
+                {step > 1 ? <Check size={14} /> : "1"}
               </div>
-              <div className="flex-grow h-[2px] mx-4 bg-slate-700">
-                <div
-                  className={`h-full bg-blue-500 transition-all duration-500 ${
-                    step === 2 ? "w-full" : "w-0"
-                  }`}
-                ></div>
-              </div>
+            </div>
+            <div
+              className={`h-0.5 flex-1 mx-4 transition-colors duration-500 ${
+                step > 1 ? "bg-orange-500" : "bg-slate-800"
+              }`}
+            />
+            <div
+              className={`flex items-center gap-2 ${
+                step >= 2 ? "text-orange-500" : "text-slate-700"
+              }`}
+            >
               <div
-                className={`h-8 w-8 rounded-full flex items-center justify-center font-bold text-xs ${
-                  step === 2 ? "bg-blue-500" : "bg-slate-700 text-slate-400"
+                className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 ${
+                  step >= 2
+                    ? "border-orange-500 bg-orange-500/10"
+                    : "border-slate-800 bg-slate-900"
                 }`}
               >
                 2
               </div>
             </div>
-            <h2 className="text-2xl font-black tracking-tight">
-              Update Security
-            </h2>
-            <p className="text-slate-400 text-xs mt-1 uppercase tracking-widest font-bold">
-              {step === 1 ? "Verify Old Password" : "Set New Password"}
-            </p>
           </div>
 
-          <div className="p-8">
+          <div className="bg-slate-900/50 border border-slate-800 p-8 rounded-3xl backdrop-blur-sm shadow-xl">
+            <div className="text-center mb-8">
+              <h1 className="text-2xl font-black tracking-tight mb-2">
+                {step === 1 ? "Update Security" : "Set New Password"}
+              </h1>
+              <p className="text-slate-400 text-sm">
+                {step === 1
+                  ? "Verify your current password to continue"
+                  : "Create a strong password for your account"}
+              </p>
+            </div>
+
             <form
-              onSubmit={step === 1 ? handleVerifyStep : handleUpdatePassword}
-              className="space-y-5"
+              onSubmit={step === 1 ? handleVerify : handleUpdate}
+              className="space-y-6"
             >
               {step === 1 ? (
-                /* STEP 1 FIELDS */
-                <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-                  <div className="relative">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">
+                /* STEP 1 FORM */
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">
                       Current Password
                     </label>
-                    <div className="relative mt-1">
+                    <div className="relative group">
                       <Lock
-                        className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                        className="absolute left-4 top-3.5 text-slate-500 group-focus-within:text-orange-500 transition-colors"
                         size={18}
                       />
                       <input
                         type={showPass ? "text" : "password"}
-                        name="oldPassword"
-                        value={formData.oldPassword}
-                        onChange={handleChange}
-                        className="w-full bg-slate-50 dark:bg-slate-800 border-2 border-transparent focus:border-blue-500 rounded-2xl py-4 pl-12 pr-12 text-sm outline-none transition-all"
-                        placeholder="Enter current password"
+                        className="w-full bg-black/40 border border-slate-800 rounded-xl py-3.5 pl-12 pr-12 text-sm font-medium outline-none focus:border-orange-500 focus:bg-slate-900/80 transition-all placeholder:text-slate-600"
+                        placeholder="••••••••"
+                        value={formData.currentPassword}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            currentPassword: e.target.value,
+                          })
+                        }
                       />
                       <button
                         type="button"
                         onClick={() => setShowPass(!showPass)}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                        className="absolute right-4 top-3.5 text-slate-500 hover:text-white transition-colors"
                       >
                         {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
                       </button>
@@ -180,57 +207,70 @@ export default function UpdatePassword() {
                   </div>
                 </div>
               ) : (
-                /* STEP 2 FIELDS */
-                <div className="space-y-5 animate-in fade-in slide-in-from-left-4 duration-300">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">
+                /* STEP 2 FORM */
+                <div className="space-y-4 animate-in fade-in slide-in-from-right-8 duration-300">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">
                       New Password
                     </label>
                     <input
                       type="password"
-                      name="newPassword"
+                      className="w-full bg-black/40 border border-slate-800 rounded-xl py-3.5 px-4 text-sm font-medium outline-none focus:border-orange-500 transition-all placeholder:text-slate-600"
+                      placeholder="••••••••"
                       value={formData.newPassword}
-                      onChange={handleChange}
-                      className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl py-4 px-5 text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-                      placeholder="Minimum 8 characters"
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          newPassword: e.target.value,
+                        })
+                      }
                     />
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">
                       Confirm New Password
                     </label>
                     <input
                       type="password"
-                      name="confirmPassword"
+                      className="w-full bg-black/40 border border-slate-800 rounded-xl py-3.5 px-4 text-sm font-medium outline-none focus:border-orange-500 transition-all placeholder:text-slate-600"
+                      placeholder="••••••••"
                       value={formData.confirmPassword}
-                      onChange={handleChange}
-                      className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl py-4 px-5 text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-                      placeholder="Repeat new password"
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          confirmPassword: e.target.value,
+                        })
+                      }
                     />
                   </div>
                 </div>
               )}
 
               <button
-                onClick={handleVerifyStep}
-                disabled={loading || !formData.oldPassword}
-                className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg font-bold text-sm hover:bg-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                type="submit"
+                disabled={loading}
+                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed mt-6"
               >
                 {loading ? (
-                  <Loader2 className="animate-spin" size={18} />
+                  <Loader2 className="animate-spin" size={20} />
+                ) : step === 1 ? (
+                  <>
+                    Verify Identity <ChevronRight size={18} />
+                  </>
                 ) : (
                   <>
-                    Verify Identity
-                    <ChevronRight size={16} />
+                    Update Password <ShieldCheck size={18} />
                   </>
                 )}
               </button>
             </form>
           </div>
+
+          <p className="text-center text-slate-500 text-xs mt-8">
+            © 2025 ShopEasy. All rights reserved.
+          </p>
         </div>
       </main>
-
-      <AuthFooter />
     </div>
   );
 }

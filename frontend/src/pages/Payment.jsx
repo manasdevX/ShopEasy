@@ -6,7 +6,6 @@ import {
   CreditCard,
   ChevronLeft,
   Lock,
-  Info,
   CheckCircle2,
   LocateFixed,
   ShoppingBag,
@@ -20,6 +19,10 @@ export default function CheckoutPage() {
   const location = useLocation();
   const navigate = useNavigate();
 
+<<<<<<< HEAD
+=======
+  // Get items from navigation state
+>>>>>>> 8fb7e9508bc38891c26a1deeaad073fff4ffa07c
   const items = location.state?.items || [];
 
   const [paymentMode, setPaymentMode] = useState("upi");
@@ -31,17 +34,25 @@ export default function CheckoutPage() {
     pincode: "",
     phone: "",
   });
+  const [saveAddress, setSaveAddress] = useState(false);
 
-  // Handle calculation for multiple items
+  // --- CALCULATIONS ---
+
+  // 1. Calculate Total Item Count (Sum of all quantities)
+  // ✅ FIX: This ensures "Price (3 items)" shows correctly instead of "Price (1 items)"
+  const totalItemCount = items.reduce((acc, item) => acc + item.quantity, 0);
+
   const totalMRP = items.reduce(
     (acc, item) => acc + (item.mrp || item.price) * item.quantity,
     0
   );
+
   const totalDiscount = items.reduce(
     (acc, item) =>
       acc + ((item.mrp || item.price) - item.price) * item.quantity,
     0
   );
+
   const subtotal = items.reduce(
     (acc, item) => acc + item.price * item.quantity,
     0
@@ -50,8 +61,6 @@ export default function CheckoutPage() {
   const platformFee = items.length > 0 ? 3 : 0;
   const deliveryFee = subtotal > 500 || items.length === 0 ? 0 : 40;
   const totalPayable = subtotal + platformFee + deliveryFee;
-
-  const [saveAddress, setSaveAddress] = useState(false);
 
   const handleInputChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -111,7 +120,7 @@ export default function CheckoutPage() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
           {/* LEFT SIDE: SHIPPING & PAYMENT */}
           <div className="lg:col-span-7 space-y-8">
-            {/* 1. Item Summary (New Section) */}
+            {/* 1. Item Summary */}
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-8 h-8 rounded-lg bg-orange-50 dark:bg-orange-500/10 flex items-center justify-center text-orange-600">
@@ -142,12 +151,13 @@ export default function CheckoutPage() {
                       </p>
                     </div>
                     <div className="text-right">
+                      {/* ✅ FIX: Showing UNIT Price (item.price), not Total */}
                       <p className="text-sm font-black dark:text-white">
-                        ₹{(item.price * item.quantity).toLocaleString()}
+                        ₹{item.price.toLocaleString()}
                       </p>
                       {item.mrp > item.price && (
                         <p className="text-[10px] text-slate-400 line-through">
-                          ₹{(item.mrp * item.quantity).toLocaleString()}
+                          ₹{item.mrp.toLocaleString()}
                         </p>
                       )}
                     </div>
@@ -311,8 +321,9 @@ export default function CheckoutPage() {
 
               <div className="p-6 space-y-4">
                 <div className="flex justify-between text-sm font-medium">
+                  {/* ✅ FIX: Showing Total Item Count here */}
                   <span className="text-slate-500">
-                    Price ({items.length} items)
+                    Price ({totalItemCount} items)
                   </span>
                   <span className="text-slate-900 dark:text-white">
                     ₹{totalMRP.toLocaleString()}

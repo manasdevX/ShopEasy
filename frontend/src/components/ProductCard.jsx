@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { ShoppingBag, Star, Heart, Loader2 } from "lucide-react";
 import { toast } from "react-hot-toast";
@@ -7,6 +7,8 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export default function ProductCard({ product }) {
   const [adding, setAdding] = useState(false);
+  const [wishlisting, setWishlisting] = useState(false);
+  const [isWishlisted, setIsWishlisted] = useState(false);
 
   // Normalize Data
   const productId = product._id || product.id;
@@ -18,9 +20,25 @@ export default function ProductCard({ product }) {
   const imageDisplay =
     product.thumbnail || product.image || (product.images && product.images[0]);
 
-  // Handle Quick Add to Cart (Connects to Backend)
+  // 1. Check if item is already in wishlist (Load from LocalStorage)
+  useEffect(() => {
+    try {
+      const user = JSON.parse(localStorage.getItem("user") || "{}");
+      if (user.wishlist && Array.isArray(user.wishlist)) {
+        // Check if product ID exists in the wishlist array (handles objects or strings)
+        const exists = user.wishlist.some(
+          (item) => (typeof item === "string" ? item : item._id) === productId
+        );
+        setIsWishlisted(exists);
+      }
+    } catch (e) {
+      console.error("Error parsing user data for wishlist check", e);
+    }
+  }, [productId]);
+
+  // Handle Quick Add to Cart
   const handleQuickAdd = async (e) => {
-    e.preventDefault(); // Prevent navigating to product page
+    e.preventDefault();
     e.stopPropagation();
 
     const token = localStorage.getItem("token");
@@ -44,7 +62,6 @@ export default function ProductCard({ product }) {
 
       if (res.ok) {
         toast.success(`${product.name} added to cart!`);
-        // 🚀 Trigger Navbar Update Instantly
         window.dispatchEvent(new Event("cartUpdated"));
       } else {
         toast.error(data.message || "Failed to add item");
@@ -54,6 +71,57 @@ export default function ProductCard({ product }) {
       toast.error("Something went wrong");
     } finally {
       setAdding(false);
+    }
+  };
+
+  // Handle Add to Wishlist
+  const handleAddToWishlist = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const token = localStorage.getItem("token");
+    if (!token) {
+      toast.error("Please login to save items", { icon: "🔒" });
+      return;
+    }
+
+    // Optimistic UI update (optional, but feels faster)
+    // setIsWishlisted(true);
+
+    setWishlisting(true);
+    try {
+      const res = await fetch(`${API_URL}/api/user/wishlist/${productId}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setIsWishlisted(true); // ✅ Turn Heart Red
+        toast.success("Added to Wishlist!", { icon: "❤️" });
+
+        // Optional: Update local storage so other components know
+        const user = JSON.parse(localStorage.getItem("user") || "{}");
+        if (user) {
+          user.wishlist = data; // API returns updated wishlist
+          localStorage.setItem("user", JSON.stringify(user));
+        }
+      } else if (res.status === 400) {
+        setIsWishlisted(true); // ✅ Turn Red if already there
+        toast.error("Already in Wishlist", { icon: "❤️" });
+      } else {
+        toast.error(data.message || "Failed to add");
+        // setIsWishlisted(false); // Revert if failed
+      }
+    } catch (error) {
+      console.error("Wishlist error:", error);
+      toast.error("Server error");
+    } finally {
+      setWishlisting(false);
     }
   };
 
@@ -74,13 +142,22 @@ export default function ProductCard({ product }) {
 
         {/* Wishlist Button */}
         <button
-          onClick={(e) => {
-            e.preventDefault();
-            toast("Wishlist feature coming soon!", { icon: "❤️" });
-          }}
-          className="absolute top-4 right-4 z-10 p-2.5 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md rounded-full shadow-sm text-slate-400 hover:text-red-500 transition-colors"
+          onClick={handleAddToWishlist}
+          disabled={wishlisting}
+          className={`absolute top-4 right-4 z-10 p-2.5 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md rounded-full shadow-sm transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed ${
+            isWishlisted
+              ? "text-red-500 hover:text-red-600 hover:scale-110" // ✅ Red if wishlisted
+              : "text-slate-400 hover:text-red-500 hover:scale-110" // Grey otherwise
+          }`}
         >
-          <Heart size={16} />
+          {wishlisting ? (
+            <Loader2 size={16} className="animate-spin text-red-500" />
+          ) : (
+            <Heart
+              size={16}
+              className={isWishlisted ? "fill-current" : ""} // ✅ Fills the heart
+            />
+          )}
         </button>
 
         <img
