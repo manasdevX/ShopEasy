@@ -205,6 +205,44 @@ export default function Account() {
     }
   };
 
+  const handleDeactivate = async () => {
+    const confirmFirst = window.confirm(
+      "Are you absolutely sure? This will permanently delete your account and all your data."
+    );
+    if (!confirmFirst) return;
+
+    const confirmSecond = window.confirm(
+      "Final Warning: This action cannot be undone. Proceed?"
+    );
+    if (!confirmSecond) return;
+
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_URL}/api/user/profile`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (res.ok) {
+        showSuccess("Account successfully deactivated.");
+        // Clear local data and logout
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        localStorage.removeItem("cart");
+
+        // Redirect to home or login
+        navigate("/login");
+        window.location.reload();
+      } else {
+        showError("Failed to deactivate account.");
+      }
+    } catch (err) {
+      showError("Network error. Please try again later.");
+    }
+  };
+
   // ================= GEOLOCATION HANDLER (HIGH ACCURACY) =================
   const handleUseCurrentLocation = () => {
     if (!navigator.geolocation) {
@@ -1535,6 +1573,7 @@ export default function Account() {
                   </div>
 
                   {/* Section 3: Danger Zone */}
+
                   <div className="mt-10 pt-6 border-t border-slate-100 dark:border-slate-800">
                     <h4 className="text-xs font-black text-red-500 uppercase tracking-[0.2em] mb-4">
                       Danger Zone
@@ -1549,7 +1588,10 @@ export default function Account() {
                           Please be certain.
                         </p>
                       </div>
-                      <button className="whitespace-nowrap bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg font-bold text-xs uppercase tracking-widest transition-all active:scale-95 shadow-sm shadow-red-200 dark:shadow-none">
+                      <button
+                        onClick={handleDeactivate}
+                        className="whitespace-nowrap bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg font-bold text-xs uppercase tracking-widest transition-all active:scale-95 shadow-sm shadow-red-200 dark:shadow-none"
+                      >
                         Deactivate
                       </button>
                     </div>
