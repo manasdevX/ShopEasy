@@ -1,6 +1,6 @@
 import Order from "../models/Order.js";
 
-// @desc    Create new order
+// @desc    Create new order (Direct COD or General)
 // @route   POST /api/orders
 // @access  Private (Customer)
 export const addOrderItems = async (req, res) => {
@@ -19,21 +19,41 @@ export const addOrderItems = async (req, res) => {
       return res.status(400).json({ message: "No order items" });
     }
 
+    // ✅ FIX: Ensure every item includes the required 'seller' ID from the request
+    // This prevents the "Path `seller` is required" validation error
+    const mappedOrderItems = orderItems.map((item) => ({
+      ...item,
+      product: item.product || item._id, // Ensure product ID is mapped
+      qty: item.qty || item.quantity, // Ensure qty is mapped
+      seller: item.seller, // Explicitly mapping the seller ID
+    }));
+
     const order = new Order({
-      orderItems,
       user: req.user._id, // Set by protect middleware
-      shippingAddress,
+      orderItems: mappedOrderItems,
+      // ✅ FIX: Ensure address fields match the schema requirements
+      shippingAddress: {
+        address: shippingAddress.address,
+        city: shippingAddress.city,
+        postalCode: shippingAddress.postalCode,
+        country: shippingAddress.country || "India", // Default required field
+      },
       paymentMethod,
       itemsPrice,
       taxPrice,
       shippingPrice,
       totalPrice,
+      // Default statuses for new orders
+      isPaid: paymentMethod === "COD" ? false : true,
+      paidAt: paymentMethod === "COD" ? null : Date.now(),
+      status: "Processing",
     });
 
     const createdOrder = await order.save();
     res.status(201).json(createdOrder);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("ORDER CREATE ERROR:", error);
+    res.status(400).json({ message: error.message });
   }
 };
 
@@ -83,26 +103,26 @@ export const getSellerOrders = async (req, res) => {
       .populate("user", "name email")
       .sort({ createdAt: -1 });
 
-    // 2. Filter the items to ONLY show products belonging to this seller
+    // 2. Filter items to ONLY show products belonging to this seller
     const sellerOrders = orders.map((order) => {
       const sellerItems = order.orderItems.filter(
         (item) => item.seller.toString() === req.seller._id.toString()
       );
 
-      // Return a clean structure for the seller dashboard
       return {
         _id: order._id,
         user: order.user,
         shippingAddress: order.shippingAddress,
+        paymentMethod: order.paymentMethod,
+        isPaid: order.isPaid,
         createdAt: order.createdAt,
-        // Optional: Calculate seller-specific total (price * qty)
         sellerTotal: sellerItems.reduce(
           (acc, item) => acc + item.price * item.qty,
           0
         ),
-        totalPrice: order.totalPrice, // Entire order total
+        totalPrice: order.totalPrice,
         items: sellerItems,
-        status: order.status, // General order status
+        status: order.status,
       };
     });
 
@@ -117,14 +137,13 @@ export const getSellerOrders = async (req, res) => {
 // @access  Private (Seller)
 export const updateOrderStatus = async (req, res) => {
   try {
-    const { status, productId } = req.body; // Expecting productId if updating specific item
+    const { status, productId } = req.body;
     const order = await Order.findById(req.params.id);
 
     if (!order) {
       return res.status(404).json({ message: "Order not found" });
     }
 
-    // Find the item in the orderItems array belonging to this seller
     const item = order.orderItems.find((item) => {
       const itemSellerId = item.seller._id
         ? item.seller._id.toString()
@@ -132,7 +151,6 @@ export const updateOrderStatus = async (req, res) => {
 
       const isOwner = itemSellerId === req.seller._id.toString();
 
-      // If productId is provided, ensure we match the specific product too
       return productId
         ? isOwner && item.product.toString() === productId
         : isOwner;
@@ -145,10 +163,10 @@ export const updateOrderStatus = async (req, res) => {
         item.deliveredAt = Date.now();
       }
 
-      // Check if ALL items in the order are delivered to update general order status
       const allDelivered = order.orderItems.every(
         (i) => i.itemStatus === "Delivered"
       );
+
       if (allDelivered) {
         order.isDelivered = true;
         order.deliveredAt = Date.now();
@@ -165,7 +183,7 @@ export const updateOrderStatus = async (req, res) => {
       });
     } else {
       res.status(403).json({
-        message: "Item not found or you are not authorized to update this item",
+        message: "Item not found or unauthorized",
       });
     }
   } catch (error) {
