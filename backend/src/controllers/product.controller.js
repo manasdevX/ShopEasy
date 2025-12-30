@@ -42,8 +42,6 @@ export const getAllProducts = async (req, res) => {
     const page = Number(req.query.pageNumber) || 1;
 
     // --- 1. Base Search Query (Keyword Only) ---
-    // We separate this so we can calculate facets based ONLY on the search term,
-    // ignoring the price/category filters currently applied.
     let keywordQuery = {};
 
     if (req.query.keyword) {
@@ -59,12 +57,10 @@ export const getAllProducts = async (req, res) => {
     // --- 2. Filter Query (Sidebar Filters) ---
     let filterQuery = {};
 
-    // Category Filter (Exact Match)
     if (req.query.category) {
       filterQuery.category = req.query.category;
     }
 
-    // Price Filter (Range)
     if (req.query.minPrice || req.query.maxPrice) {
       filterQuery.price = {};
       if (req.query.minPrice) {
@@ -75,7 +71,6 @@ export const getAllProducts = async (req, res) => {
       }
     }
 
-    // Rating Filter
     if (req.query.rating) {
       filterQuery.rating = { $gte: Number(req.query.rating) };
     }
@@ -85,32 +80,25 @@ export const getAllProducts = async (req, res) => {
 
     // --- 4. Execute Queries in Parallel ---
     const [products, count, facetsResult] = await Promise.all([
-      // A. Get Actual Products (Paginated)
       Product.find(finalQuery)
         .limit(pageSize)
         .skip(pageSize * (page - 1))
         .sort({ createdAt: -1 }),
 
-      // B. Get Total Count (For Pagination)
       Product.countDocuments(finalQuery),
 
-      // C. Get Dynamic Facets (Counts)
-      // We aggregate based on 'keywordQuery' only, so users see available
-      // categories even if they haven't selected one yet.
       Product.aggregate([
         { $match: keywordQuery },
         {
           $facet: {
-            // Count by Category
             categories: [
               { $group: { _id: "$category", count: { $sum: 1 } } },
               { $sort: { count: -1 } },
             ],
-            // Count by Rating (Floored)
             ratings: [
               {
                 $project: {
-                  rating: { $floor: "$rating" }, // Group 4.2 & 4.8 together as "4"
+                  rating: { $floor: "$rating" },
                 },
               },
               { $group: { _id: "$rating", count: { $sum: 1 } } },
@@ -121,13 +109,12 @@ export const getAllProducts = async (req, res) => {
       ]),
     ]);
 
-    // Send Response
     res.json({
       products,
       page,
       pages: Math.ceil(count / pageSize),
       total: count,
-      facets: facetsResult[0], // Send the counts to frontend
+      facets: facetsResult[0],
     });
   } catch (error) {
     console.error("Search Error:", error);
@@ -192,13 +179,11 @@ export const createProduct = async (req, res) => {
       isBestSeller,
     } = req.body;
 
-    // 1. Upload Thumbnail
     let thumbnail = "";
     if (req.files && req.files.thumbnail) {
       thumbnail = await uploadToCloudinary(req.files.thumbnail[0].buffer);
     }
 
-    // 2. Upload Gallery Images
     let galleryImages = [];
     if (req.files && req.files.images) {
       const uploadPromises = req.files.images.map((file) =>
@@ -209,7 +194,6 @@ export const createProduct = async (req, res) => {
 
     const allImages = [thumbnail, ...galleryImages].filter(Boolean);
 
-    // 3. Parse Tags
     let parsedTags = [];
     if (tags) {
       try {
@@ -255,14 +239,12 @@ export const updateProduct = async (req, res) => {
       return res.status(404).json({ message: "Product not found" });
     }
 
-    // Security Check
     if (product.seller.toString() !== req.seller._id.toString()) {
       return res
         .status(403)
         .json({ message: "Not authorized to edit this product" });
     }
 
-    // --- 1. HANDLE THUMBNAIL ---
     if (req.files && req.files.thumbnail) {
       product.thumbnail = await uploadToCloudinary(
         req.files.thumbnail[0].buffer
@@ -271,7 +253,6 @@ export const updateProduct = async (req, res) => {
       product.thumbnail = req.body.existingThumbnail;
     }
 
-    // --- 2. HANDLE GALLERY IMAGES ---
     let finalImages = [];
     if (req.body.existingImages) {
       if (Array.isArray(req.body.existingImages)) {
@@ -300,7 +281,6 @@ export const updateProduct = async (req, res) => {
       product.images = [];
     }
 
-    // --- 3. UPDATE TEXT FIELDS ---
     product.name = req.body.name || product.name;
     product.price = req.body.price || product.price;
     product.mrp = req.body.mrp || product.mrp;
@@ -361,33 +341,48 @@ export const deleteProduct = async (req, res) => {
    REVIEW ROUTES
 ========================================= */
 
+// @desc    Create new review
+// @route   POST /api/products/:id/reviews
+// @access  Private
 export const createProductReview = async (req, res) => {
-  const { rating, comment } = req.body;
-  const product = await Product.findById(req.params.id);
+  try {
+    const { rating, comment } = req.body;
 
-  if (product) {
-    const alreadyReviewed = product.reviews.find(
-      (r) => r.user.toString() === req.user._id.toString()
-    );
-    if (alreadyReviewed)
-      return res.status(400).json({ message: "Product already reviewed" });
+    // Validate ID before query to prevent CastError crash
+    if (!req.params.id || req.params.id.match(/^[0-9a-fA-F]{24}$/) === null) {
+      return res.status(400).json({ message: "Invalid Product ID format" });
+    }
 
-    const review = {
-      name: req.user.name,
-      rating: Number(rating),
-      comment,
-      user: req.user._id,
-    };
+    const product = await Product.findById(req.params.id);
 
-    product.reviews.push(review);
-    product.numReviews = product.reviews.length;
-    product.rating =
-      product.reviews.reduce((acc, item) => item.rating + acc, 0) /
-      product.reviews.length;
+    if (product) {
+      const alreadyReviewed = product.reviews.find(
+        (r) => r.user.toString() === req.user._id.toString()
+      );
+      if (alreadyReviewed) {
+        return res.status(400).json({ message: "Product already reviewed" });
+      }
 
-    await product.save();
-    res.status(201).json({ message: "Review added" });
-  } else {
-    res.status(404).json({ message: "Product not found" });
+      const review = {
+        name: req.user.name,
+        rating: Number(rating),
+        comment,
+        user: req.user._id,
+      };
+
+      product.reviews.push(review);
+      product.numReviews = product.reviews.length;
+      product.rating =
+        product.reviews.reduce((acc, item) => item.rating + acc, 0) /
+        product.reviews.length;
+
+      await product.save();
+      res.status(201).json({ message: "Review added" });
+    } else {
+      res.status(404).json({ message: "Product not found" });
+    }
+  } catch (error) {
+    console.error("Review Error:", error); // Log the actual error
+    res.status(500).json({ message: "Server Error: " + error.message });
   }
 };
