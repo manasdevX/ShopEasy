@@ -363,7 +363,7 @@ export default function SellerSignup() {
                 </p>
               )}
               {isEmailSent && !isEmailVerified && !googleId && (
-                <div className="flex gap-2 p-2 bg-gray-50 dark:bg-slate-800/50 rounded-lg border border-dashed dark:border-slate-700 animate-in zoom-in-95">
+                <div className="flex gap-2 p-2 bg-gray-50 dark:bg-slate-800/50 rounded-lg dark:border-slate-700 animate-in zoom-in-95">
                   <input
                     autoComplete="off"
                     type="text"
@@ -432,7 +432,7 @@ export default function SellerSignup() {
                 </p>
               )}
               {isMobileSent && !isMobileVerified && (
-                <div className="flex gap-2 p-2 bg-gray-50 dark:bg-slate-800/50 rounded-lg border border-dashed dark:border-slate-700 animate-in zoom-in-95">
+                <div className="flex gap-2 p-2 bg-gray-50 dark:bg-slate-800/50 rounded-lg dark:border-slate-700 animate-in zoom-in-95">
                   <input
                     autoComplete="off"
                     type="text"

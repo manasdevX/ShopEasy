@@ -380,7 +380,7 @@ export default function Signup() {
                 </p>
               )}
               {isEmailSent && !isEmailVerified && !googleId && (
-                <div className="flex gap-2 p-2 bg-gray-50 dark:bg-slate-800/50 rounded-lg border border-dashed dark:border-slate-700 animate-in zoom-in-95">
+                <div className="flex gap-2 p-2 bg-gray-50 dark:bg-slate-800/50 rounded-lg dark:border-slate-700 animate-in zoom-in-95">
                   <input
                     autoComplete="off"
                     type="text"
@@ -430,7 +430,7 @@ export default function Signup() {
                         <Loader2 className="text-orange-500 animate-spin" size={16} />
                       ) : mobileTimer > 0 ? (
                         <span className="text-orange-600 dark:text-orange-400 font-black">
-                          {emailTimer}s
+                          {mobileTimer}s
                         </span>
                       ) : isMobileSent ? (
                         "Resend"
@@ -449,7 +449,7 @@ export default function Signup() {
                 </p>
               )}
               {isMobileSent && !isMobileVerified && (
-                <div className="flex gap-2 p-2 bg-gray-50 dark:bg-slate-800/50 rounded-lg border border-dashed dark:border-slate-700 animate-in zoom-in-95">
+                <div className="flex gap-2 p-2 bg-gray-50 dark:bg-slate-800/50 rounded-lg dark:border-slate-700 animate-in zoom-in-95">
                   <input
                     autoComplete="off"
                     type="text"

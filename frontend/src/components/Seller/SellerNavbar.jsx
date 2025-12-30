@@ -217,10 +217,10 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
             </button>
 
             {isAuth && (
-              <button className="p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 relative transition-colors">
+              <Link to="/Seller/Notifications" className="p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 relative transition-colors">
                 <Bell size={20} />
                 <span className="absolute top-2 right-2.5 w-2 h-2 bg-orange-500 rounded-full border-2 border-white dark:border-[#030712]"></span>
-              </button>
+              </Link>
             )}
 
             <div className="h-8 w-[1px] bg-slate-100 dark:bg-slate-800 mx-1 hidden sm:block"></div>

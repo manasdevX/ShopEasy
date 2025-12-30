@@ -107,6 +107,16 @@ export default function ProductDetails() {
     }
   };
 
+  const nextImage = () => {
+    setSelectedImage((prev) => (prev + 1) % allImages.length);
+  };
+
+  const prevImage = () => {
+    setSelectedImage(
+      (prev) => (prev - 1 + allImages.length) % allImages.length
+    );
+  };
+
   const handleBuyNow = () => {
     if (isLoggedIn) {
       // ✅ FIX: Mapping product data with seller ID to satisfy Order Model requirements
@@ -156,11 +166,24 @@ export default function ProductDetails() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 relative">
           {/* LEFT COLUMN: IMAGES */}
           <div className="lg:sticky lg:top-24 h-fit space-y-8">
-            <div className="aspect-square bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 overflow-hidden flex items-center justify-center p-8 relative shadow-sm">
+            {/* MAIN IMAGE CONTAINER */}
+            <div className="group relative aspect-square bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 overflow-hidden flex items-center justify-center p-8 shadow-sm">
+              {/* Left Button */}
+              {allImages.length > 1 && (
+                <button
+                  onClick={prevImage}
+                  className="absolute left-4 z-20 p-3 rounded-full bg-white/90 dark:bg-slate-800/90 text-slate-900 dark:text-white shadow-xl backdrop-blur-md transition-all duration-300 hover:bg-orange-500 hover:text-white"
+                >
+                  <ChevronLeft size={24} strokeWidth={3} />
+                </button>
+              )}
+
+              {/* Main Image Rendering */}
               {getImageUrl(allImages[selectedImage]) ? (
                 <img
                   src={getImageUrl(allImages[selectedImage])}
                   alt={product.name}
+                  key={selectedImage} // Key helps trigger transition animations
                   className="w-full h-full object-contain hover:scale-105 transition-transform duration-500"
                 />
               ) : (
@@ -171,6 +194,25 @@ export default function ProductDetails() {
                   </span>
                 </div>
               )}
+
+              {/* Right Button */}
+              {allImages.length > 1 && (
+                <button
+                  onClick={nextImage}
+                  className="absolute right-4 z-20 p-3 rounded-full bg-white/90 dark:bg-slate-800/90 text-slate-900 dark:text-white shadow-xl backdrop-blur-md transition-all duration-300 hover:bg-orange-500 hover:text-white"
+                >
+                  <ChevronLeft
+                    size={24}
+                    strokeWidth={3}
+                    className="rotate-180"
+                  />
+                </button>
+              )}
+
+              {/* Image Count Indicator */}
+              <div className="absolute bottom-6 px-4 py-1.5 bg-slate-900/10 dark:bg-white/10 backdrop-blur-md rounded-full text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 border border-white/20">
+                {selectedImage + 1} / {allImages.length}
+              </div>
             </div>
 
             {allImages.length > 1 && (

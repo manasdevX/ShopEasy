@@ -28,6 +28,7 @@ import Products from "./pages/Seller/Products";
 import AddProduct from "./pages/Seller/AddProduct";
 import EditProduct from "./pages/Seller/EditProduct";
 import SellerOrders from "./pages/Seller/Orders";
+import Notifications from "./pages/Seller/Notification";
 
 export default function App() {
   return (
@@ -70,6 +71,7 @@ export default function App() {
         {/* --- Seller Journey Routes --- */}
         <Route path="/Seller/Landing" element={<SellerLanding />} />
         <Route path="/Seller/Dashboard" element={<Dashboard />} />
+        <Route path="/Seller/Notifications" element={<Notifications />} />
 
         {/* Product Management */}
         <Route path="/Seller/products" element={<Products />} />
