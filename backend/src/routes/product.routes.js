@@ -15,21 +15,19 @@ import { protect, protectSeller } from "../middlewares/auth.middleware.js";
 const router = express.Router();
 
 // --- Multer Configuration (Memory Storage for Cloudinary) ---
-// We use memoryStorage so we can access file.buffer in the controller
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
 /* =========================================
    SELLER ROUTES (Manage Products)
-   NOTE: Specialized routes must come BEFORE /:id 
-   to prevent "seller/all" being interpreted as an ID
+   ⚠️ IMPORTANT: Specialized routes must come BEFORE /:id 
+   so "seller/all" isn't treated as an product ID
 ========================================= */
 
-// Matches: GET /api/products/seller/all
+// 1. Get all products for the logged-in seller
 router.get("/seller/all", protectSeller, getSellerProducts);
 
-// Matches: POST /api/products/add
-// Uploads thumbnail (1) + gallery images (up to 5)
+// 2. Add a new product (Thumb + Images)
 router.post(
   "/add",
   protectSeller,
@@ -40,8 +38,7 @@ router.post(
   createProduct
 );
 
-// Matches: PUT /api/products/:id
-// Allows updating images during edit
+// 3. Update an existing product
 router.put(
   "/:id",
   protectSeller,
@@ -52,26 +49,25 @@ router.put(
   updateProduct
 );
 
-// Matches: DELETE /api/products/:id
-router.delete("/:id", protectSeller, deleteProduct);
+// 4. Delete a product
+router.delete("//:id", protectSeller, deleteProduct);
 
 /* =========================================
-   PUBLIC ROUTES
+   PUBLIC ROUTES (Browsing)
 ========================================= */
 
-// Matches: GET /api/products
-// Supports: ?keyword=abc & minPrice=100 & rating=4 & category=electronics
+// 1. Get All Products (Home Page & Search)
+// Supports query params: ?keyword=...&category=...
 router.get("/", getAllProducts);
 
-// Matches: GET /api/products/:id
+// 2. Get Single Product Details
 router.get("/:id", getProductById);
 
 /* =========================================
-   CUSTOMER ACTIONS (Reviews)
+   CUSTOMER ACTIONS
 ========================================= */
 
-// Matches: POST /api/products/:id/reviews
-// Uses 'protect' (any logged-in user) not 'protectSeller'
+// 1. Add/Update Review
 router.post("/:id/reviews", protect, createProductReview);
 
 export default router;
