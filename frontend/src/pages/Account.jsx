@@ -60,6 +60,7 @@ export default function Account() {
     email: "",
     phone: "",
     avatar: null,
+    passwordChangedAt: null,
     addresses: [],
     address: {
       name: "",
@@ -81,76 +82,78 @@ export default function Account() {
   const [status, setStatus] = useState("loading");
 
   // ================= FETCH LOGIC =================
-  useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const token = localStorage.getItem("token");
-        if (!token) {
-          setStatus("idle");
-          return;
-        }
+ useEffect(() => {
+   const fetchProfile = async () => {
+     try {
+       const token = localStorage.getItem("token");
+       if (!token) {
+         setStatus("idle");
+         return;
+       }
 
-        const res = await fetch(`${API_URL}/api/user/profile`, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        });
+       const res = await fetch(`${API_URL}/api/user/profile`, {
+         method: "GET",
+         headers: {
+           "Content-Type": "application/json",
+           Authorization: `Bearer ${token}`,
+         },
+       });
 
-        if (res.status === 401) {
-          localStorage.removeItem("token");
-          setStatus("idle");
-          return;
-        }
+       if (res.status === 401) {
+         localStorage.removeItem("token");
+         setStatus("idle");
+         return;
+       }
 
-        const data = await res.json();
-        if (res.ok) {
-          const allAddresses = data.addresses || [];
-          const primaryAddr =
-            allAddresses.find((a) => a.isDefault) ||
-            allAddresses[allAddresses.length - 1] ||
-            {};
+       const data = await res.json();
+       if (res.ok) {
+         const allAddresses = data.addresses || [];
+         const primaryAddr =
+           allAddresses.find((a) => a.isDefault) ||
+           allAddresses[allAddresses.length - 1] ||
+           {};
 
-          const userData = {
-            name: data.name || "",
-            email: data.email || "",
-            phone: (data.phone || "").replace(/^\+91/, ""),
-            avatar:
-              data.profilePicture ||
-              `https://ui-avatars.com/api/?name=${encodeURIComponent(
-                data.name || "User"
-              )}&background=random&color=fff`,
-            addresses: allAddresses,
-            address: {
-              name: data.address?.name || primaryAddr.fullName || data.name,
-              phone: (
-                data.address?.phone ||
-                primaryAddr.phone ||
-                data.phone ||
-                ""
-              ).replace(/^\+91/, ""),
-              street: data.address?.street || primaryAddr.addressLine || "",
-              city: data.address?.city || primaryAddr.city || "",
-              state: data.address?.state || primaryAddr.state || "",
-              pincode: data.address?.pincode || primaryAddr.pincode || "",
-              country: data.address?.country || primaryAddr.country || "India",
-              type: data.address?.type || primaryAddr.type || "Home",
-            },
-            orders: [], // You can fetch orders here if you have an order endpoint
-            wishlist: data.wishlist || [], // ✅ Load Wishlist from API
-          };
-          setUser(userData);
-          setFormData(userData);
-        }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setStatus("idle");
-      }
-    };
-    fetchProfile();
-  }, []);
+         const userData = {
+           name: data.name || "",
+           email: data.email || "",
+           phone: (data.phone || "").replace(/^\+91/, ""),
+           avatar:
+             data.profilePicture ||
+             `https://ui-avatars.com/api/?name=${encodeURIComponent(
+               data.name || "User"
+             )}&background=random&color=fff`,
+           // ✅ FIX: Capture the passwordChangedAt date
+           passwordChangedAt: data.passwordChangedAt,
+           addresses: allAddresses,
+           address: {
+             name: data.address?.name || primaryAddr.fullName || data.name,
+             phone: (
+               data.address?.phone ||
+               primaryAddr.phone ||
+               data.phone ||
+               ""
+             ).replace(/^\+91/, ""),
+             street: data.address?.street || primaryAddr.addressLine || "",
+             city: data.address?.city || primaryAddr.city || "",
+             state: data.address?.state || primaryAddr.state || "",
+             pincode: data.address?.pincode || primaryAddr.pincode || "",
+             country: data.address?.country || primaryAddr.country || "India",
+             type: data.address?.type || primaryAddr.type || "Home",
+           },
+           orders: [], // You can fetch orders here if you have an endpoint
+           wishlist: data.wishlist || [],
+         };
+         setUser(userData);
+         setFormData(userData);
+       }
+     } catch (err) {
+       console.error(err);
+     } finally {
+       setStatus("idle");
+     }
+   };
+   fetchProfile();
+ }, []);
 
   // ================= WISHLIST HANDLER =================
   const handleRemoveFromWishlist = async (productId) => {
