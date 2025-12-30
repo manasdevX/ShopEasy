@@ -34,29 +34,20 @@ export default function CheckoutPage() {
     city: "",
     pincode: "",
     phone: "",
-    country: "India", // Defaulting for schema validation
+    country: "India",
   });
-  const [saveAddress, setSaveAddress] = useState(false);
 
   // --- CALCULATIONS ---
   const totalItemCount = items.reduce((acc, item) => acc + item.quantity, 0);
-
   const totalMRP = items.reduce(
     (acc, item) => acc + (item.mrp || item.price) * item.quantity,
     0
   );
-
-  const totalDiscount = items.reduce(
-    (acc, item) =>
-      acc + ((item.mrp || item.price) - item.price) * item.quantity,
-    0
-  );
-
   const subtotal = items.reduce(
     (acc, item) => acc + item.price * item.quantity,
     0
   );
-
+  const totalDiscount = totalMRP - subtotal;
   const platformFee = items.length > 0 ? 3 : 0;
   const deliveryFee = subtotal > 500 || items.length === 0 ? 0 : 40;
   const totalPayable = subtotal + platformFee + deliveryFee;
@@ -65,13 +56,12 @@ export default function CheckoutPage() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  // ================= GEOLOCATION HANDLER =================
+  // ================= GEOLOCATION =================
   const handleUseCurrentLocation = () => {
     if (!navigator.geolocation) {
       toast.error("Geolocation is not supported by your browser");
       return;
     }
-
     setIsLocating(true);
     navigator.geolocation.getCurrentPosition(
       async (position) => {
@@ -106,9 +96,8 @@ export default function CheckoutPage() {
     );
   };
 
-  // ================= RAZORPAY INTEGRATION =================
+  // ================= MAIN ORDER HANDLER =================
   const handlePayment = async () => {
-    // 1. Validation
     if (
       !formData.fullName ||
       !formData.street ||
@@ -120,11 +109,57 @@ export default function CheckoutPage() {
     }
 
     setIsProcessing(true);
+    const token = localStorage.getItem("token");
 
     try {
-      const token = localStorage.getItem("token");
+      // --- 1. BRANCH: CASH ON DELIVERY FLOW ---
+      // This bypasses Razorpay and hits the orders endpoint directly
+      if (paymentMode === "cod") {
+        const res = await fetch(`${API_URL}/api/orders`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            orderItems: items.map((item) => ({
+              name: item.name,
+              qty: item.quantity,
+              image: item.image,
+              price: item.price,
+              product: item._id,
+              seller: item.seller, // Ensuring seller requirement is met
+            })),
+            shippingAddress: {
+              address: formData.street,
+              city: formData.city,
+              postalCode: formData.pincode,
+              country: formData.country,
+            },
+            paymentMethod: "COD",
+            itemsPrice: subtotal,
+            taxPrice: platformFee,
+            shippingPrice: deliveryFee,
+            totalPrice: totalPayable,
+          }),
+        });
 
-      // 2. Create Order on Backend
+        const data = await res.json();
+
+        if (res.ok) {
+          showSuccess("Order Placed Successfully!");
+          localStorage.removeItem("cart");
+          window.dispatchEvent(new Event("cartUpdated"));
+          // Navigate instantly to Summary
+          navigate("/OrderSummary", { state: { order: data } });
+        } else {
+          showError(data.message || "Failed to place COD order");
+        }
+        setIsProcessing(false);
+        return;
+      }
+
+      // --- 2. BRANCH: RAZORPAY FLOW ---
       const res = await fetch(`${API_URL}/api/payment/create-order`, {
         method: "POST",
         headers: {
@@ -135,12 +170,9 @@ export default function CheckoutPage() {
       });
 
       const orderData = await res.json();
-
-      if (!res.ok) {
+      if (!res.ok)
         throw new Error(orderData.message || "Failed to create order");
-      }
 
-      // 3. Configure Razorpay Options
       const options = {
         key: import.meta.env.VITE_RAZORPAY_KEY_ID,
         amount: orderData.order.amount,
@@ -150,8 +182,6 @@ export default function CheckoutPage() {
         order_id: orderData.order.id,
         handler: async function (response) {
           try {
-            // 4. Verify Payment on Backend
-            // Mapping fields to match Order Model schema exactly
             const verifyRes = await fetch(
               `${API_URL}/api/payment/verify-payment`,
               {
@@ -175,40 +205,29 @@ export default function CheckoutPage() {
             );
 
             const verifyData = await verifyRes.json();
-
             if (verifyRes.ok) {
-              showSuccess("Order Placed Successfully!");
+              showSuccess("Payment Successful!");
               localStorage.removeItem("cart");
               window.dispatchEvent(new Event("cartUpdated"));
-              navigate("/account");
+              navigate("/OrderSummary", { state: { order: verifyData.order } });
             } else {
-              showError(verifyData.message || "Order saving failed");
+              showError("Order saving failed");
             }
           } catch (err) {
-            showError("Error verifying payment");
+            showError("Verification error");
           } finally {
             setIsProcessing(false);
           }
         },
-        prefill: {
-          name: formData.fullName,
-          contact: formData.phone,
-        },
-        theme: {
-          color: "#4f46e5",
-        },
-        modal: {
-          ondismiss: function () {
-            setIsProcessing(false);
-          },
-        },
+        prefill: { name: formData.fullName, contact: formData.phone },
+        theme: { color: "#4f46e5" },
+        modal: { ondismiss: () => setIsProcessing(false) },
       };
 
       const rzp = new window.Razorpay(options);
       rzp.open();
     } catch (error) {
-      console.error("Payment Error:", error);
-      showError(error.message || "An error occurred during checkout");
+      showError(error.message || "Checkout failed");
       setIsProcessing(false);
     }
   };
@@ -233,7 +252,6 @@ export default function CheckoutPage() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#030712] transition-colors font-sans">
       <PaymentHeader />
-
       <main className="max-w-6xl mx-auto px-6 py-10">
         <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-6 mb-8 gap-4">
           <h1 className="text-4xl md:text-5xl font-black text-slate-900 dark:text-white tracking-tight">
@@ -241,7 +259,7 @@ export default function CheckoutPage() {
           </h1>
           <button
             onClick={() => navigate(-1)}
-            className="flex items-center gap-2 text-slate-500 hover:text-orange-600 dark:hover:text-orange-400 text-sm font-bold transition-colors"
+            className="flex items-center gap-2 text-slate-500 hover:text-orange-600 text-sm font-bold transition-colors"
           >
             <ChevronLeft size={18} /> Back to Shopping
           </button>
@@ -255,11 +273,10 @@ export default function CheckoutPage() {
                   <ShoppingBag size={18} />
                 </div>
                 <h2 className="font-bold text-slate-900 dark:text-white uppercase tracking-wider text-xs">
-                  Order Summary ({totalItemCount}{" "}
-                  {totalItemCount > 1 ? "Items" : "Item"})
+                  Order Summary ({totalItemCount} Items)
                 </h2>
               </div>
-              <div className="space-y-4 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+              <div className="space-y-4 max-h-60 overflow-y-auto pr-2">
                 {items.map((item, index) => (
                   <div
                     key={index}
@@ -306,25 +323,24 @@ export default function CheckoutPage() {
                 <button
                   onClick={handleUseCurrentLocation}
                   disabled={isLocating}
-                  className="flex items-center gap-2 text-indigo-600 hover:text-indigo-700 text-xs font-bold uppercase transition-colors disabled:opacity-50"
+                  className="flex items-center gap-2 text-indigo-600 text-xs font-bold uppercase transition-colors"
                 >
                   {isLocating ? (
                     <Loader2 size={14} className="animate-spin" />
                   ) : (
                     <LocateFixed size={14} />
-                  )}
+                  )}{" "}
                   Detect Location
                 </button>
               </div>
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="md:col-span-2">
                   <input
                     name="fullName"
                     value={formData.fullName}
                     onChange={handleInputChange}
-                    placeholder="Full Name (Required)"
-                    className="w-full px-4 py-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 outline-none text-sm dark:text-white font-medium"
+                    placeholder="Full Name"
+                    className="w-full px-4 py-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 outline-none dark:text-white"
                   />
                 </div>
                 <div className="md:col-span-2">
@@ -332,8 +348,8 @@ export default function CheckoutPage() {
                     name="phone"
                     value={formData.phone}
                     onChange={handleInputChange}
-                    placeholder="Mobile Number (Required)"
-                    className="w-full px-4 py-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 outline-none text-sm dark:text-white font-medium"
+                    placeholder="Phone Number"
+                    className="w-full px-4 py-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 outline-none dark:text-white"
                   />
                 </div>
                 <div className="md:col-span-2">
@@ -341,8 +357,8 @@ export default function CheckoutPage() {
                     name="street"
                     value={formData.street}
                     onChange={handleInputChange}
-                    placeholder="Street Address, House No."
-                    className="w-full px-4 py-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 outline-none text-sm dark:text-white font-medium"
+                    placeholder="Street / House No."
+                    className="w-full px-4 py-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 outline-none dark:text-white"
                   />
                 </div>
                 <input
@@ -350,7 +366,7 @@ export default function CheckoutPage() {
                   value={formData.city}
                   onChange={handleInputChange}
                   placeholder="City"
-                  className="w-full px-4 py-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 outline-none text-sm dark:text-white font-medium"
+                  className="w-full px-4 py-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 outline-none dark:text-white"
                 />
                 <input
                   name="pincode"
@@ -358,7 +374,7 @@ export default function CheckoutPage() {
                   onChange={handleInputChange}
                   maxLength="6"
                   placeholder="Pincode"
-                  className="w-full px-4 py-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 outline-none text-sm dark:text-white font-medium"
+                  className="w-full px-4 py-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 outline-none dark:text-white"
                 />
               </div>
             </div>
@@ -375,14 +391,13 @@ export default function CheckoutPage() {
               <div className="space-y-3">
                 {[
                   { id: "upi", label: "Online Payment (Razorpay)" },
-                  { id: "card", label: "Credit / Debit Card (Razorpay)" },
                   { id: "cod", label: "Cash on Delivery" },
                 ].map((mode) => (
                   <label
                     key={mode.id}
                     className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${
                       paymentMode === mode.id
-                        ? "border-indigo-600 bg-indigo-50/30 dark:bg-indigo-500/5"
+                        ? "border-indigo-600 bg-indigo-50/10"
                         : "border-slate-100 dark:border-slate-800"
                     }`}
                   >
@@ -398,7 +413,7 @@ export default function CheckoutPage() {
                           <div className="w-2.5 h-2.5 bg-indigo-600 rounded-full" />
                         )}
                       </div>
-                      <span className="text-sm font-bold dark:text-white uppercase tracking-tight">
+                      <span className="text-sm font-bold dark:text-white uppercase">
                         {mode.label}
                       </span>
                     </div>
@@ -421,9 +436,8 @@ export default function CheckoutPage() {
                   Price Details
                 </h2>
               </div>
-
               <div className="p-6 space-y-4">
-                <div className="flex justify-between text-sm font-medium">
+                <div className="flex justify-between text-sm">
                   <span className="text-slate-500">
                     Price ({totalItemCount} items)
                   </span>
@@ -431,52 +445,50 @@ export default function CheckoutPage() {
                     ₹{totalMRP.toLocaleString()}
                   </span>
                 </div>
-                <div className="flex justify-between text-sm font-medium">
+                <div className="flex justify-between text-sm">
                   <span className="text-slate-500">Discount</span>
                   <span className="text-green-500">
                     - ₹{totalDiscount.toLocaleString()}
                   </span>
                 </div>
-                <div className="flex justify-between text-sm font-medium">
+                <div className="flex justify-between text-sm">
                   <span className="text-slate-500">Platform Fee</span>
                   <span className="text-slate-900 dark:text-white">
                     ₹{platformFee}
                   </span>
                 </div>
-                <div className="flex justify-between text-sm font-medium border-b border-dashed border-slate-200 dark:border-slate-800 pb-4">
+                <div className="flex justify-between text-sm border-b border-dashed border-slate-200 dark:border-slate-800 pb-4">
                   <span className="text-slate-500">Delivery Charges</span>
                   <span
                     className={
                       deliveryFee === 0
                         ? "text-green-500 font-bold"
-                        : "text-slate-900 dark:text-white"
+                        : "dark:text-white"
                     }
                   >
                     {deliveryFee === 0 ? "FREE" : `₹${deliveryFee}`}
                   </span>
                 </div>
                 <div className="flex justify-between pt-2">
-                  <span className="text-lg font-bold text-slate-900 dark:text-white">
+                  <span className="text-lg font-bold dark:text-white">
                     Total Payable
                   </span>
-                  <span className="text-xl font-black text-slate-900 dark:text-white">
+                  <span className="text-xl font-black dark:text-white">
                     ₹{totalPayable.toLocaleString()}
                   </span>
                 </div>
               </div>
-
               <div className="bg-green-500/10 p-4 mx-6 mb-6 rounded-2xl flex items-center gap-3 border border-green-500/20">
                 <CheckCircle2 size={18} className="text-green-500" />
                 <p className="text-xs font-bold text-green-600">
                   You will save ₹{totalDiscount.toLocaleString()} on this order
                 </p>
               </div>
-
               <div className="p-6 pt-0">
                 <button
                   onClick={handlePayment}
                   disabled={isProcessing}
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-black py-4 rounded-2xl shadow-lg shadow-indigo-500/20 transition-all active:scale-95 flex items-center justify-center gap-2 uppercase tracking-widest text-xs mb-4"
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-black py-4 rounded-2xl transition-all flex items-center justify-center gap-2 uppercase text-xs"
                 >
                   {isProcessing ? (
                     <Loader2 size={18} className="animate-spin" />
@@ -486,7 +498,7 @@ export default function CheckoutPage() {
                     </>
                   )}
                 </button>
-                <div className="flex items-center justify-center gap-2 text-[10px] text-slate-400 font-bold uppercase">
+                <div className="flex items-center justify-center gap-2 text-[10px] text-slate-400 font-bold uppercase mt-4">
                   <ShieldCheck size={14} /> 100% Secure Transaction
                 </div>
               </div>

@@ -67,6 +67,9 @@ export const verifyPayment = async (req, res) => {
       razorpay_signature,
       orderItems,
       shippingAddress,
+      itemsPrice,
+      taxPrice,
+      shippingPrice,
       totalPrice,
     } = req.body;
 
@@ -95,16 +98,13 @@ export const verifyPayment = async (req, res) => {
         image: item.image,
         price: item.price,
         product: item._id,
-        // ✅ FIX: Ensure seller ID is present (using item.seller or fallback)
-        seller: item.seller || req.user._id,
+        // ✅ CRITICAL FIX: Ensure 'seller' is passed from frontend
+        seller: item.seller,
       })),
       shippingAddress: {
-        // ✅ FIX: Mapping frontend 'street' to schema 'address'
         address: shippingAddress.street,
         city: shippingAddress.city,
-        // ✅ FIX: Mapping frontend 'pincode' to schema 'postalCode'
         postalCode: shippingAddress.pincode,
-        // ✅ FIX: Adding required 'country' field
         country: shippingAddress.country || "India",
       },
       paymentMethod: "Razorpay",
@@ -113,9 +113,13 @@ export const verifyPayment = async (req, res) => {
         status: "Completed",
         update_time: new Date().toISOString(),
       },
+      itemsPrice,
+      taxPrice,
+      shippingPrice,
       totalPrice,
       isPaid: true,
       paidAt: Date.now(),
+      status: "Processing",
     });
 
     const savedOrder = await newOrder.save();
@@ -130,7 +134,7 @@ export const verifyPayment = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Payment verified but failed to save order.",
-      error: error.message, // Helps debug any remaining validation issues
+      error: error.message,
     });
   }
 };

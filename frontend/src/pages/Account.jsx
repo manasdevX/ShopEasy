@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Link , useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { showSuccess, showError } from "../utils/toast";
 import Footer from "../components/Footer";
@@ -47,6 +47,7 @@ export default function Account() {
   const [openMenuId, setOpenMenuId] = useState(null);
   const [isAddressSaving, setIsAddressSaving] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
+  const [ordersLoading, setOrdersLoading] = useState(false);
 
   const [newAddress, setNewAddress] = useState({
     name: "",
@@ -159,6 +160,29 @@ export default function Account() {
     };
     fetchProfile();
   }, []);
+
+  useEffect(() => {
+    if (activeTab === "orders") {
+      const fetchOrders = async () => {
+        setOrdersLoading(true);
+        try {
+          const token = localStorage.getItem("token");
+          const res = await fetch(`${API_URL}/api/orders/myorders`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const data = await res.json();
+          if (res.ok) {
+            setUser((prev) => ({ ...prev, orders: data }));
+          }
+        } catch (err) {
+          console.error("Order fetch error:", err);
+        } finally {
+          setOrdersLoading(false);
+        }
+      };
+      fetchOrders();
+    }
+  }, [activeTab]);
 
   // ================= WISHLIST HANDLER =================
   const handleRemoveFromWishlist = async (productId) => {
@@ -643,7 +667,7 @@ export default function Account() {
     { id: "addresses", label: "Manage Addresses", icon: <MapPin size={18} /> },
     { id: "security", label: "Privacy & Security", icon: <Lock size={18} /> },
   ];
-  
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#030712] text-slate-900 dark:text-slate-100 transition-colors duration-300 font-sans">
       <Navbar />
@@ -893,17 +917,32 @@ export default function Account() {
             {/* 2. ORDER HISTORY TAB */}
             {activeTab === "orders" && (
               <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500 min-h-[500px]">
-                <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
-                  <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                    Order History
-                  </h3>
-                  <span className="text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-500 px-3 py-1 rounded-full">
-                    {user.orders.length} Orders Total
+                <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/20">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                      Order History
+                    </h3>
+                    <p className="text-xs text-slate-500 font-medium">
+                      Track and manage your recent purchases
+                    </p>
+                  </div>
+                  <span className="text-xs font-bold bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-3 py-1 rounded-full border border-blue-100 dark:border-blue-800">
+                    {user.orders.length} Orders
                   </span>
                 </div>
 
                 <div className="p-6">
-                  {user.orders.length === 0 ? (
+                  {ordersLoading ? (
+                    <div className="flex flex-col items-center justify-center py-20">
+                      <Loader2
+                        className="animate-spin text-blue-500 mb-2"
+                        size={32}
+                      />
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                        Loading orders...
+                      </p>
+                    </div>
+                  ) : user.orders.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-20 text-center">
                       <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-full mb-4">
                         <Package
@@ -919,50 +958,35 @@ export default function Account() {
                       </p>
                       <Link
                         to="/"
-                        className="mt-6 bg-blue-600 text-white px-6 py-2 rounded-lg font-bold text-sm hover:bg-blue-700 transition-all"
+                        className="mt-6 bg-blue-600 text-white px-8 py-3 rounded-xl font-bold text-sm hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20"
                       >
                         Start Shopping
                       </Link>
                     </div>
                   ) : (
-                    <div className="space-y-4">
+                    <div className="space-y-6">
                       {user.orders.map((order) => (
                         <div
                           key={order._id}
-                          className="group border border-slate-100 dark:border-slate-800 rounded-2xl p-5 hover:border-blue-200 dark:hover:border-blue-900/50 hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-all"
+                          className="group border border-slate-100 dark:border-slate-800 rounded-2xl overflow-hidden hover:border-blue-200 dark:hover:border-blue-900/50 transition-all shadow-sm"
                         >
-                          <div className="flex flex-col md:flex-row justify-between gap-4">
-                            {/* Order Info */}
-                            <div className="flex gap-4">
-                              <div className="h-16 w-16 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center flex-shrink-0">
-                                <ShoppingBag
-                                  size={24}
-                                  className="text-slate-400"
-                                />
-                              </div>
+                          {/* Order Header */}
+                          <div className="bg-slate-50/50 dark:bg-slate-800/30 px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex flex-wrap justify-between items-center gap-4">
+                            <div className="flex items-center gap-4">
                               <div>
-                                <div className="flex items-center gap-2 mb-1">
-                                  <span className="text-xs font-black uppercase tracking-wider text-blue-600 dark:text-blue-400">
-                                    Order #{order._id.slice(-8).toUpperCase()}
-                                  </span>
-                                  <span
-                                    className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
-                                      order.status === "Delivered"
-                                        ? "bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400"
-                                        : "bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400"
-                                    }`}
-                                  >
-                                    {order.status}
-                                  </span>
-                                </div>
-                                <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                                  {order.orderItems.length}{" "}
-                                  {order.orderItems.length === 1
-                                    ? "Item"
-                                    : "Items"}
-                                </h4>
-                                <p className="text-xs text-slate-500 mt-1">
-                                  Placed on{" "}
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                  Order ID
+                                </p>
+                                <p className="text-xs font-bold text-blue-600 dark:text-blue-400 font-mono">
+                                  #{order._id.slice(-8).toUpperCase()}
+                                </p>
+                              </div>
+                              <div className="h-8 w-[1px] bg-slate-200 dark:border-slate-700 hidden sm:block"></div>
+                              <div>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                  Date Placed
+                                </p>
+                                <p className="text-xs font-bold dark:text-slate-300">
                                   {new Date(order.createdAt).toLocaleDateString(
                                     "en-IN",
                                     {
@@ -974,24 +998,69 @@ export default function Account() {
                                 </p>
                               </div>
                             </div>
-
-                            {/* Price & Action */}
-                            <div className="flex flex-row md:flex-col justify-between md:items-end gap-2">
-                              <div className="text-right">
-                                <p className="text-xs text-slate-400 font-medium">
-                                  Total Amount
-                                </p>
-                                <p className="text-lg font-black text-slate-900 dark:text-white">
-                                  ₹{order.totalPrice.toLocaleString()}
-                                </p>
-                              </div>
-                              <Link
-                                to={`/order/${order._id}`}
-                                className="flex items-center gap-1 text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline group-hover:gap-2 transition-all"
-                              >
-                                VIEW DETAILS <ChevronRight size={14} />
-                              </Link>
+                            <div
+                              className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter border ${
+                                order.status === "Delivered"
+                                  ? "bg-green-50 text-green-600 border-green-100 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800"
+                                  : "bg-orange-50 text-orange-600 border-orange-100 dark:bg-orange-900/20 dark:text-orange-400 dark:border-orange-800"
+                              }`}
+                            >
+                              {order.status}
                             </div>
+                          </div>
+
+                          {/* Order Items */}
+                          <div className="p-5 space-y-4">
+                            {order.orderItems.map((item, idx) => (
+                              <div
+                                key={idx}
+                                className="flex items-center justify-between gap-4"
+                              >
+                                <div className="flex items-center gap-4">
+                                  <div className="h-14 w-14 bg-slate-100 dark:bg-slate-800 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 flex-shrink-0">
+                                    <img
+                                      src={item.image}
+                                      alt={item.name}
+                                      className="h-full w-full object-cover"
+                                    />
+                                  </div>
+                                  <div>
+                                    <h5 className="text-sm font-bold text-slate-900 dark:text-white line-clamp-1">
+                                      {item.name}
+                                    </h5>
+                                    <p className="text-xs text-slate-500 font-medium">
+                                      Qty: {item.qty} • ₹
+                                      {item.price.toLocaleString()}
+                                    </p>
+                                  </div>
+                                </div>
+                                <Link
+                                  to={`/product/${item.product}`}
+                                  className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-blue-500 transition-colors"
+                                >
+                                  <ChevronRight size={18} />
+                                </Link>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Order Footer */}
+                          <div className="px-5 py-4 bg-white dark:bg-slate-900 border-t border-slate-50 dark:border-slate-800 flex justify-between items-center">
+                            <div>
+                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                Total Payable
+                              </p>
+                              <p className="text-lg font-black text-slate-900 dark:text-white">
+                                ₹{order.totalPrice.toLocaleString()}
+                              </p>
+                            </div>
+                            <Link
+                              to={`/OrderSummary`}
+                              state={{ order }}
+                              className="px-5 py-2 bg-slate-900 dark:bg-white dark:text-slate-900 text-white text-xs font-bold rounded-xl hover:opacity-90 transition-all active:scale-95 flex items-center gap-2"
+                            >
+                              View Details
+                            </Link>
                           </div>
                         </div>
                       ))}
@@ -1402,7 +1471,10 @@ export default function Account() {
                     <div className="flex justify-between items-start mb-4">
                       <div className="flex gap-4">
                         <div className="h-12 w-12 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center flex-shrink-0">
-                          <Lock size={20} className="text-slate-400 group-hover:text-blue-500 transition-colors" />
+                          <Lock
+                            size={20}
+                            className="text-slate-400 group-hover:text-blue-500 transition-colors"
+                          />
                         </div>
                         <div>
                           <h4 className="text-sm font-bold text-slate-900 dark:text-white">

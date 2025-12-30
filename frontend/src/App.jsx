@@ -13,6 +13,7 @@ import SearchResults from "./pages/SearchResults";
 import ProductDetails from "./pages/ProductDetails";
 import Cart from "./pages/Cart"; // ✅ Added Cart Import
 import Payment from "./pages/Payment";
+import OrderSummary from "./pages/OrderSummary";
 import Reviews from "./pages/Reviews";
 
 // --- SELLER PAGES ---
@@ -61,6 +62,7 @@ export default function App() {
         <Route path="/product/:id" element={<ProductDetails />} />
         <Route path="/payment" element={<Payment />} />
         <Route path="/product/:id/reviews" element={<Reviews />} />
+        <Route path="/OrderSummary" element={<OrderSummary />} />
 
         {/* ✅ Production Cart Route */}
         <Route path="/cart" element={<Cart />} />

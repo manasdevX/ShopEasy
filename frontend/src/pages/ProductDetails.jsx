@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate, Link, useLocation } from "react-router-dom"; // Added useLocation
+import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
 import {
   Star,
   ShoppingCart,
@@ -23,7 +23,7 @@ import { showError, showSuccess } from "../utils/toast";
 export default function ProductDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const location = useLocation(); // Added for login redirect state
+  const location = useLocation();
   const token = localStorage.getItem("token");
   const isLoggedIn = !!token;
 
@@ -78,6 +78,7 @@ export default function ProductDetails() {
 
     if (!token) {
       toast("Please login to add to cart", { icon: "🔒" });
+      navigate("/login", { state: { from: location.pathname } });
       return;
     }
 
@@ -108,6 +109,7 @@ export default function ProductDetails() {
 
   const handleBuyNow = () => {
     if (isLoggedIn) {
+      // ✅ FIX: Mapping product data with seller ID to satisfy Order Model requirements
       navigate("/payment", {
         state: {
           items: [
@@ -115,16 +117,17 @@ export default function ProductDetails() {
               _id: product._id,
               name: product.name,
               price: product.price,
-              mrp: product.mrp,
-              quantity: quantity, // ✅ FIX: Use selected quantity, not hardcoded 1
+              mrp: product.mrp || product.price,
+              quantity: quantity,
+              seller: product.seller || product.sellerId, // Critical for backend validation
               image: getImageUrl(product.thumbnail || product.images?.[0]),
             },
           ],
         },
       });
     } else {
-      toast("Please signup to Buy Now", { icon: "🔒" });
-      navigate("/login", { state: { from: location.pathname } }); // Redirect to login
+      toast("Please login to Buy Now", { icon: "🔒" });
+      navigate("/login", { state: { from: location.pathname } });
     }
   };
 
@@ -151,7 +154,7 @@ export default function ProductDetails() {
         </button>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 relative">
-          {/* LEFT COLUMN: IMAGES + ACTION CONTROL */}
+          {/* LEFT COLUMN: IMAGES */}
           <div className="lg:sticky lg:top-24 h-fit space-y-8">
             <div className="aspect-square bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 overflow-hidden flex items-center justify-center p-8 relative shadow-sm">
               {getImageUrl(allImages[selectedImage]) ? (
@@ -170,7 +173,6 @@ export default function ProductDetails() {
               )}
             </div>
 
-            {/* Thumbnails */}
             {allImages.length > 1 && (
               <div className="flex py-2 px-2 gap-4 overflow-x-auto pb-2 no-scrollbar">
                 {allImages.map((img, idx) => (
@@ -179,7 +181,7 @@ export default function ProductDetails() {
                     onClick={() => setSelectedImage(idx)}
                     className={`w-16 h-16 rounded-xl border-2 flex-shrink-0 overflow-hidden p-1 bg-white dark:bg-slate-900 transition-all ${
                       selectedImage === idx
-                        ? "scale-105 shadow-md"
+                        ? "scale-105 shadow-md border-orange-500"
                         : "border-transparent opacity-60"
                     }`}
                   >
@@ -193,29 +195,24 @@ export default function ProductDetails() {
               </div>
             )}
 
-            {/* ACTIONS & QUANTITY */}
             <div className="space-y-4">
               <div className="flex flex-col sm:flex-row gap-3">
                 <button
                   onClick={() => handleAddToCart(false)}
                   disabled={product.stock === 0}
-                  className="flex-1 bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white font-black py-4 rounded-2xl transition-all active:scale-95 flex items-center justify-center gap-2 uppercase tracking-widest text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white font-black py-4 rounded-2xl transition-all active:scale-95 flex items-center justify-center gap-2 uppercase tracking-widest text-xs disabled:opacity-50"
                 >
-                  <ShoppingCart size={18} />
-                  Add to Cart
+                  <ShoppingCart size={18} /> Add to Cart
                 </button>
-
                 <button
-                  onClick={() => handleBuyNow()}
+                  onClick={handleBuyNow}
                   disabled={product.stock === 0}
-                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-orange-500/20 transition-all active:scale-95 flex items-center justify-center gap-2 uppercase tracking-widest text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-orange-500/20 transition-all active:scale-95 flex items-center justify-center gap-2 uppercase tracking-widest text-xs disabled:opacity-50"
                 >
-                  <Zap size={18} fill="currentColor" />
-                  Buy Now
+                  <Zap size={18} fill="currentColor" /> Buy Now
                 </button>
               </div>
 
-              {/* REFINED QUANTITY BAR */}
               <div className="flex items-center justify-between bg-slate-100/50 dark:bg-slate-800/50 rounded-2xl p-1.5 border border-slate-200/60 dark:border-slate-700/50">
                 <span className="pl-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">
                   Quantity
@@ -241,7 +238,7 @@ export default function ProductDetails() {
             </div>
           </div>
 
-          {/* RIGHT COLUMN: PRODUCT INFO */}
+          {/* RIGHT COLUMN: INFO */}
           <div className="space-y-8">
             <div className="space-y-4">
               <div className="space-y-1">
@@ -271,7 +268,6 @@ export default function ProductDetails() {
                 </div>
               </div>
 
-              {/* DESCRIPTION */}
               <div className="space-y-2">
                 <h3 className="text-[12px] font-black text-slate-400 uppercase tracking-widest">
                   The Details
@@ -281,7 +277,6 @@ export default function ProductDetails() {
                 </p>
               </div>
 
-              {/* PRICE SECTION */}
               <div className="pt-4">
                 <div className="flex items-baseline gap-3">
                   <span className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">
@@ -292,7 +287,7 @@ export default function ProductDetails() {
                       <span className="text-lg text-slate-400 line-through font-medium">
                         ₹{product.mrp?.toLocaleString()}
                       </span>
-                      <span className="text-green-500 font-bold text-xs uppercase tracking-tighter">
+                      <span className="text-green-500 font-bold text-xs uppercase">
                         {Math.round(
                           ((product.mrp - product.price) / product.mrp) * 100
                         )}
@@ -327,11 +322,11 @@ export default function ProductDetails() {
                 },
               ].map((item, i) => (
                 <div key={i} className="flex items-center gap-4 group">
-                  <div className="w-12 h-12 rounded-full bg-slate-50 dark:bg-slate-900 flex items-center justify-center text-slate-400 group-hover:text-orange-500 group-hover:bg-orange-50 dark:group-hover:bg-orange-500/10 transition-all">
+                  <div className="w-12 h-12 rounded-full bg-slate-50 dark:bg-slate-900 flex items-center justify-center text-slate-400 group-hover:text-orange-500 transition-all">
                     {item.icon}
                   </div>
                   <div>
-                    <h4 className="text-[15px] font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+                    <h4 className="text-[15px] font-black text-slate-800 dark:text-slate-200 tracking-wider">
                       {item.title}
                     </h4>
                     <p className="text-[12px] text-slate-500">{item.desc}</p>
@@ -340,7 +335,7 @@ export default function ProductDetails() {
               ))}
             </div>
 
-            {/* RATINGS & REVIEWS SECTION */}
+            {/* REVIEWS */}
             <div className="pt-10 border-t border-slate-100 dark:border-slate-800 space-y-6">
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
@@ -348,27 +343,25 @@ export default function ProductDetails() {
                     Ratings & Reviews
                   </h3>
                   <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-1.5 bg-green-500 text-white px-2 py-0.5 rounded-md shadow-sm">
+                    <div className="flex items-center gap-1.5 bg-green-500 text-white px-2 py-0.5 rounded-md">
                       <span className="text-sm font-black">
                         {product.rating?.toFixed(1) || 0}
                       </span>
                       <Star size={12} fill="currentColor" />
                     </div>
-                    <p className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                    <p className="text-xs font-bold text-slate-500">
                       {product.numReviews} Ratings
                     </p>
                   </div>
                 </div>
-
                 <button
-                  className="bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 hover:border-orange-500 dark:hover:border-orange-500 text-slate-900 dark:text-white font-black py-2.5 px-6 rounded-xl transition-all active:scale-95 text-xs uppercase tracking-widest shadow-sm"
+                  className="border-2 border-slate-200 dark:border-slate-700 hover:border-orange-500 dark:text-white font-black py-2 px-6 rounded-xl transition-all text-xs uppercase"
                   onClick={() => navigate(`/product/${product._id}/reviews`)}
                 >
                   Rate Product
                 </button>
               </div>
 
-              {/* VISUAL RATING BARS */}
               <div className="grid grid-cols-1 gap-2 pt-2">
                 {[5, 4, 3, 2, 1].map((star) => (
                   <div key={star} className="flex items-center gap-3">
@@ -377,16 +370,10 @@ export default function ProductDetails() {
                     </span>
                     <div className="flex-1 h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                       <div
-                        className={`h-full rounded-full ${
-                          star >= 4
-                            ? "bg-green-500"
-                            : star === 3
-                            ? "bg-yellow-400"
-                            : "bg-orange-500"
-                        }`}
+                        className="h-full bg-green-500"
                         style={{
                           width: `${
-                            product.reviews && product.reviews.length > 0
+                            product.reviews?.length > 0
                               ? (product.reviews.filter(
                                   (r) => Math.round(r.rating) === star
                                 ).length /
@@ -398,7 +385,7 @@ export default function ProductDetails() {
                       />
                     </div>
                     <span className="text-[10px] font-bold text-slate-400 w-8">
-                      {product.reviews && product.reviews.length > 0
+                      {product.reviews?.length > 0
                         ? Math.round(
                             (product.reviews.filter(
                               (r) => Math.round(r.rating) === star
@@ -413,81 +400,59 @@ export default function ProductDetails() {
                 ))}
               </div>
 
-              {/* DYNAMIC REVIEWS LIST */}
               <div className="pt-4 space-y-4">
-                {product.reviews && product.reviews.length > 0 ? (
+                {product.reviews?.length > 0 ? (
                   product.reviews.map((review) => (
                     <div
                       key={review._id}
-                      className="group p-5 bg-white dark:bg-slate-900/40 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-md transition-all duration-300"
+                      className="p-5 bg-white dark:bg-slate-900/40 rounded-3xl border border-slate-100 dark:border-slate-800"
                     >
-                      {/* Review Content */}
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
-                          <div className="flex items-center gap-1 bg-green-600 dark:bg-green-500 text-white text-[10px] px-2 py-0.5 rounded-full font-black shadow-sm">
+                          <div className="bg-green-600 text-white text-[10px] px-2 py-0.5 rounded-full font-black">
                             {review.rating}{" "}
                             <Star size={8} fill="currentColor" />
                           </div>
-                          <span className="text-sm font-black text-slate-800 dark:text-white tracking-tight">
-                            {review.rating >= 4
-                              ? "Great!"
-                              : review.rating === 3
-                              ? "Good"
-                              : "Fair"}
+                          <span className="text-sm font-black dark:text-white">
+                            {review.rating >= 4 ? "Great!" : "Good"}
                           </span>
                         </div>
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        <span className="text-[10px] text-slate-400 uppercase">
                           {new Date(review.createdAt).toLocaleDateString()}
                         </span>
                       </div>
-
-                      <p className="text-[13px] italic text-slate-600 dark:text-slate-400 leading-relaxed font-medium">
+                      <p className="text-[13px] italic text-slate-600 dark:text-slate-400 font-medium">
                         "{review.comment}"
                       </p>
-
-                      <div className="flex items-center justify-between mt-5 pt-4 border-t border-slate-50 dark:border-slate-800/50">
+                      <div className="flex items-center justify-between mt-5 pt-4 border-t dark:border-slate-800">
                         <div className="flex flex-col">
-                          <span className="text-xs font-black text-slate-800 dark:text-slate-400">
+                          <span className="text-xs font-black dark:text-slate-400">
                             {review.name}
                           </span>
-                          <div className="flex items-center gap-1 text-[9px] font-bold text-green-500 uppercase tracking-tighter">
-                            <ShieldCheck
-                              size={10}
-                              fill="currentColor"
-                              className="text-green-500/20"
-                            />
+                          <div className="flex items-center gap-1 text-[9px] font-bold text-green-500 uppercase">
+                            <ShieldCheck size={10} fill="currentColor" />{" "}
                             Verified Buyer
                           </div>
                         </div>
-
-                        {/* Interactive Buttons */}
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-black text-slate-400">
-                            Helpful?
-                          </span>
-                          <div className="flex items-center gap-1 group/like cursor-pointer">
-                            <button className="p-2 rounded-full bg-slate-50 dark:bg-slate-800 text-slate-400 group-hover/like:text-green-500 group-hover/like:bg-green-50 dark:group-hover/like:bg-green-500/10 transition-all">
-                              <ThumbsUp size={12} />
-                            </button>
-                          </div>
-                          <div className="flex items-center gap-1 group/dislike cursor-pointer">
-                            <button className="p-2 rounded-full bg-slate-50 dark:bg-slate-800 text-slate-400 group-hover/dislike:text-red-500 group-hover/dislike:bg-red-50 dark:group-hover/dislike:bg-red-500/10 transition-all">
-                              <ThumbsDown size={12} />
-                            </button>
-                          </div>
+                        <div className="flex gap-2">
+                          <button className="p-2 rounded-full bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-green-500 transition-all">
+                            <ThumbsUp size={12} />
+                          </button>
+                          <button className="p-2 rounded-full bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-red-500 transition-all">
+                            <ThumbsDown size={12} />
+                          </button>
                         </div>
                       </div>
                     </div>
                   ))
                 ) : (
-                  // ✅ FIX: Corrected Empty State Link
                   <div className="text-center py-6">
                     <p className="text-slate-400 text-xs font-bold mb-2">
                       No reviews yet.
                     </p>
                     <Link
                       to={`/product/${id}/reviews`}
-                      className="text-orange-500 text-xs font-black uppercase tracking-widest hover:underline"
+                      className="text-orange-500 text-xs font-black uppercase hover:underline"
                     >
                       Be the first to write one!
                     </Link>

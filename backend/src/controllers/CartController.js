@@ -1,7 +1,7 @@
 import Cart from "../models/Cart.js";
 import Product from "../models/Product.js";
 
-// @desc    Add item to cart (Used by "Quick Add" button)
+// @desc    Add item to cart
 // @route   POST /api/cart/add
 // @access  Private
 export const addToCart = async (req, res) => {
@@ -9,13 +9,11 @@ export const addToCart = async (req, res) => {
     const { productId, quantity = 1 } = req.body;
     const userId = req.user._id;
 
-    // 1. Validate Product
     const product = await Product.findById(productId);
     if (!product) {
       return res.status(404).json({ message: "Product not found" });
     }
 
-    // 2. Find or Create Cart
     let cart = await Cart.findOne({ user: userId });
 
     if (!cart) {
@@ -24,28 +22,24 @@ export const addToCart = async (req, res) => {
         items: [{ product: productId, quantity }],
       });
     } else {
-      // 3. Check if product exists in cart
       const itemIndex = cart.items.findIndex(
         (item) => item.product.toString() === productId
       );
 
       if (itemIndex > -1) {
-        // Product exists, update quantity
         cart.items[itemIndex].quantity += quantity;
       } else {
-        // Product does not exist, push new item
         cart.items.push({ product: productId, quantity });
       }
       await cart.save();
     }
 
-    // 4. Calculate Total Count for Navbar Badge
     const totalItems = cart.items.reduce((acc, item) => acc + item.quantity, 0);
 
     res.status(200).json({
       success: true,
       message: `${product.name} added to cart!`,
-      cartCount: totalItems, // Vital for instant Navbar update
+      cartCount: totalItems,
       cart,
     });
   } catch (error) {
@@ -59,16 +53,17 @@ export const addToCart = async (req, res) => {
 // @access  Private
 export const getUserCart = async (req, res) => {
   try {
+    // ✅ CRITICAL FIX: Ensure 'seller' is included in population string
+    // This allows the frontend to send the required seller ID to the Order API
     const cart = await Cart.findOne({ user: req.user._id }).populate(
       "items.product",
-      "name price images category stock"
+      "name price images category stock seller mrp thumbnail"
     );
 
     if (!cart) {
       return res.json({ items: [] });
     }
 
-    // Safety Check: Remove "Ghost Items" (products deleted from DB)
     const validItems = cart.items.filter((item) => item.product !== null);
 
     if (validItems.length !== cart.items.length) {
@@ -83,15 +78,14 @@ export const getUserCart = async (req, res) => {
   }
 };
 
-// @desc    Sync/Merge LocalStorage cart with Database cart
+// @desc    Sync LocalStorage cart with DB cart
 // @route   POST /api/cart/sync
 // @access  Private
 export const syncCart = async (req, res) => {
   try {
-    const { localItems } = req.body; // Expecting Array
+    const { localItems } = req.body;
     const userId = req.user._id;
 
-    // 1. If no local items, just return existing DB cart
     if (!localItems || localItems.length === 0) {
       return getUserCart(req, res);
     }
@@ -101,30 +95,26 @@ export const syncCart = async (req, res) => {
     if (!cart) {
       cart = await Cart.create({ user: userId, items: localItems });
     } else {
-      // Merge Logic
       for (const localItem of localItems) {
         const itemIndex = cart.items.findIndex(
           (item) => item.product.toString() === localItem.product
         );
 
         if (itemIndex > -1) {
-          // Sum quantities
           cart.items[itemIndex].quantity += localItem.quantity;
         } else {
-          // Add new item
           cart.items.push(localItem);
         }
       }
       await cart.save();
     }
 
-    // 2. Populate and Clean
+    // ✅ CRITICAL FIX: Ensure 'seller' is populated here as well
     let populatedCart = await Cart.findOne({ user: userId }).populate(
       "items.product",
-      "name price images category stock"
+      "name price images category stock seller mrp thumbnail"
     );
 
-    // 3. Safety Check: Remove ghost items
     const validItems = populatedCart.items.filter(
       (item) => item.product !== null
     );
@@ -161,12 +151,10 @@ export const updateCartItem = async (req, res) => {
       if (quantity > 0) {
         cart.items[itemIndex].quantity = quantity;
       } else {
-        // Remove if quantity is 0
         cart.items.splice(itemIndex, 1);
       }
       await cart.save();
 
-      // Calculate new total for frontend
       const totalItems = cart.items.reduce(
         (acc, item) => acc + item.quantity,
         0
@@ -198,7 +186,6 @@ export const removeCartItem = async (req, res) => {
 
     await cart.save();
 
-    // Calculate new total for frontend
     const totalItems = cart.items.reduce((acc, item) => acc + item.quantity, 0);
 
     res.json({ success: true, cart, cartCount: totalItems });
