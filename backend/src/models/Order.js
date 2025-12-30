@@ -21,13 +21,13 @@ const orderSchema = new mongoose.Schema(
           ref: "Product",
           required: true,
         },
-        // === CRITICAL FIX: Reference the 'Seller' Model ===
+        // === CRITICAL: Reference the 'Seller' Model ===
         seller: {
           type: mongoose.Schema.Types.ObjectId,
           ref: "Seller", // Points to the 'sellers' collection
           required: true,
         },
-        // Track status per item (useful if one order has items from multiple sellers)
+        // Track status per item (useful for multi-seller orders)
         itemStatus: {
           type: String,
           default: "Processing", // Processing, Shipped, Delivered, Cancelled
@@ -86,7 +86,7 @@ const orderSchema = new mongoose.Schema(
       type: Date,
     },
 
-    // 🔹 Fulfillment Status (Global for the whole order)
+    // 🔹 Fulfillment Status
     isDelivered: {
       type: Boolean,
       required: true,

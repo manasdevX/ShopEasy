@@ -8,6 +8,7 @@ import userRoutes from "./routes/user.routes.js";
 import sellerRoutes from "./routes/sellerRoutes.js";
 import orderRoutes from "./routes/order.routes.js";
 import cartRoutes from "./routes/cartRoutes.js";
+import paymentRoutes from "./routes/paymentRoutes.js";
 
 const app = express();
 
@@ -32,31 +33,28 @@ app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
 // --- API ENDPOINTS ---
 
-// Product & Catalog Management (Search & Filters work here automatically)
+// Product & Catalog Management
 app.use("/api/products", productRoutes);
 
 // User Authentication & Customer Profile
 app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);
 
-/**
- * SELLER MANAGEMENT
- * - POST /api/sellers/register
- * - POST /api/sellers/login
- * - PUT  /api/sellers/profile
- * - PUT  /api/sellers/bank-details
- */
+// Seller Management
 app.use("/api/sellers", sellerRoutes);
 
 // Order Processing & Management
 app.use("/api/orders", orderRoutes);
 
-// Persistent Cart (Database-Synced)
+// Persistent Cart
 app.use("/api/cart", cartRoutes);
+
+// Payment Integration (Razorpay)
+// ✅ This makes the URL: http://localhost:5000/api/payment/create-order
+app.use("/api/payment", paymentRoutes);
 
 /**
  * Health Check Route
- * Useful for Render/Vercel/AWS to verify the backend is active.
  */
 app.get("/health", (req, res) => {
   res.status(200).json({
@@ -68,7 +66,6 @@ app.get("/health", (req, res) => {
 
 /**
  * 🛡️ GLOBAL 404 HANDLER
- * Returns JSON instead of HTML when a route is missing.
  */
 app.use((req, res) => {
   res.status(404).json({

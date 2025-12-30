@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   ShieldCheck,
@@ -9,11 +9,14 @@ import {
   CheckCircle2,
   LocateFixed,
   ShoppingBag,
+  Loader2,
 } from "lucide-react";
 import PaymentHeader from "../components/PaymentHeader";
 import PaymentFooter from "../components/PaymentFooter";
 import { toast } from "react-hot-toast";
 import { showSuccess, showError } from "../utils/toast";
+
+const API_URL = import.meta.env.VITE_API_URL;
 
 export default function CheckoutPage() {
   const location = useLocation();
@@ -22,6 +25,8 @@ export default function CheckoutPage() {
   const items = location.state?.items || [];
 
   const [paymentMode, setPaymentMode] = useState("upi");
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isLocating, setIsLocating] = useState(false);
   const [formData, setFormData] = useState({
     fullName: "",
     street: "",
@@ -29,13 +34,11 @@ export default function CheckoutPage() {
     city: "",
     pincode: "",
     phone: "",
+    country: "India", // Defaulting for schema validation
   });
   const [saveAddress, setSaveAddress] = useState(false);
 
   // --- CALCULATIONS ---
-
-  // 1. Calculate Total Item Count (Sum of all quantities)
-  // ✅ FIX: This ensures "Price (3 items)" shows correctly instead of "Price (1 items)"
   const totalItemCount = items.reduce((acc, item) => acc + item.quantity, 0);
 
   const totalMRP = items.reduce(
@@ -62,21 +65,152 @@ export default function CheckoutPage() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handlePlaceOrder = () => {
-    if (!formData.fullName || !formData.street || !formData.pincode) {
-      toast.error("Please fill in the required shipping details");
+  // ================= GEOLOCATION HANDLER =================
+  const handleUseCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error("Geolocation is not supported by your browser");
       return;
     }
 
-    // Logic to send to Backend
-    console.log("Order Data:", {
-      items,
-      address: formData,
-      paymentMode,
-      totalPayable,
-    });
-    showSuccess("Order Placed Successfully!");
-    // navigate("/order-success");
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`
+          );
+          const data = await res.json();
+          if (data && data.address) {
+            setFormData((prev) => ({
+              ...prev,
+              street:
+                data.display_name.split(",")[0] +
+                ", " +
+                (data.address.suburb || ""),
+              city: data.address.city || data.address.town || "",
+              pincode: data.address.postcode || "",
+            }));
+            showSuccess("Location detected!");
+          }
+        } catch (error) {
+          showError("Failed to fetch address details");
+        } finally {
+          setIsLocating(false);
+        }
+      },
+      () => {
+        setIsLocating(false);
+        showError("Location access denied.");
+      }
+    );
+  };
+
+  // ================= RAZORPAY INTEGRATION =================
+  const handlePayment = async () => {
+    // 1. Validation
+    if (
+      !formData.fullName ||
+      !formData.street ||
+      !formData.pincode ||
+      !formData.phone
+    ) {
+      toast.error("Please fill in all required shipping details");
+      return;
+    }
+
+    setIsProcessing(true);
+
+    try {
+      const token = localStorage.getItem("token");
+
+      // 2. Create Order on Backend
+      const res = await fetch(`${API_URL}/api/payment/create-order`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ amount: totalPayable }),
+      });
+
+      const orderData = await res.json();
+
+      if (!res.ok) {
+        throw new Error(orderData.message || "Failed to create order");
+      }
+
+      // 3. Configure Razorpay Options
+      const options = {
+        key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+        amount: orderData.order.amount,
+        currency: "INR",
+        name: "ShopEasy",
+        description: `Payment for ${totalItemCount} items`,
+        order_id: orderData.order.id,
+        handler: async function (response) {
+          try {
+            // 4. Verify Payment on Backend
+            // Mapping fields to match Order Model schema exactly
+            const verifyRes = await fetch(
+              `${API_URL}/api/payment/verify-payment`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                  razorpay_order_id: response.razorpay_order_id,
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_signature: response.razorpay_signature,
+                  orderItems: items,
+                  shippingAddress: formData,
+                  itemsPrice: subtotal,
+                  taxPrice: platformFee,
+                  shippingPrice: deliveryFee,
+                  totalPrice: totalPayable,
+                }),
+              }
+            );
+
+            const verifyData = await verifyRes.json();
+
+            if (verifyRes.ok) {
+              showSuccess("Order Placed Successfully!");
+              localStorage.removeItem("cart");
+              window.dispatchEvent(new Event("cartUpdated"));
+              navigate("/account");
+            } else {
+              showError(verifyData.message || "Order saving failed");
+            }
+          } catch (err) {
+            showError("Error verifying payment");
+          } finally {
+            setIsProcessing(false);
+          }
+        },
+        prefill: {
+          name: formData.fullName,
+          contact: formData.phone,
+        },
+        theme: {
+          color: "#4f46e5",
+        },
+        modal: {
+          ondismiss: function () {
+            setIsProcessing(false);
+          },
+        },
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.open();
+    } catch (error) {
+      console.error("Payment Error:", error);
+      showError(error.message || "An error occurred during checkout");
+      setIsProcessing(false);
+    }
   };
 
   if (items.length === 0) {
@@ -114,17 +248,15 @@ export default function CheckoutPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
-          {/* LEFT SIDE: SHIPPING & PAYMENT */}
           <div className="lg:col-span-7 space-y-8">
-            {/* 1. Item Summary */}
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-8 h-8 rounded-lg bg-orange-50 dark:bg-orange-500/10 flex items-center justify-center text-orange-600">
                   <ShoppingBag size={18} />
                 </div>
                 <h2 className="font-bold text-slate-900 dark:text-white uppercase tracking-wider text-xs">
-                  Order Summary ({items.length}{" "}
-                  {items.length > 1 ? "Items" : "Item"})
+                  Order Summary ({totalItemCount}{" "}
+                  {totalItemCount > 1 ? "Items" : "Item"})
                 </h2>
               </div>
               <div className="space-y-4 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
@@ -147,7 +279,6 @@ export default function CheckoutPage() {
                       </p>
                     </div>
                     <div className="text-right">
-                      {/* ✅ FIX: Showing UNIT Price (item.price), not Total */}
                       <p className="text-sm font-black dark:text-white">
                         ₹{item.price.toLocaleString()}
                       </p>
@@ -162,7 +293,6 @@ export default function CheckoutPage() {
               </div>
             </div>
 
-            {/* 2. Shipping Address */}
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
@@ -173,23 +303,36 @@ export default function CheckoutPage() {
                     Shipping Address
                   </h2>
                 </div>
+                <button
+                  onClick={handleUseCurrentLocation}
+                  disabled={isLocating}
+                  className="flex items-center gap-2 text-indigo-600 hover:text-indigo-700 text-xs font-bold uppercase transition-colors disabled:opacity-50"
+                >
+                  {isLocating ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <LocateFixed size={14} />
+                  )}
+                  Detect Location
+                </button>
               </div>
 
-              <button
-                type="button"
-                className="bg-indigo-600 m-1 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 font-bold text-sm mb-6 shadow-sm transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
-              >
-                <LocateFixed size={18} />
-                "Use my current location"
-              </button>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 ">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="md:col-span-2">
                   <input
                     name="fullName"
                     value={formData.fullName}
                     onChange={handleInputChange}
                     placeholder="Full Name (Required)"
+                    className="w-full px-4 py-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 outline-none text-sm dark:text-white font-medium"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <input
+                    name="phone"
+                    value={formData.phone}
+                    onChange={handleInputChange}
+                    placeholder="Mobile Number (Required)"
                     className="w-full px-4 py-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 outline-none text-sm dark:text-white font-medium"
                   />
                 </div>
@@ -218,43 +361,8 @@ export default function CheckoutPage() {
                   className="w-full px-4 py-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 outline-none text-sm dark:text-white font-medium"
                 />
               </div>
-              <div
-                onClick={() => setSaveAddress(!saveAddress)}
-                className="flex px-2 mt-2 items-center gap-3 cursor-pointer group pt-2"
-              >
-                <div
-                  className={`
-    w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all duration-200
-    ${
-      saveAddress
-        ? "bg-indigo-600 border-indigo-600 scale-110"
-        : "border-slate-300 dark:border-slate-700 scale-100"
-    }
-  `}
-                >
-                  {saveAddress && (
-                    <svg
-                      className="w-3 h-3 text-white"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M5 13l4 4L19 7"
-                      />
-                    </svg>
-                  )}
-                </div>
-                <span className="text-xs font-bold text-slate-500 uppercase">
-                  Save Address
-                </span>
-              </div>
             </div>
 
-            {/* 3. Payment Method */}
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 flex items-center justify-center text-indigo-600">
@@ -265,11 +373,15 @@ export default function CheckoutPage() {
                 </h2>
               </div>
               <div className="space-y-3">
-                {["upi", "card", "cod"].map((mode) => (
+                {[
+                  { id: "upi", label: "Online Payment (Razorpay)" },
+                  { id: "card", label: "Credit / Debit Card (Razorpay)" },
+                  { id: "cod", label: "Cash on Delivery" },
+                ].map((mode) => (
                   <label
-                    key={mode}
+                    key={mode.id}
                     className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                      paymentMode === mode
+                      paymentMode === mode.id
                         ? "border-indigo-600 bg-indigo-50/30 dark:bg-indigo-500/5"
                         : "border-slate-100 dark:border-slate-800"
                     }`}
@@ -277,28 +389,24 @@ export default function CheckoutPage() {
                     <div className="flex items-center gap-4">
                       <div
                         className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                          paymentMode === mode
+                          paymentMode === mode.id
                             ? "border-indigo-600"
                             : "border-slate-300"
                         }`}
                       >
-                        {paymentMode === mode && (
+                        {paymentMode === mode.id && (
                           <div className="w-2.5 h-2.5 bg-indigo-600 rounded-full" />
                         )}
                       </div>
                       <span className="text-sm font-bold dark:text-white uppercase tracking-tight">
-                        {mode === "upi"
-                          ? "UPI / Netbanking"
-                          : mode === "card"
-                          ? "Credit / Debit Card"
-                          : "Cash on Delivery"}
+                        {mode.label}
                       </span>
                     </div>
                     <input
                       type="radio"
                       className="hidden"
-                      checked={paymentMode === mode}
-                      onChange={() => setPaymentMode(mode)}
+                      checked={paymentMode === mode.id}
+                      onChange={() => setPaymentMode(mode.id)}
                     />
                   </label>
                 ))}
@@ -306,7 +414,6 @@ export default function CheckoutPage() {
             </div>
           </div>
 
-          {/* RIGHT SIDE: PRICE BREAKDOWN */}
           <div className="lg:col-span-5 lg:sticky lg:top-24">
             <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xl">
               <div className="p-6 border-b border-slate-100 dark:border-slate-800">
@@ -317,7 +424,6 @@ export default function CheckoutPage() {
 
               <div className="p-6 space-y-4">
                 <div className="flex justify-between text-sm font-medium">
-                  {/* ✅ FIX: Showing Total Item Count here */}
                   <span className="text-slate-500">
                     Price ({totalItemCount} items)
                   </span>
@@ -368,10 +474,17 @@ export default function CheckoutPage() {
 
               <div className="p-6 pt-0">
                 <button
-                  onClick={handlePlaceOrder}
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-2xl shadow-lg shadow-indigo-500/20 transition-all active:scale-95 flex items-center justify-center gap-2 uppercase tracking-widest text-xs mb-4"
+                  onClick={handlePayment}
+                  disabled={isProcessing}
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-black py-4 rounded-2xl shadow-lg shadow-indigo-500/20 transition-all active:scale-95 flex items-center justify-center gap-2 uppercase tracking-widest text-xs mb-4"
                 >
-                  <Lock size={16} /> Place Order Now
+                  {isProcessing ? (
+                    <Loader2 size={18} className="animate-spin" />
+                  ) : (
+                    <>
+                      <Lock size={16} /> Place Order Now
+                    </>
+                  )}
                 </button>
                 <div className="flex items-center justify-center gap-2 text-[10px] text-slate-400 font-bold uppercase">
                   <ShieldCheck size={14} /> 100% Secure Transaction
