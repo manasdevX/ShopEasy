@@ -123,11 +123,26 @@ export default function EditProduct() {
   // --- FORM LOGIC ---
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
+
+    if (parseFloat(value) < 0) {
+      if (name == "stock") {
+        return showError("Stocks can't be negative");
+      } else if (name == "price") {
+        return showError("Price can't be negative");
+      } else if (name == "mrp") {
+        return showError("MRP can't be negative");
+      }
+    }
+
     setFormData((prev) => ({
       ...prev,
       [name]: type === "checkbox" ? checked : value,
     }));
   };
+
+  if (formData.mrp < formData.price) {
+    return showError("You cannot sell at a price greater than MRP.");
+  }
 
   const addTag = (e) => {
     if (e.key === "Enter" && tagInput.trim()) {
@@ -431,6 +446,7 @@ export default function EditProduct() {
                       </label>
                       <input
                         type="number"
+                        min="0"
                         autoComplete="off"
                         name="mrp"
                         value={formData.mrp}
@@ -444,6 +460,7 @@ export default function EditProduct() {
                       </label>
                       <input
                         type="number"
+                        min="0"
                         autoComplete="off"
                         name="price"
                         value={formData.price}
@@ -458,6 +475,7 @@ export default function EditProduct() {
                       </label>
                       <input
                         type="number"
+                        min="0"
                         autoComplete="off"
                         name="stock"
                         value={formData.stock}
@@ -523,17 +541,17 @@ export default function EditProduct() {
                   Cancel
                 </button>
                 <button
-              onClick={handleUpdate}
-              disabled={isUpdating}
-              className="flex items-center gap-2 px-6 py-2.5 bg-orange-500 text-white font-bold rounded-xl shadow-lg shadow-orange-500/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50"
-            >
-              {isUpdating ? (
-                <Loader2 className="animate-spin" size={18} />
-              ) : (
-                <Save size={18} />
-              )}
-              {isUpdating ? "Saving..." : "Save Changes"}
-            </button>
+                  onClick={handleUpdate}
+                  disabled={isUpdating}
+                  className="flex items-center gap-2 px-6 py-2.5 bg-orange-500 text-white font-bold rounded-xl shadow-lg shadow-orange-500/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50"
+                >
+                  {isUpdating ? (
+                    <Loader2 className="animate-spin" size={18} />
+                  ) : (
+                    <Save size={18} />
+                  )}
+                  {isUpdating ? "Saving..." : "Save Changes"}
+                </button>
               </div>
             </form>
           </div>

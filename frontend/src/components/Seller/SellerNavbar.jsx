@@ -498,6 +498,10 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
               </div>
             )}
           </div>
+          <Link to="/" className="hidden lg:flex px-5 py-2.5 rounded-2xl border-2 border-orange-500/20 text-orange-500 hover:bg-orange-500 hover:text-white font-black text-xs uppercase tracking-widest transition-all">
+            <Store size={16} className="mr-2" /> Switch to buying
+          </Link>
+
         </div>
 
         {/* BOTTOM NAV */}
