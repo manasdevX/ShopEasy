@@ -32,6 +32,7 @@ import AddProduct from "./pages/Seller/AddProduct";
 import EditProduct from "./pages/Seller/EditProduct";
 import SellerOrders from "./pages/Seller/Orders";
 import Notifications from "./pages/Seller/Notification";
+import Settings from "./pages/Seller/Settings";
 
 export default function App() {
   return (
@@ -75,6 +76,7 @@ export default function App() {
         <Route path="/Seller/Landing" element={<SellerLanding />} />
         <Route path="/Seller/Dashboard" element={<Dashboard />} />
         <Route path="/Seller/Notifications" element={<Notifications />} />
+        <Route path="/Seller/Settings" element={<Settings />} />
 
         {/* Product Management */}
         <Route path="/Seller/products" element={<Products />} />

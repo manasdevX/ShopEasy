@@ -219,16 +219,13 @@ export default function Account() {
     }
   };
 
-  const handleDeactivate = async () => {
-    const confirmFirst = window.confirm(
-      "Are you absolutely sure? This will permanently delete your account and all your data."
-    );
-    if (!confirmFirst) return;
+  const [isConfirming, setIsConfirming] = useState(false);
 
-    const confirmSecond = window.confirm(
-      "Final Warning: This action cannot be undone. Proceed?"
-    );
-    if (!confirmSecond) return;
+  const handleDeactivate = async () => {
+    if (!isConfirming) {
+      setIsConfirming(true);
+      return; // Stop here and wait for the second click
+    }
 
     try {
       const token = localStorage.getItem("token");
@@ -245,7 +242,7 @@ export default function Account() {
         localStorage.removeItem("user");
         localStorage.removeItem("cart");
 
-        navigate("/login");
+        navigate("/");
         window.location.reload();
       } else {
         showError("Failed to deactivate account.");
@@ -1449,6 +1446,10 @@ export default function Account() {
                         Change email <ChevronRight size={14} />
                       </button>
                     </div>
+                    <p className="text-xs text-slate-400 leading-relaxed mt-4">
+                      Use a verified email address to receive order updates,
+                      security alerts, and exclusive offers.
+                    </p>
                   </div>
                   <div className="mt-10 pt-6 border-t border-slate-100 dark:border-slate-800">
                     <h4 className="text-xs font-black text-red-500 uppercase tracking-[0.2em] mb-4">
@@ -1457,19 +1458,43 @@ export default function Account() {
                     <div className="border border-red-100 dark:border-red-900/20 bg-red-50/30 dark:bg-red-900/10 rounded-2xl p-5 flex flex-col md:flex-row justify-between items-center gap-4">
                       <div>
                         <h5 className="text-sm font-bold text-red-600 dark:text-red-400">
-                          Delete Account
+                          {isConfirming ? "Confirm Deletion" : "Delete Account"}
                         </h5>
                         <p className="text-xs text-red-500/70 mt-1">
-                          Once you delete your account, there is no going back.
-                          Please be certain.
+                          {isConfirming
+                            ? "Are you absolutely sure? All data will be lost."
+                            : "Once you delete your account, there is no going back. Please be certain."}
                         </p>
                       </div>
-                      <button
-                        onClick={handleDeactivate}
-                        className="whitespace-nowrap bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg font-bold text-xs uppercase tracking-widest transition-all active:scale-95 shadow-sm shadow-red-200 dark:shadow-none"
-                      >
-                        Deactivate
-                      </button>
+
+                      <div className="flex gap-2">
+                        {isConfirming ? (
+                          <>
+                            {/* CANCEL BUTTON */}
+                            <button
+                              onClick={() => setIsConfirming(false)}
+                              className="whitespace-nowrap bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-4 py-2 rounded-lg font-bold text-xs uppercase tracking-widest transition-all active:scale-95"
+                            >
+                              Cancel
+                            </button>
+                            {/* FINAL DELETE BUTTON */}
+                            <button
+                              onClick={handleDeactivate}
+                              className="whitespace-nowrap bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-bold text-xs uppercase tracking-widest transition-all active:scale-95 shadow-sm shadow-red-200 dark:shadow-none"
+                            >
+                              Confirm
+                            </button>
+                          </>
+                        ) : (
+                          /* INITIAL DEACTIVATE BUTTON */
+                          <button
+                            onClick={handleDeactivate}
+                            className="whitespace-nowrap bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg font-bold text-xs uppercase tracking-widest transition-all active:scale-95 shadow-sm shadow-red-200 dark:shadow-none"
+                          >
+                            Deactivate
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
