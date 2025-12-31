@@ -1,5 +1,5 @@
 import Order from "../models/Order.js";
-import Product from "../models/Product.js"; // ✅ Import Product Model
+import Product from "../models/Product.js";
 import { createNotification } from "./notification.controller.js";
 
 // @desc    Create new order (Direct COD or General)
@@ -12,14 +12,13 @@ export const addOrderItems = async (req, res) => {
       shippingAddress,
       paymentMethod,
       shippingPrice = 0,
-      // Note: itemsPrice, taxPrice, totalPrice are now calculated server-side for security
     } = req.body;
 
     if (orderItems && orderItems.length === 0) {
       return res.status(400).json({ message: "No order items" });
     }
 
-    // 1. Fetch Real Products from DB (Security Check)
+    // 1. Fetch Real Products from DB
     const productIds = orderItems.map((item) => item.product || item._id);
     const dbProducts = await Product.find({ _id: { $in: productIds } });
 
@@ -29,43 +28,54 @@ export const addOrderItems = async (req, res) => {
         .json({ message: "One or more products not found" });
     }
 
-    // Map for quick lookup { productId: productDoc }
     const productMap = {};
     dbProducts.forEach((p) => {
       productMap[p._id.toString()] = p;
     });
 
-    // 2. Map Items with Real DB Data (Price & Seller)
+    // 2. Map Items & CHECK STOCK
     let calculatedItemsPrice = 0;
+    const itemsToUpdate = []; // Queue for stock deduction
 
     const mappedOrderItems = orderItems.map((item) => {
       const productId = item.product || item._id;
       const realProduct = productMap[productId];
+      const orderQty = item.qty || item.quantity;
 
       if (!realProduct) {
         throw new Error(`Product not found: ${productId}`);
       }
 
-      const itemTotal = realProduct.price * (item.qty || item.quantity);
+      // 🛑 STOCK CHECK: Prevent Overselling
+      if (realProduct.stock < orderQty) {
+        throw new Error(
+          `Not enough stock for ${realProduct.name}. Only ${realProduct.stock} left.`
+        );
+      }
+
+      const itemTotal = realProduct.price * orderQty;
       calculatedItemsPrice += itemTotal;
+
+      // Add to queue for later update
+      itemsToUpdate.push({ product: realProduct, qty: orderQty });
 
       return {
         ...item,
-        name: realProduct.name, // Ensure name comes from DB
-        image: realProduct.thumbnail, // Ensure image comes from DB (mapped to 'image' in schema)
+        name: realProduct.name,
+        image: realProduct.thumbnail,
         product: productId,
-        qty: item.qty || item.quantity,
-        price: realProduct.price, // ✅ Force DB Price
-        seller: realProduct.seller, // ✅ Force DB Seller ID
+        qty: orderQty,
+        price: realProduct.price,
+        seller: realProduct.seller,
         itemStatus: "Processing",
       };
     });
 
-    // 3. Calculate Final Totals
-    const taxPrice = 0; // or calculatedItemsPrice * 0.18
+    // 3. Calculate Totals
+    const taxPrice = 0;
     const totalPrice = calculatedItemsPrice + taxPrice + shippingPrice;
 
-    // 4. Create the Order
+    // 4. Create Order
     const order = new Order({
       user: req.user._id,
       orderItems: mappedOrderItems,
@@ -74,7 +84,7 @@ export const addOrderItems = async (req, res) => {
         city: shippingAddress.city,
         postalCode: shippingAddress.postalCode,
         country: shippingAddress.country || "India",
-        phone: shippingAddress.phone, // Ensure phone is saved
+        phone: shippingAddress.phone,
       },
       paymentMethod,
       itemsPrice: calculatedItemsPrice,
@@ -88,7 +98,13 @@ export const addOrderItems = async (req, res) => {
 
     const createdOrder = await order.save();
 
-    // 5. Trigger Notifications for Sellers
+    // 5. ✅ DEDUCT STOCK FROM DB
+    for (const item of itemsToUpdate) {
+      item.product.stock -= item.qty;
+      await item.product.save();
+    }
+
+    // 6. Notify Sellers
     const sellersToNotify = [
       ...new Set(mappedOrderItems.map((item) => item.seller.toString())),
     ];
@@ -111,6 +127,7 @@ export const addOrderItems = async (req, res) => {
     res.status(201).json(createdOrder);
   } catch (error) {
     console.error("ORDER CREATE ERROR:", error);
+    // Return 400 to show "Not enough stock" error on frontend
     res.status(400).json({ message: error.message });
   }
 };
@@ -151,31 +168,28 @@ export const getMyOrders = async (req, res) => {
   }
 };
 
-// @desc    Get orders for the logged-in Seller
+// @desc    Get orders for Seller
 // @route   GET /api/orders/seller-orders?status=...&search=...
 // @access  Private (Seller)
 export const getSellerOrders = async (req, res) => {
   try {
     const { status, search } = req.query;
 
-    // 1. Find orders where at least one item belongs to this seller
     const orders = await Order.find({ "orderItems.seller": req.seller._id })
       .populate("user", "name email")
       .populate({
         path: "orderItems.product",
-        select: "name thumbnail", // Ensure product details are available for UI
+        select: "name thumbnail",
       })
       .sort({ createdAt: -1 });
 
-    // 2. Filter items to ONLY show products belonging to this seller
     let sellerOrders = orders.map((order) => {
       const sellerItems = order.orderItems.filter(
         (item) => item.seller.toString() === req.seller._id.toString()
       );
 
-      // Determine the "Seller Status" based on *their* items
       const itemStatuses = sellerItems.map((i) => i.itemStatus);
-      let derivedStatus = "Processing"; // Default
+      let derivedStatus = "Processing";
 
       if (itemStatuses.every((s) => s === "Delivered"))
         derivedStatus = "Delivered";
@@ -197,21 +211,22 @@ export const getSellerOrders = async (req, res) => {
         ),
         totalItems: sellerItems.length,
         items: sellerItems,
-        status: derivedStatus, // Use derived status for filtering
+        status: derivedStatus,
       };
     });
 
-    // 3. Apply Status Filter (Tabs)
     if (status && status !== "All") {
       sellerOrders = sellerOrders.filter((o) => o.status === status);
     }
 
-    // 4. Apply Search Filter (Order ID or Customer Name)
+    // ✅ Search Logic: Order ID, Customer Name, OR Product Name
     if (search) {
       const searchRegex = new RegExp(search, "i");
       sellerOrders = sellerOrders.filter(
         (o) =>
-          searchRegex.test(o._id) || (o.user && searchRegex.test(o.user.name))
+          searchRegex.test(o._id) ||
+          (o.user && searchRegex.test(o.user.name)) ||
+          o.items.some((item) => searchRegex.test(item.name))
       );
     }
 
@@ -235,15 +250,12 @@ export const updateOrderStatus = async (req, res) => {
 
     let updatedCount = 0;
 
-    // Find items belonging to this seller and update them
     order.orderItems.forEach((item) => {
       const itemSellerId = item.seller._id
         ? item.seller._id.toString()
         : item.seller.toString();
 
       const isOwner = itemSellerId === req.seller._id.toString();
-
-      // If productId is provided, update specific item; otherwise update all items for this seller
       const isTarget = productId ? item.product.toString() === productId : true;
 
       if (isOwner && isTarget) {
@@ -262,7 +274,7 @@ export const updateOrderStatus = async (req, res) => {
         .json({ message: "Item not found or unauthorized" });
     }
 
-    // Check Global Order Status (if all items from all sellers are delivered)
+    // Check Global Order Status
     const allDelivered = order.orderItems.every(
       (i) => i.itemStatus === "Delivered"
     );
@@ -272,7 +284,7 @@ export const updateOrderStatus = async (req, res) => {
       order.deliveredAt = Date.now();
       order.status = "Delivered";
 
-      // ✅ NEW: Auto-Update Payment for COD on Delivery
+      // ✅ Auto-Update Payment for COD
       if (order.paymentMethod === "COD") {
         order.isPaid = true;
         order.paidAt = Date.now();
@@ -283,10 +295,9 @@ export const updateOrderStatus = async (req, res) => {
 
     await order.save();
 
-    // Trigger Confirmation Notification for Seller
     await createNotification(
       req.seller._id,
-      "alert", // Icon: Alert/Info
+      "alert",
       "Order Updated",
       `Order #${order._id
         .toString()

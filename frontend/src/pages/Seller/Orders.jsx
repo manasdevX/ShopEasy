@@ -197,7 +197,7 @@ export default function SellerOrders() {
             />
             <input
               type="text"
-              placeholder="Search by Order ID or Customer..."
+              placeholder="Search by Order ID/Name or Customer..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-12 pr-4 py-3 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl outline-none focus:ring-2 focus:ring-orange-500/20 font-medium text-slate-900 dark:text-white transition-colors"
