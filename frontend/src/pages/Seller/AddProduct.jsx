@@ -195,7 +195,7 @@ export default function AddProduct() {
       }
 
       showSuccess("Product Listed Successfully! 🎉");
-      navigate("/Seller/dashboard");
+      navigate("/Seller/Dashboard");
     } catch (error) {
       console.error(error);
       toast.dismiss(loadingToast);
