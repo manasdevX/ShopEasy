@@ -60,6 +60,17 @@ export default function AddProduct() {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
+
+    if(parseFloat(value) < 0) {
+      if(name == "stock") {
+        return showError("Stocks can't be negative");
+      } else if(name == "price") {
+        return showError("Price can't be negative");
+      } else if(name == "mrp") {
+        return showError("MRP can't be negative");
+      }
+    }
+
     setFormData((prev) => ({
       ...prev,
       [name]: type === "checkbox" ? checked : value,
@@ -177,6 +188,10 @@ export default function AddProduct() {
 
       if (!res.ok) {
         throw new Error(result.message || "Failed to add product");
+      }
+
+      if(formData.mrp < formData.price) {
+        return showError("You cannot sell at a price greater than MRP.")
       }
 
       showSuccess("Product Listed Successfully! 🎉");
@@ -408,6 +423,7 @@ export default function AddProduct() {
                       </label>
                       <input
                         type="number"
+                        min="0"
                         autoComplete="off"
                         name="mrp"
                         value={formData.mrp}
@@ -422,6 +438,7 @@ export default function AddProduct() {
                       </label>
                       <input
                         type="number"
+                        min="0"
                         autoComplete="off"
                         name="price"
                         value={formData.price}
@@ -436,6 +453,7 @@ export default function AddProduct() {
                       </label>
                       <input
                         type="number"
+                        min="0"
                         autoComplete="off"
                         name="stock"
                         value={formData.stock}

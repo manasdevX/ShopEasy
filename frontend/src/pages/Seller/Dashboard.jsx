@@ -94,8 +94,6 @@ export default function Dashboard() {
 
   // --- REAL BACKEND DELETE ---
   const handleRemoveProduct = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this product?"))
-      return;
     try {
       const token = localStorage.getItem("sellerToken");
       const res = await fetch(`${API_URL}/api/products/${id}`, {
