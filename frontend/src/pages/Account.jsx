@@ -88,7 +88,6 @@ export default function Account() {
   const [status, setStatus] = useState("loading");
 
   // ================= UTILS =================
-  // Correctly resolves image paths for Cloudinary or local storage
   const getImageUrl = (imagePath) => {
     if (!imagePath) return "https://via.placeholder.com/150?text=No+Image";
     if (imagePath.startsWith("data:") || imagePath.startsWith("http"))
@@ -196,34 +195,31 @@ export default function Account() {
   }, [activeTab]);
 
   // ================= WISHLIST HANDLER =================
- const handleRemoveFromWishlist = async (productId) => {
-   try {
-     const token = localStorage.getItem("token");
-     const res = await fetch(`${API_URL}/api/user/wishlist/${productId}`, {
-       method: "DELETE",
-       headers: { Authorization: `Bearer ${token}` },
-     });
+  const handleRemoveFromWishlist = async (productId) => {
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_URL}/api/user/wishlist/${productId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
-     if (res.ok) {
-       const updatedWishlist = await res.json();
+      if (res.ok) {
+        const updatedWishlist = await res.json();
+        setUser((prev) => ({ ...prev, wishlist: updatedWishlist }));
 
-       // 1. Update the local page state
-       setUser((prev) => ({ ...prev, wishlist: updatedWishlist }));
+        const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
+        storedUser.wishlist = updatedWishlist;
+        localStorage.setItem("user", JSON.stringify(storedUser));
 
-       // 2. CRITICAL: Update localStorage so other components see the change
-       const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
-       storedUser.wishlist = updatedWishlist;
-       localStorage.setItem("user", JSON.stringify(storedUser));
-
-       // 3. CRITICAL: Tell other components (like ProductCard) to refresh their hearts
-       window.dispatchEvent(new Event("wishlistUpdated"));
-
-       showSuccess("Item removed from wishlist");
-     }
-   } catch (err) {
-     showError("Server error");
-   }
- };
+        window.dispatchEvent(new Event("wishlistUpdated"));
+        showSuccess("Item removed from wishlist");
+      } else {
+        showError("Failed to remove item");
+      }
+    } catch (err) {
+      showError("Server error");
+    }
+  };
 
   const handleDeactivate = async () => {
     const confirmFirst = window.confirm(
@@ -261,20 +257,14 @@ export default function Account() {
     }
   };
 
-  // ================= GEOLOCATION HANDLER (HIGH ACCURACY) =================
+  // ================= GEOLOCATION HANDLER =================
   const handleUseCurrentLocation = () => {
     if (!navigator.geolocation) {
       showError("Geolocation is not supported by your browser");
       return;
     }
-
     setIsLocating(true);
-
-    const options = {
-      enableHighAccuracy: true,
-      timeout: 10000,
-      maximumAge: 0,
-    };
+    const options = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 };
 
     navigator.geolocation.getCurrentPosition(
       async (position) => {
@@ -303,14 +293,7 @@ export default function Account() {
 
             const uniqueStreetComponents = [...new Set(streetComponents)];
             const fullStreet = uniqueStreetComponents.join(", ");
-
-            const city =
-              addr.city ||
-              addr.town ||
-              addr.municipality ||
-              addr.county ||
-              addr.state_district ||
-              "";
+            const city = addr.city || addr.town || addr.municipality || "";
 
             setNewAddress((prev) => ({
               ...prev,
@@ -320,10 +303,7 @@ export default function Account() {
               pincode: addr.postcode || "",
               country: addr.country || "India",
             }));
-
             showSuccess("Location fetched successfully!");
-          } else {
-            showError("Could not determine precise address");
           }
         } catch (error) {
           showError("Failed to fetch address details");
@@ -331,9 +311,9 @@ export default function Account() {
           setIsLocating(false);
         }
       },
-      (error) => {
+      () => {
         setIsLocating(false);
-        showError("Location access denied. Please enable GPS.");
+        showError("Location access denied.");
       },
       options
     );
@@ -348,27 +328,9 @@ export default function Account() {
         method: "PUT",
         headers: { Authorization: `Bearer ${token}` },
       });
-
       const updatedAddresses = await res.json();
-
       if (res.ok) {
         setUser((prev) => ({ ...prev, addresses: updatedAddresses }));
-        const newDefault = updatedAddresses.find((a) => a.isDefault);
-        if (newDefault) {
-          setFormData((prev) => ({
-            ...prev,
-            address: {
-              name: newDefault.fullName,
-              phone: newDefault.phone,
-              street: newDefault.addressLine,
-              city: newDefault.city,
-              state: newDefault.state,
-              pincode: newDefault.pincode,
-              country: newDefault.country,
-              type: newDefault.type,
-            },
-          }));
-        }
         showSuccess("Default Address Updated");
       }
     } catch (err) {
@@ -377,8 +339,6 @@ export default function Account() {
   };
 
   const handleSaveAddress = async () => {
-    const phoneRegex = /^[0-9]{10}$/;
-    const pincodeRegex = /^[0-9]{6}$/;
     if (
       !newAddress.name ||
       !newAddress.phone ||
@@ -389,29 +349,15 @@ export default function Account() {
       showError("Please fill all required fields");
       return;
     }
-
-    if (!phoneRegex.test(newAddress.phone)) {
-      showError("Enter a valid 10-digit phone number");
-      return;
-    }
-
-    if (!pincodeRegex.test(newAddress.pincode)) {
-      showError("Enter a valid 6-digit pincode");
-      return;
-    }
-
     setIsAddressSaving(true);
-
     try {
       const token = localStorage.getItem("token");
       let url = `${API_URL}/api/user/address`;
       let method = "POST";
-
       if (editingAddressId) {
         url = `${API_URL}/api/user/address/${editingAddressId}`;
         method = "PUT";
       }
-
       const res = await fetch(url, {
         method: method,
         headers: {
@@ -420,46 +366,12 @@ export default function Account() {
         },
         body: JSON.stringify(newAddress),
       });
-
       const updatedAddresses = await res.json();
-
       if (res.ok) {
         setUser((prev) => ({ ...prev, addresses: updatedAddresses }));
-
-        const primaryAddr =
-          updatedAddresses.find((a) => a.isDefault) ||
-          updatedAddresses[updatedAddresses.length - 1] ||
-          {};
-
-        setFormData((prev) => ({
-          ...prev,
-          address: {
-            name: primaryAddr.fullName,
-            phone: primaryAddr.phone,
-            street: primaryAddr.addressLine,
-            city: primaryAddr.city,
-            state: primaryAddr.state,
-            pincode: primaryAddr.pincode,
-            country: primaryAddr.country,
-            type: primaryAddr.type,
-          },
-        }));
-
         setShowAddAddress(false);
         setEditingAddressId(null);
-        setNewAddress({
-          name: "",
-          phone: "",
-          street: "",
-          city: "",
-          state: "",
-          pincode: "",
-          country: "India",
-          type: "Home",
-        });
-        showSuccess(editingAddressId ? "Address Updated!" : "Address Added!");
-      } else {
-        showError("Failed to save address");
+        showSuccess("Address Saved!");
       }
     } catch (err) {
       showError("Network Error");
@@ -528,23 +440,6 @@ export default function Account() {
       const updatedAddresses = await res.json();
       if (res.ok) {
         setUser((prev) => ({ ...prev, addresses: updatedAddresses }));
-        const primaryAddr =
-          updatedAddresses.find((a) => a.isDefault) ||
-          updatedAddresses[updatedAddresses.length - 1] ||
-          {};
-        setFormData((prev) => ({
-          ...prev,
-          address: {
-            name: primaryAddr.fullName,
-            phone: primaryAddr.phone,
-            street: primaryAddr.addressLine,
-            city: primaryAddr.city,
-            state: primaryAddr.state,
-            pincode: primaryAddr.pincode,
-            country: primaryAddr.country,
-            type: primaryAddr.type,
-          },
-        }));
         showSuccess("Address Deleted");
       }
     } catch (err) {
@@ -553,8 +448,7 @@ export default function Account() {
   };
 
   const toggleMenu = (id) => {
-    if (openMenuId === id) setOpenMenuId(null);
-    else setOpenMenuId(id);
+    setOpenMenuId(openMenuId === id ? null : id);
   };
 
   // ================= PROFILE HANDLERS =================
@@ -596,26 +490,10 @@ export default function Account() {
 
   const handleSave = async () => {
     const phoneRegex = /^[0-9]{10}$/;
-    const pincodeRegex = /^[0-9]{6}$/;
-
     if (!phoneRegex.test(formData.phone)) {
       showError("Please enter a valid 10-digit profile phone number");
       return;
     }
-
-    if (formData.address.phone && !phoneRegex.test(formData.address.phone)) {
-      showError("Please enter a valid 10-digit address phone number");
-      return;
-    }
-
-    if (
-      formData.address.pincode &&
-      !pincodeRegex.test(formData.address.pincode)
-    ) {
-      showError("Please enter a valid 6-digit pincode");
-      return;
-    }
-
     setStatus("saving");
     try {
       const token = localStorage.getItem("token");
@@ -623,11 +501,7 @@ export default function Account() {
         name: formData.name,
         phone: formData.phone,
         profilePicture: formData.avatar,
-        address: {
-          ...formData.address,
-          name: formData.address.name,
-          phone: formData.address.phone,
-        },
+        address: { ...formData.address },
       };
       const res = await fetch(`${API_URL}/api/user/profile`, {
         method: "PUT",
@@ -639,7 +513,6 @@ export default function Account() {
       });
 
       const data = await res.json();
-
       if (res.ok) {
         setUser({
           ...formData,
@@ -651,39 +524,23 @@ export default function Account() {
           addresses: data.addresses,
           address: data.address,
         }));
-
-        try {
-          const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
-          const updatedUser = {
-            ...storedUser,
+        localStorage.setItem(
+          "user",
+          JSON.stringify({
+            ...JSON.parse(localStorage.getItem("user") || "{}"),
             name: formData.name,
             profilePicture: data.profilePicture || formData.avatar,
-          };
-          localStorage.setItem("user", JSON.stringify(updatedUser));
-        } catch (storageErr) {
-          console.warn("LocalStorage quota exceeded.");
-          try {
-            const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
-            const safeUser = { ...storedUser, name: formData.name };
-            localStorage.setItem("user", JSON.stringify(safeUser));
-          } catch (e) {
-            console.error("Critical: LocalStorage completely full", e);
-          }
-        }
-
+          })
+        );
         window.dispatchEvent(new Event("user-info-updated"));
-        window.dispatchEvent(new Event("storage"));
-
         setIsEditing(false);
         showSuccess("Profile Updated Successfully!");
-        setStatus("idle");
       } else {
         showError("Save failed");
-        setStatus("idle");
       }
     } catch (err) {
-      console.error(err);
       showError("Server Error");
+    } finally {
       setStatus("idle");
     }
   };
@@ -704,6 +561,7 @@ export default function Account() {
 
       <main className="max-w-6xl mx-auto px-6 py-8">
         <div className="flex flex-col lg:flex-row gap-6">
+          {/* SIDEBAR */}
           <aside className="w-full lg:w-80 space-y-4">
             <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border border-slate-200 dark:border-slate-800 text-center transition-colors">
               <div className="relative w-28 h-28 mx-auto mb-4">
@@ -737,7 +595,6 @@ export default function Account() {
                   </div>
                 )}
                 <input
-                  autoComplete="off"
                   type="file"
                   ref={fileInputRef}
                   onChange={handleImageChange}
@@ -777,7 +634,9 @@ export default function Account() {
             </nav>
           </aside>
 
+          {/* MAIN CONTENT */}
           <div className="flex-1">
+            {/* 1. PROFILE SETTINGS */}
             {activeTab === "profile" && (
               <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden relative">
@@ -792,7 +651,6 @@ export default function Account() {
                           : "View profile info"}
                       </p>
                     </div>
-
                     <div className="flex items-center gap-2">
                       {!isEditing ? (
                         <button
@@ -811,19 +669,17 @@ export default function Account() {
                             <Loader2 className="animate-spin" size={14} />
                           ) : (
                             <Check size={16} />
-                          )}
+                          )}{" "}
                           Save
                         </button>
                       )}
                     </div>
                   </div>
-
                   <div className="p-6 space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <InputField
                         label="Full Name"
                         name="name"
-                        autoComplete="off"
                         value={formData.name}
                         onChange={handleInputChange}
                         isEditing={isEditing}
@@ -831,7 +687,6 @@ export default function Account() {
                       />
                       <InputField
                         label="Email"
-                        autoComplete="off"
                         name="email"
                         value={formData.email}
                         onChange={handleInputChange}
@@ -842,7 +697,6 @@ export default function Account() {
                       <InputField
                         label="Phone"
                         name="phone"
-                        autoComplete="off"
                         value={formData.phone}
                         onChange={handleInputChange}
                         icon={<Phone size={16} />}
@@ -865,7 +719,6 @@ export default function Account() {
                         <InputField
                           label="Receiver Name"
                           name="addressName"
-                          autoComplete="off"
                           value={formData.address.name}
                           onChange={handleInputChange}
                           isEditing={isEditing}
@@ -873,7 +726,6 @@ export default function Account() {
                         />
                         <InputField
                           label="Contact"
-                          autoComplete="off"
                           name="addressPhone"
                           value={formData.address.phone}
                           onChange={handleInputChange}
@@ -883,7 +735,6 @@ export default function Account() {
                         <div className="md:col-span-2">
                           <InputField
                             label="Street Address"
-                            autoComplete="off"
                             name="street"
                             value={formData.address.street}
                             onChange={handleInputChange}
@@ -892,7 +743,6 @@ export default function Account() {
                         </div>
                         <InputField
                           label="City"
-                          autoComplete="off"
                           name="city"
                           value={formData.address.city}
                           onChange={handleInputChange}
@@ -900,7 +750,6 @@ export default function Account() {
                         />
                         <InputField
                           label="Pincode"
-                          autoComplete="off"
                           name="pincode"
                           value={formData.address.pincode}
                           onChange={handleInputChange}
@@ -908,7 +757,6 @@ export default function Account() {
                         />
                         <InputField
                           label="State"
-                          autoComplete="off"
                           name="state"
                           value={formData.address.state}
                           onChange={handleInputChange}
@@ -916,7 +764,6 @@ export default function Account() {
                         />
                         <InputField
                           label="Country"
-                          autoComplete="off"
                           name="country"
                           value={formData.address.country}
                           onChange={handleInputChange}
@@ -930,6 +777,7 @@ export default function Account() {
               </div>
             )}
 
+            {/* 2. ORDER HISTORY TAB CORRECTED */}
             {activeTab === "orders" && (
               <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500 min-h-[500px]">
                 <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/20">
@@ -1024,20 +872,21 @@ export default function Account() {
                           </div>
                           <div className="p-5 space-y-4">
                             {order.orderItems.map((item, idx) => (
-                              <div
+                              <Link
                                 key={idx}
-                                className="flex items-center justify-between gap-4"
+                                to={`/product/${item.product}`}
+                                className="flex items-center justify-between gap-4 group/item p-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all"
                               >
                                 <div className="flex items-center gap-4">
-                                  <div className="h-14 w-14 bg-slate-100 dark:bg-slate-800 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 flex-shrink-0">
+                                  <div className="h-14 w-14 bg-slate-100 dark:bg-slate-800 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 flex-shrink-0 group-hover/item:border-orange-500 transition-colors">
                                     <img
                                       src={getImageUrl(item.image)}
                                       alt={item.name}
-                                      className="h-full w-full object-cover"
+                                      className="h-full w-full object-cover group-hover/item:scale-110 transition-transform duration-300"
                                     />
                                   </div>
                                   <div>
-                                    <h5 className="text-sm font-bold text-slate-900 dark:text-white line-clamp-1">
+                                    <h5 className="text-sm font-bold text-slate-900 dark:text-white line-clamp-1 group-hover/item:text-orange-500 transition-colors">
                                       {item.name}
                                     </h5>
                                     <p className="text-xs text-slate-500 font-medium">
@@ -1046,13 +895,10 @@ export default function Account() {
                                     </p>
                                   </div>
                                 </div>
-                                <Link
-                                  to={`/product/${item.product}`}
-                                  className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-blue-500 transition-colors"
-                                >
+                                <div className="p-2 text-slate-400 group-hover/item:text-orange-500 group-hover/item:translate-x-1 transition-all">
                                   <ChevronRight size={18} />
-                                </Link>
-                              </div>
+                                </div>
+                              </Link>
                             ))}
                           </div>
                           <div className="px-5 py-4 bg-white dark:bg-slate-900 border-t border-slate-50 dark:border-slate-800 flex justify-between items-center">
@@ -1096,16 +942,13 @@ export default function Account() {
                     {user.wishlist.length} Items Saved
                   </span>
                 </div>
-
                 <div className="p-6">
                   {user.wishlist.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-20 text-center">
-                      <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-full mb-4">
-                        <Heart
-                          size={40}
-                          className="text-slate-300 dark:text-slate-600"
-                        />
-                      </div>
+                      <Heart
+                        size={40}
+                        className="text-slate-300 dark:text-slate-600"
+                      />
                       <h4 className="text-slate-900 dark:text-white font-bold">
                         Your wishlist is empty
                       </h4>
@@ -1127,7 +970,6 @@ export default function Account() {
                           className="group border border-slate-100 dark:border-slate-800 rounded-2xl p-4 hover:border-blue-200 dark:hover:border-blue-900/50 hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-all shadow-sm"
                         >
                           <div className="flex justify-between gap-4">
-                            {/* Corrected Image: Using Link for clickability and getImageUrl helper for visibility */}
                             <Link
                               to={`/product/${product._id}`}
                               className="h-24 w-24 bg-white dark:bg-slate-800 rounded-xl overflow-hidden flex-shrink-0 border border-slate-100 dark:border-slate-700 group-hover:border-blue-300 transition-colors"
@@ -1145,7 +987,6 @@ export default function Account() {
                                 }}
                               />
                             </Link>
-
                             <div className="flex flex-col justify-between py-1 flex-1 min-w-0">
                               <div className="space-y-1">
                                 <div className="flex items-center gap-2">
@@ -1153,7 +994,6 @@ export default function Account() {
                                     {product.category || "Premium Collection"}
                                   </span>
                                 </div>
-                                {/* Corrected Title: Using Link for details navigation */}
                                 <Link to={`/product/${product._id}`}>
                                   <h4 className="text-sm font-bold text-slate-900 dark:text-white line-clamp-2 hover:text-blue-600 transition-colors">
                                     {product.name}
@@ -1169,7 +1009,6 @@ export default function Account() {
                                 <Trash2 size={12} /> Remove Item
                               </button>
                             </div>
-
                             <div className="flex flex-col justify-between items-end shrink-0">
                               <div className="text-right">
                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
@@ -1195,6 +1034,7 @@ export default function Account() {
               </div>
             )}
 
+            {/* 4. MANAGE ADDRESSES TAB */}
             {activeTab === "addresses" && (
               <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500 min-h-[500px]">
                 <div className="p-6 border-b border-slate-100 dark:border-slate-800">
@@ -1224,7 +1064,7 @@ export default function Account() {
                           <Loader2 className="animate-spin" size={18} />
                         ) : (
                           <LocateFixed size={18} />
-                        )}
+                        )}{" "}
                         {isLocating
                           ? "Fetching Location..."
                           : "Use my current location"}
@@ -1232,7 +1072,6 @@ export default function Account() {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                         <input
                           placeholder="Receiver's Name"
-                          autoComplete="off"
                           value={newAddress.name}
                           onChange={(e) =>
                             setNewAddress({
@@ -1244,7 +1083,6 @@ export default function Account() {
                         />
                         <input
                           placeholder="Receiver's Phone"
-                          autoComplete="off"
                           value={newAddress.phone}
                           onChange={(e) =>
                             setNewAddress({
@@ -1258,7 +1096,6 @@ export default function Account() {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                         <input
                           placeholder="Street Address"
-                          autoComplete="off"
                           value={newAddress.street}
                           onChange={(e) =>
                             setNewAddress({
@@ -1270,7 +1107,6 @@ export default function Account() {
                         />
                         <input
                           placeholder="City"
-                          autoComplete="off"
                           value={newAddress.city}
                           onChange={(e) =>
                             setNewAddress({
@@ -1282,7 +1118,6 @@ export default function Account() {
                         />
                         <input
                           placeholder="Pincode"
-                          autoComplete="off"
                           value={newAddress.pincode}
                           onChange={(e) =>
                             setNewAddress({
@@ -1294,7 +1129,6 @@ export default function Account() {
                         />
                         <input
                           placeholder="State"
-                          autoComplete="off"
                           value={newAddress.state}
                           onChange={(e) =>
                             setNewAddress({
@@ -1306,7 +1140,6 @@ export default function Account() {
                         />
                         <input
                           placeholder="Country"
-                          autoComplete="off"
                           value={newAddress.country}
                           onChange={(e) =>
                             setNewAddress({
@@ -1375,7 +1208,6 @@ export default function Account() {
                       </div>
                     </div>
                   )}
-
                   <div className="mt-6 space-y-4">
                     {user.addresses && user.addresses.length > 0 ? (
                       user.addresses.map((addr, index) => {
@@ -1407,7 +1239,7 @@ export default function Account() {
                                   {!addr.isDefault && (
                                     <button
                                       onClick={() => handleSetDefault(addr._id)}
-                                      className="w-full text-left px-4 py-2.5 text-xs font-medium text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 transition-colors"
+                                      className="w-full text-left px-4 py-2.5 text-xs font-medium text-blue-600 hover:bg-blue-50 dark:hover:bg-green-900/20 flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 transition-colors"
                                     >
                                       <Check size={12} /> Default
                                     </button>
@@ -1462,6 +1294,7 @@ export default function Account() {
               </div>
             )}
 
+            {/* 5. PRIVACY & SECURITY TAB */}
             {activeTab === "security" && (
               <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500 min-h-[500px]">
                 <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/20">
@@ -1632,20 +1465,6 @@ function InputField({
           } ${error ? "!border-red-400" : ""}`}
         />
       </div>
-    </div>
-  );
-}
-
-function PlaceholderTab({ icon, title, desc }) {
-  return (
-    <div className="bg-white dark:bg-slate-900 rounded-3xl p-10 shadow-sm border border-slate-200 dark:border-slate-800 text-center animate-in fade-in zoom-in duration-300">
-      <div className="w-20 h-20 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-6 text-slate-400 dark:text-slate-500">
-        {icon}
-      </div>
-      <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
-        {title}
-      </h2>
-      <p className="text-slate-500 dark:text-slate-400">{desc}</p>
     </div>
   );
 }
