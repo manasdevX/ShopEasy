@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import {
   ShoppingBag,
@@ -14,14 +14,22 @@ import {
   Check,
   Store,
   LayoutDashboard,
+  Loader2,
+  X,
+  AlertCircle,
 } from "lucide-react";
+
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
   const navigate = useNavigate();
   const location = useLocation();
 
+  // Ref for closing dropdown on outside click
+  const searchRef = useRef(null);
+
   // ==========================================
-  // 1. SAFE DATA RETRIEVAL (Fixes the Crash)
+  // 1. SAFE DATA RETRIEVAL
   // ==========================================
   const [seller, setSeller] = useState(() => {
     try {
@@ -37,7 +45,16 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
   const [token, setToken] = useState(localStorage.getItem("sellerToken"));
 
   // ==========================================
-  // 2. SYNC STATE ON CHANGE
+  // 2. SEARCH STATES (NEW)
+  // ==========================================
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [searchError, setSearchError] = useState(null);
+
+  // ==========================================
+  // 3. SYNC STATE ON CHANGE
   // ==========================================
   useEffect(() => {
     const handleStorageChange = () => {
@@ -55,7 +72,6 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
     };
 
     window.addEventListener("storage", handleStorageChange);
-    // Custom event listener for immediate updates within the same tab
     window.addEventListener("seller-info-updated", handleStorageChange);
 
     return () => {
@@ -63,6 +79,64 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
       window.removeEventListener("seller-info-updated", handleStorageChange);
     };
   }, []);
+
+  // ==========================================
+  // 4. SEARCH FUNCTIONALITY (NEW)
+  // ==========================================
+  useEffect(() => {
+    // 1. Clear if empty
+    if (searchQuery.trim().length === 0) {
+      setSearchResults(null);
+      setShowDropdown(false);
+      return;
+    }
+
+    // 2. Debounce API Call
+    const delayDebounceFn = setTimeout(async () => {
+      if (searchQuery.trim().length > 2) {
+        setIsSearching(true);
+        setShowDropdown(true);
+        setSearchError(null);
+
+        try {
+          const res = await fetch(
+            `${API_URL}/api/sellers/search?query=${searchQuery}`,
+            {
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+            }
+          );
+
+          const result = await res.json();
+
+          if (res.ok) {
+            setSearchResults(result.results);
+          } else {
+            setSearchError(result.message || "Search failed");
+          }
+        } catch (error) {
+          setSearchError("Connection error");
+        } finally {
+          setIsSearching(false);
+        }
+      }
+    }, 500);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchQuery, token]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (searchRef.current && !searchRef.current.contains(event.target)) {
+        setShowDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [searchRef]);
 
   const isAuth = propIsLoggedIn || !!token;
 
@@ -92,7 +166,7 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
     { name: "Orders", path: "/Seller/orders", icon: ListOrdered },
   ];
 
-  // Stepper Logic (for Registration Flow)
+  // Stepper Logic
   const steps = [
     {
       name: "EMAIL & PASSWORD",
@@ -130,7 +204,10 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
           </Link>
 
           {/* CENTER: ONBOARDING STEPS OR SEARCH */}
-          <div className="hidden lg:flex flex-grow max-w-2xl justify-center">
+          <div
+            className="hidden lg:flex flex-grow max-w-2xl justify-center"
+            ref={searchRef}
+          >
             {isOnboarding ? (
               <div className="flex items-center gap-4">
                 {steps.map((step, index) => {
@@ -190,7 +267,9 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
                 })}
               </div>
             ) : (
-              /* SEARCH BAR (Only visible if logged in and not onboarding) */
+              /* =============================================
+                 FUNCTIONAL SEARCH BAR (Replaced Static UI)
+                 ============================================= */
               isAuth && (
                 <div className="w-full relative group">
                   <Search
@@ -200,8 +279,131 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
                   <input
                     type="text"
                     placeholder="Search products, orders or SKU..."
-                    className="w-full bg-slate-100 dark:bg-slate-900 border border-transparent dark:border-slate-800 rounded-xl py-2.5 pl-12 pr-4 text-sm font-medium outline-none focus:bg-white dark:focus:bg-slate-950 focus:border-orange-500/50 focus:ring-4 focus:ring-orange-500/5 transition-all"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onFocus={() => {
+                      if (searchResults || searchQuery.length > 2)
+                        setShowDropdown(true);
+                    }}
+                    className="w-full bg-slate-100 dark:bg-slate-900 border border-transparent dark:border-slate-800 rounded-xl py-2.5 pl-12 pr-10 text-sm font-medium outline-none focus:bg-white dark:focus:bg-slate-950 focus:border-orange-500/50 focus:ring-4 focus:ring-orange-500/5 transition-all"
                   />
+                  {searchQuery && (
+                    <button
+                      onClick={() => {
+                        setSearchQuery("");
+                        setSearchResults(null);
+                      }}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-white"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+
+                  {/* SEARCH RESULTS DROPDOWN */}
+                  {showDropdown && searchQuery.length > 2 && (
+                    <div className="absolute top-full mt-2 left-0 w-full bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 z-[100]">
+                      {isSearching ? (
+                        <div className="p-6 text-center text-slate-500 flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-widest">
+                          <Loader2 className="animate-spin" size={16} />{" "}
+                          Searching...
+                        </div>
+                      ) : (
+                        <div className="max-h-[400px] overflow-y-auto">
+                          {/* Products */}
+                          {searchResults?.products?.length > 0 && (
+                            <div className="p-2">
+                              <h4 className="px-3 py-2 text-[10px] font-black uppercase text-slate-400 tracking-widest">
+                                Products
+                              </h4>
+                              {searchResults.products.map((p) => (
+                                <div
+                                  key={p._id}
+                                  onClick={() => {
+                                    navigate(`/Seller/edit-product/${p._id}`);
+                                    setShowDropdown(false);
+                                  }}
+                                  className="flex items-center gap-3 p-2 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg cursor-pointer transition-colors group"
+                                >
+                                  <img
+                                    src={p.thumbnail}
+                                    alt=""
+                                    className="w-10 h-10 rounded-lg object-cover bg-slate-100"
+                                    onError={(e) =>
+                                      (e.target.src =
+                                        "https://via.placeholder.com/50")
+                                    }
+                                  />
+                                  <div>
+                                    <p className="text-sm font-bold text-slate-900 dark:text-white line-clamp-1">
+                                      {p.name}
+                                    </p>
+                                    <p className="text-xs text-slate-500">
+                                      Stock: {p.stock} • ₹{p.price}
+                                    </p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Orders */}
+                          {searchResults?.orders?.length > 0 && (
+                            <div className="p-2 border-t border-slate-100 dark:border-slate-800">
+                              <h4 className="px-3 py-2 text-[10px] font-black uppercase text-slate-400 tracking-widest">
+                                Orders
+                              </h4>
+                              {searchResults.orders.map((o) => (
+                                <div
+                                  key={o._id}
+                                  className="flex items-center justify-between p-3 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg cursor-pointer transition-colors"
+                                >
+                                  <div>
+                                    <p className="text-xs font-bold text-slate-900 dark:text-white">
+                                      #{o._id.slice(-6).toUpperCase()}
+                                    </p>
+                                    <p className="text-[10px] text-slate-500">
+                                      {new Date(
+                                        o.createdAt
+                                      ).toLocaleDateString()}
+                                    </p>
+                                  </div>
+                                  <span
+                                    className={`text-[10px] font-bold px-2 py-1 rounded-md uppercase ${
+                                      o.status === "Delivered"
+                                        ? "bg-green-500/10 text-green-500"
+                                        : "bg-orange-500/10 text-orange-500"
+                                    }`}
+                                  >
+                                    {o.status}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Empty State */}
+                          {searchResults?.products?.length === 0 &&
+                            searchResults?.orders?.length === 0 && (
+                              <div className="p-8 text-center">
+                                <p className="text-sm font-bold text-slate-900 dark:text-white">
+                                  No results found
+                                </p>
+                                <p className="text-xs text-slate-500 mt-1">
+                                  Try a different keyword or SKU.
+                                </p>
+                              </div>
+                            )}
+
+                          {/* Error State */}
+                          {searchError && (
+                            <div className="p-4 text-center text-red-500 flex flex-col items-center gap-1 text-xs font-bold">
+                              <AlertCircle size={16} /> {searchError}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )
             )}
@@ -217,7 +419,10 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
             </button>
 
             {isAuth && (
-              <Link to="/Seller/Notifications" className="p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 relative transition-colors">
+              <Link
+                to="/Seller/Notifications"
+                className="p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 relative transition-colors"
+              >
                 <Bell size={20} />
                 <span className="absolute top-2 right-2.5 w-2 h-2 bg-orange-500 rounded-full border-2 border-white dark:border-[#030712]"></span>
               </Link>
@@ -228,8 +433,6 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
             {/* PROFILE DROPDOWN */}
             {isAuth ? (
               <div className="relative group py-2">
-                {" "}
-                {/* Added py-2 to extend the hoverable area vertically */}
                 <button className="flex items-center gap-1 hover:text-orange-500 transition-colors">
                   <div className="flex items-center gap-2 hover:text-orange-500 transition-colors font-bold text-sm text-slate-700 dark:text-slate-200">
                     <div className="w-8 h-8 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center text-orange-600 dark:text-orange-400 font-bold border border-orange-200 dark:border-orange-800">
@@ -244,10 +447,6 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
                     className="text-slate-400 transition-transform group-hover:rotate-180"
                   />
                 </button>
-                {/* Dropdown Menu */}
-                {/* CHANGE: Added 'pt-2' and removed 'mt-2'. 
-        The 'pt-2' acts as an invisible bridge so the mouse stay 'inside' the group.
-    */}
                 <div className="absolute top-full right-0 w-52 pt-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
                   <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-xl overflow-hidden shadow-xl border border-slate-100 dark:border-slate-800">
                     <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800">
@@ -298,7 +497,7 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
           </div>
         </div>
 
-        {/* BOTTOM NAV (Only visible if logged in and NOT onboarding) */}
+        {/* BOTTOM NAV */}
         {isAuth &&
           !isOnboarding &&
           ["/Seller/Dashboard", "/Seller/orders", "/Seller/products"].includes(
