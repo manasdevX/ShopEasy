@@ -436,7 +436,7 @@ export default function ProductDetails() {
                 {
                   icon: <RotateCcw size={20} />,
                   title: "Easy Returns",
-                  desc: "30-day hassle-free policy",
+                  desc: "14-day hassle-free policy",
                 },
                 {
                   icon: <ShieldCheck size={20} />,
