@@ -1,10 +1,11 @@
 import React from 'react';
-import { ShieldCheck, Lock, Sparkles } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { ShieldCheck, Lock, Sparkles , ArrowLeft } from 'lucide-react';
+import { useNavigate , useLocation } from 'react-router-dom';
 
 const ShopEasyHeader = () => {
 
   const navigate = useNavigate();
+  const location = useLocation();
 
   return (
     <header className="bg-white dark:bg-[#030712] border-b border-gray-100 dark:border-gray-800 px-6 py-3 flex items-center gap-6">
@@ -18,7 +19,7 @@ const ShopEasyHeader = () => {
         </div>
 
         {/* SECURE CHECKOUT STATUS */}
-        <div className="flex items-center gap-4 text-white/90">
+        {location.pathname == "/payment" && <div className="flex items-center gap-4 text-white/90">
           <div className="hidden sm:flex items-center gap-2 border-r border-white/20 dark:border-slate-700 pr-4">
             <ShieldCheck size={18} className="text-white dark:text-orange-400" />
             <span className="text-[10px] font-black uppercase tracking-widest">
@@ -31,7 +32,16 @@ const ShopEasyHeader = () => {
               Safe Payment
             </span>
           </div>
-        </div>
+        </div>}
+        {location.pathname != "/payment" && 
+          <button
+              onClick={() => navigate("/")}
+              className="flex items-center gap-2 text-slate-400 hover:text-orange-500 font-bold text-[10px] uppercase tracking-[0.2em] transition-all hover:-translate-x-1"
+            >
+              <ArrowLeft size={14} /> 
+              <span>Back</span>
+            </button>
+        }
 
       </div>
     </header>
