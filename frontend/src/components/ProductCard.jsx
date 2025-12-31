@@ -20,20 +20,32 @@ export default function ProductCard({ product }) {
   const imageDisplay =
     product.thumbnail || product.image || (product.images && product.images[0]);
 
-  // 1. Check if item is already in wishlist (Load from LocalStorage)
-  useEffect(() => {
+  // 1. Logic to check if item is in wishlist and handle global sync
+  const checkWishlistStatus = () => {
     try {
       const user = JSON.parse(localStorage.getItem("user") || "{}");
       if (user.wishlist && Array.isArray(user.wishlist)) {
-        // Check if product ID exists in the wishlist array (handles objects or strings)
+        // Check if product ID exists (handles both object arrays and ID string arrays)
         const exists = user.wishlist.some(
           (item) => (typeof item === "string" ? item : item._id) === productId
         );
         setIsWishlisted(exists);
+      } else {
+        setIsWishlisted(false);
       }
     } catch (e) {
       console.error("Error parsing user data for wishlist check", e);
     }
+  };
+
+  useEffect(() => {
+    // Initial check on mount
+    checkWishlistStatus();
+
+    // Listen for custom event from Account.jsx to sync the UI
+    window.addEventListener("wishlistUpdated", checkWishlistStatus);
+    return () =>
+      window.removeEventListener("wishlistUpdated", checkWishlistStatus);
   }, [productId]);
 
   // Handle Quick Add to Cart
@@ -59,7 +71,6 @@ export default function ProductCard({ product }) {
       });
 
       const data = await res.json();
-
       if (res.ok) {
         toast.success(`${product.name} added to cart!`);
         window.dispatchEvent(new Event("cartUpdated"));
@@ -67,14 +78,13 @@ export default function ProductCard({ product }) {
         toast.error(data.message || "Failed to add item");
       }
     } catch (error) {
-      console.error("Add to cart error:", error);
       toast.error("Something went wrong");
     } finally {
       setAdding(false);
     }
   };
 
-  // Handle Add to Wishlist
+  // Handle Toggle Wishlist (Add/Remove)
   const handleAddToWishlist = async (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -85,11 +95,9 @@ export default function ProductCard({ product }) {
       return;
     }
 
-    // Optimistic UI update (optional, but feels faster)
-    // setIsWishlisted(true);
-
     setWishlisting(true);
     try {
+      // Use POST for toggle logic or follow your specific backend route
       const res = await fetch(`${API_URL}/api/user/wishlist/${productId}`, {
         method: "POST",
         headers: {
@@ -101,24 +109,19 @@ export default function ProductCard({ product }) {
       const data = await res.json();
 
       if (res.ok) {
-        setIsWishlisted(true); // ✅ Turn Heart Red
+        const user = JSON.parse(localStorage.getItem("user") || "{}");
+        user.wishlist = data;
+        localStorage.setItem("user", JSON.stringify(user));
+
+        setIsWishlisted(true);
         toast.success("Added to Wishlist!", { icon: "❤️" });
 
-        // Optional: Update local storage so other components know
-        const user = JSON.parse(localStorage.getItem("user") || "{}");
-        if (user) {
-          user.wishlist = data; // API returns updated wishlist
-          localStorage.setItem("user", JSON.stringify(user));
-        }
-      } else if (res.status === 400) {
-        setIsWishlisted(true); // ✅ Turn Red if already there
-        toast.error("Already in Wishlist", { icon: "❤️" });
+        // ✅ Notify other instances of ProductCard and Account page
+        window.dispatchEvent(new Event("wishlistUpdated"));
       } else {
-        toast.error(data.message || "Failed to add");
-        // setIsWishlisted(false); // Revert if failed
+        toast.error(data.message || "Failed to update wishlist");
       }
     } catch (error) {
-      console.error("Wishlist error:", error);
       toast.error("Server error");
     } finally {
       setWishlisting(false);
@@ -144,18 +147,16 @@ export default function ProductCard({ product }) {
         <button
           onClick={handleAddToWishlist}
           disabled={wishlisting}
-          className={`absolute top-4 right-4 z-10 p-2.5 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md rounded-full shadow-sm transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed ${
-            isWishlisted
-              ? "text-red-500 hover:text-red-600 hover:scale-110" // ✅ Red if wishlisted
-              : "text-slate-400 hover:text-red-500 hover:scale-110" // Grey otherwise
-          }`}
+          className={`absolute top-4 right-4 z-20 p-2.5 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md rounded-full shadow-sm transition-all duration-300 hover:scale-110 active:scale-95 disabled:opacity-50`}
         >
           {wishlisting ? (
             <Loader2 size={16} className="animate-spin text-red-500" />
           ) : (
             <Heart
               size={16}
-              className={isWishlisted ? "fill-current" : ""} // ✅ Fills the heart
+              className={`${
+                isWishlisted ? "text-red-500 fill-red-500" : "text-slate-400"
+              } transition-colors duration-300`}
             />
           )}
         </button>
@@ -164,14 +165,17 @@ export default function ProductCard({ product }) {
           src={imageDisplay}
           className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
           alt={product.name}
+          onError={(e) => {
+            e.target.src = "https://via.placeholder.com/300?text=No+Image";
+          }}
         />
 
         {/* Quick Add Button Overlay */}
-        <div className="absolute inset-x-0 bottom-0 p-4 translate-y-full group-hover:translate-y-0 transition-transform duration-500 ease-out">
+        <div className="absolute inset-x-0 bottom-0 p-4 translate-y-full group-hover:translate-y-0 transition-transform duration-500 ease-out z-10">
           <button
             onClick={handleQuickAdd}
             disabled={adding}
-            className="w-full py-3 bg-slate-900 dark:bg-orange-500 text-white rounded-2xl shadow-xl font-bold text-sm flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+            className="w-full py-3 bg-slate-900 dark:bg-orange-500 text-white rounded-2xl shadow-xl font-bold text-sm flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-70"
           >
             {adding ? (
               <>
@@ -200,11 +204,11 @@ export default function ProductCard({ product }) {
       </div>
 
       {/* INFO */}
-      <div className="px-1 flex-grow">
+      <div className="px-1 flex-grow flex flex-col justify-between">
         <h3 className="font-bold text-slate-900 dark:text-white mb-2 group-hover:text-orange-500 transition-colors leading-tight line-clamp-2">
           {product.name}
         </h3>
-        <div className="flex items-center gap-2 mt-auto">
+        <div className="flex items-center gap-2">
           <p className="text-orange-600 dark:text-orange-400 font-black text-lg">
             ₹{price.toLocaleString()}
           </p>

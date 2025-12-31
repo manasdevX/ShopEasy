@@ -14,6 +14,7 @@ import {
   Zap,
   ThumbsUp,
   ThumbsDown,
+  Heart,
 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import Navbar from "../components/Navbar";
@@ -33,6 +34,10 @@ export default function ProductDetails() {
   const [selectedImage, setSelectedImage] = useState(0);
   const [allImages, setAllImages] = useState([]);
 
+  // Wishlist States
+  const [isWishlisted, setIsWishlisted] = useState(false);
+  const [wishlisting, setWishlisting] = useState(false);
+
   const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
   const SAFE_API_URL = BASE_URL.startsWith("http")
     ? BASE_URL
@@ -48,6 +53,21 @@ export default function ProductDetails() {
     return `${SAFE_API_URL}/${cleanPath}`;
   };
 
+  // Sync Wishlist status from LocalStorage
+  const checkWishlistStatus = () => {
+    try {
+      const user = JSON.parse(localStorage.getItem("user") || "{}");
+      if (user.wishlist && Array.isArray(user.wishlist)) {
+        const exists = user.wishlist.some(
+          (item) => (typeof item === "string" ? item : item._id) === id
+        );
+        setIsWishlisted(exists);
+      }
+    } catch (e) {
+      console.error("Wishlist sync error", e);
+    }
+  };
+
   useEffect(() => {
     const fetchProduct = async () => {
       try {
@@ -59,6 +79,7 @@ export default function ProductDetails() {
             .filter((img) => img)
             .filter((img, index, self) => self.indexOf(img) === index);
           setAllImages(mergedImages);
+          checkWishlistStatus();
         } else {
           showError("Product not found");
           navigate("/");
@@ -70,7 +91,54 @@ export default function ProductDetails() {
       }
     };
     if (id) fetchProduct();
+
+    // Listen for changes from other components
+    window.addEventListener("wishlistUpdated", checkWishlistStatus);
+    return () =>
+      window.removeEventListener("wishlistUpdated", checkWishlistStatus);
   }, [id, navigate, SAFE_API_URL]);
+
+  const handleWishlistToggle = async () => {
+    if (!isLoggedIn) {
+      toast.error("Please login to save items", { icon: "🔒" });
+      return;
+    }
+
+    setWishlisting(true);
+    try {
+      // Note: If your backend uses DELETE to remove, you should check
+      // isWishlisted here and switch between POST and DELETE methods.
+      const method = isWishlisted ? "DELETE" : "POST";
+
+      const res = await fetch(`${SAFE_API_URL}/api/user/wishlist/${id}`, {
+        method: method,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        // Update global storage
+        const user = JSON.parse(localStorage.getItem("user") || "{}");
+        user.wishlist = data; // Backend must return the full updated list
+        localStorage.setItem("user", JSON.stringify(user));
+
+        setIsWishlisted(!isWishlisted);
+        window.dispatchEvent(new Event("wishlistUpdated"));
+        toast.success(
+          isWishlisted ? "Removed from Wishlist" : "Added to Wishlist!",
+          { icon: "❤️" }
+        );
+      }
+    } catch (error) {
+      showError("Action failed");
+    } finally {
+      setWishlisting(false);
+    }
+  };
 
   const handleAddToCart = async (isBuyNow = false) => {
     if (!product) return;
@@ -119,7 +187,6 @@ export default function ProductDetails() {
 
   const handleBuyNow = () => {
     if (isLoggedIn) {
-      // ✅ FIX: Mapping product data with seller ID to satisfy Order Model requirements
       navigate("/payment", {
         state: {
           items: [
@@ -129,7 +196,7 @@ export default function ProductDetails() {
               price: product.price,
               mrp: product.mrp || product.price,
               quantity: quantity,
-              seller: product.seller || product.sellerId, // Critical for backend validation
+              seller: product.seller || product.sellerId,
               image: getImageUrl(product.thumbnail || product.images?.[0]),
             },
           ],
@@ -166,9 +233,27 @@ export default function ProductDetails() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 relative">
           {/* LEFT COLUMN: IMAGES */}
           <div className="lg:sticky lg:top-24 h-fit space-y-8">
-            {/* MAIN IMAGE CONTAINER */}
             <div className="group relative aspect-square bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 overflow-hidden flex items-center justify-center p-8 shadow-sm">
-              {/* Left Button */}
+              {/* ✅ NEW: FLOATING WISHLIST BUTTON */}
+              <button
+                onClick={handleWishlistToggle}
+                disabled={wishlisting}
+                className="absolute top-6 right-6 z-30 p-3.5 rounded-full bg-white/90 dark:bg-slate-800/90 shadow-xl backdrop-blur-md transition-all duration-300 hover:scale-110 active:scale-90 border border-slate-100 dark:border-slate-700"
+              >
+                {wishlisting ? (
+                  <Loader2 size={20} className="animate-spin text-red-500" />
+                ) : (
+                  <Heart
+                    size={20}
+                    className={`${
+                      isWishlisted
+                        ? "text-red-500 fill-red-500"
+                        : "text-slate-400"
+                    } transition-colors duration-300`}
+                  />
+                )}
+              </button>
+
               {allImages.length > 1 && (
                 <button
                   onClick={prevImage}
@@ -178,12 +263,11 @@ export default function ProductDetails() {
                 </button>
               )}
 
-              {/* Main Image Rendering */}
               {getImageUrl(allImages[selectedImage]) ? (
                 <img
                   src={getImageUrl(allImages[selectedImage])}
                   alt={product.name}
-                  key={selectedImage} // Key helps trigger transition animations
+                  key={selectedImage}
                   className="w-full h-full object-contain hover:scale-105 transition-transform duration-500"
                 />
               ) : (
@@ -195,7 +279,6 @@ export default function ProductDetails() {
                 </div>
               )}
 
-              {/* Right Button */}
               {allImages.length > 1 && (
                 <button
                   onClick={nextImage}
@@ -209,7 +292,6 @@ export default function ProductDetails() {
                 </button>
               )}
 
-              {/* Image Count Indicator */}
               <div className="absolute bottom-6 px-4 py-1.5 bg-slate-900/10 dark:bg-white/10 backdrop-blur-md rounded-full text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 border border-white/20">
                 {selectedImage + 1} / {allImages.length}
               </div>
@@ -344,7 +426,6 @@ export default function ProductDetails() {
               </div>
             </div>
 
-            {/* TRUST BADGES */}
             <div className="space-y-4 pt-6 border-t border-slate-100 dark:border-slate-800">
               {[
                 {
@@ -377,7 +458,6 @@ export default function ProductDetails() {
               ))}
             </div>
 
-            {/* REVIEWS */}
             <div className="pt-10 border-t border-slate-100 dark:border-slate-800 space-y-6">
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
