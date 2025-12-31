@@ -21,16 +21,16 @@ const orderSchema = new mongoose.Schema(
           ref: "Product",
           required: true,
         },
-        // === CRITICAL: Reference the 'Seller' Model ===
+        // Reference the 'Seller' Model
         seller: {
           type: mongoose.Schema.Types.ObjectId,
-          ref: "Seller", // Points to the 'sellers' collection
+          ref: "Seller",
           required: true,
         },
-        // Track status per item (useful for multi-seller orders)
+        // Track status per item
         itemStatus: {
           type: String,
-          default: "Processing", // Processing, Shipped, Delivered, Cancelled
+          default: "Processing",
         },
       },
     ],
@@ -40,6 +40,8 @@ const orderSchema = new mongoose.Schema(
       city: { type: String, required: true },
       postalCode: { type: String, required: true },
       country: { type: String, required: true },
+      // ✅ NEW: Added Phone Number
+      phone: { type: String, required: true },
     },
 
     paymentMethod: {
@@ -54,55 +56,20 @@ const orderSchema = new mongoose.Schema(
       email_address: { type: String },
     },
 
-    // 🔹 Pricing Breakdown
-    itemsPrice: {
-      type: Number,
-      required: true,
-      default: 0.0,
-    },
-    taxPrice: {
-      type: Number,
-      required: true,
-      default: 0.0,
-    },
-    shippingPrice: {
-      type: Number,
-      required: true,
-      default: 0.0,
-    },
-    totalPrice: {
-      type: Number,
-      required: true,
-      default: 0.0,
-    },
+    itemsPrice: { type: Number, required: true, default: 0.0 },
+    taxPrice: { type: Number, required: true, default: 0.0 },
+    shippingPrice: { type: Number, required: true, default: 0.0 },
+    totalPrice: { type: Number, required: true, default: 0.0 },
 
-    // 🔹 Payment Status
-    isPaid: {
-      type: Boolean,
-      required: true,
-      default: false,
-    },
-    paidAt: {
-      type: Date,
-    },
+    isPaid: { type: Boolean, required: true, default: false },
+    paidAt: { type: Date },
 
-    // 🔹 Fulfillment Status
-    isDelivered: {
-      type: Boolean,
-      required: true,
-      default: false,
-    },
-    deliveredAt: {
-      type: Date,
-    },
-    status: {
-      type: String,
-      required: true,
-      default: "Processing",
-    },
+    isDelivered: { type: Boolean, required: true, default: false },
+    deliveredAt: { type: Date },
+    status: { type: String, required: true, default: "Processing" },
   },
   {
-    timestamps: true, // Auto-creates createdAt and updatedAt
+    timestamps: true,
   }
 );
 

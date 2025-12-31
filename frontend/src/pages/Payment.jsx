@@ -188,6 +188,8 @@ export default function CheckoutPage() {
               city: selectedAddress.city,
               postalCode: selectedAddress.pincode,
               country: selectedAddress.country,
+              // ✅ CRITICAL FIX: Send phone number to backend
+              phone: selectedAddress.phone,
             },
             paymentMethod: "COD",
             itemsPrice: subtotal,
@@ -565,8 +567,8 @@ export default function CheckoutPage() {
                   {/* Dynamic Hint for the User */}
                   {deliveryFee > 0 && (
                     <p className="text-[10px] text-orange-400 mt-2 font-bold italic">
-                      Add ₹{deliveryThreshold - (totalMRP - totalDiscount)} more for FREE
-                      delivery!
+                      Add ₹{deliveryThreshold - (totalMRP - totalDiscount)} more
+                      for FREE delivery!
                     </p>
                   )}
                 </div>
