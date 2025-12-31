@@ -61,8 +61,12 @@ export default function CheckoutPage() {
   );
   const totalDiscount = totalMRP - subtotal;
   const platformFee = items.length > 0 ? 3 : 0;
-  const deliveryFee = subtotal > 500 || items.length === 0 ? 0 : 40;
-  const totalPayable = subtotal + platformFee + deliveryFee;
+  // Calculate delivery fee based on the threshold
+  const deliveryThreshold = 400;
+  const deliveryFee = totalMRP - totalDiscount >= deliveryThreshold ? 0 : 50;
+
+  // Update total payable to include delivery
+  const totalPayable = totalMRP - totalDiscount + deliveryFee;
 
   useEffect(() => {
     const fetchAddresses = async () => {
@@ -225,6 +229,56 @@ export default function CheckoutPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
           <div className="lg:col-span-7 space-y-8">
+            {/* --- PRODUCT PREVIEW SECTION --- */}
+            <div className="bg-slate-900/50 rounded-[2.5rem] border border-slate-800 p-6 mb-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-8 h-8 rounded-lg bg-orange-500/10 flex items-center justify-center text-orange-500">
+                  <ShoppingBag size={18} />
+                </div>
+                <h2 className="font-bold uppercase tracking-widest text-[10px] text-slate-400">
+                  Review Items ({totalItemCount})
+                </h2>
+              </div>
+
+              <div className="space-y-4 max-h-[320px] overflow-y-auto pr-2 custom-scrollbar">
+                {items.map((item) => (
+                  <div
+                    key={item._id}
+                    onClick={() => navigate(`/product/${item._id}`)}
+                    className="group flex items-center gap-4 p-3 rounded-2xl bg-slate-950/40 border border-slate-800/50 hover:border-orange-500/30 transition-all cursor-pointer"
+                  >
+                    {/* Image Container */}
+                    <div className="w-16 h-16 rounded-xl overflow-hidden bg-white shrink-0 border border-slate-800">
+                      <img
+                        src={item.image}
+                        alt={item.name}
+                        className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-500"
+                      />
+                    </div>
+
+                    {/* Details */}
+                    <div className="flex-grow min-w-0">
+                      <h3 className="text-xs font-bold text-slate-200 truncate group-hover:text-orange-500 transition-colors">
+                        {item.name}
+                      </h3>
+                      <div className="flex items-center gap-3 mt-1">
+                        <span className="text-[10px] font-black text-slate-500 uppercase">
+                          Qty: {item.quantity}
+                        </span>
+                        <span className="text-xs font-black text-white">
+                          ₹{(item.price * item.quantity).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Hover Indicator */}
+                    <div className="opacity-0 group-hover:opacity-100 transition-opacity pr-2">
+                      <CheckCircle2 size={16} className="text-orange-500" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
             {/* SAVED ADDRESSES SECTION - ALWAYS VISIBLE */}
             <div className="bg-slate-900/50 rounded-3xl border border-slate-800 p-6 shadow-sm">
               <div className="flex items-center justify-between mb-6">
@@ -475,31 +529,49 @@ export default function CheckoutPage() {
                   Price Details
                 </h2>
               </div>
+
               <div className="p-8 space-y-5">
+                {/* Price Row */}
                 <div className="flex justify-between text-sm text-slate-400">
                   <span>Price ({totalItemCount} items)</span>
                   <span className="text-slate-100 font-bold">
                     ₹{totalMRP.toLocaleString()}
                   </span>
                 </div>
+
+                {/* Discount Row */}
                 <div className="flex justify-between text-sm text-slate-400">
                   <span>Discount</span>
                   <span className="text-green-500 font-bold">
                     - ₹{totalDiscount.toLocaleString()}
                   </span>
                 </div>
-                <div className="flex justify-between text-sm text-slate-400 border-b border-dashed border-slate-800 pb-5">
-                  <span>Delivery</span>
-                  <span
-                    className={
-                      deliveryFee === 0
-                        ? "text-green-500 font-bold"
-                        : "text-slate-100 font-bold"
-                    }
-                  >
-                    {deliveryFee === 0 ? "FREE" : `₹${deliveryFee}`}
-                  </span>
+
+                {/* Delivery Row with Dynamic Logic */}
+                <div className="flex flex-col border-b border-dashed border-slate-800 pb-5">
+                  <div className="flex justify-between text-sm text-slate-400">
+                    <span>Delivery</span>
+                    <span
+                      className={
+                        deliveryFee === 0
+                          ? "text-green-500 font-bold"
+                          : "text-slate-100 font-bold"
+                      }
+                    >
+                      {deliveryFee === 0 ? "FREE" : `₹${deliveryFee}`}
+                    </span>
+                  </div>
+
+                  {/* Dynamic Hint for the User */}
+                  {deliveryFee > 0 && (
+                    <p className="text-[10px] text-orange-400 mt-2 font-bold italic">
+                      Add ₹{deliveryThreshold - (totalMRP - totalDiscount)} more for FREE
+                      delivery!
+                    </p>
+                  )}
                 </div>
+
+                {/* Total Row */}
                 <div className="flex justify-between pt-2">
                   <span className="text-lg font-bold text-slate-100">
                     Total Payable
@@ -509,6 +581,7 @@ export default function CheckoutPage() {
                   </span>
                 </div>
               </div>
+
               <div className="px-8 pb-8">
                 <button
                   onClick={handlePayment}
@@ -523,6 +596,7 @@ export default function CheckoutPage() {
                     </>
                   )}
                 </button>
+
                 <div className="flex items-center justify-center gap-2 text-[9px] text-slate-600 font-bold uppercase mt-6 tracking-tighter">
                   <ShieldCheck size={14} /> 100% Secure Transaction via Razorpay
                 </div>
