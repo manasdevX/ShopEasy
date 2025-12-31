@@ -15,6 +15,9 @@ import Cart from "./pages/Cart"; // ✅ Added Cart Import
 import Payment from "./pages/Payment";
 import OrderSummary from "./pages/OrderSummary";
 import Reviews from "./pages/Reviews";
+import Privacy from "./pages/Privacy";
+import Terms from "./pages/Terms";
+import Help from "./pages/Help";
 
 // --- SELLER PAGES ---
 import SellerLanding from "./pages/Seller/Landing";
@@ -95,6 +98,10 @@ export default function App() {
 
         {/* Fallback for safety */}
         <Route path="/Seller/setup" element={<SellerRegister />} />
+
+        <Route path="/Terms" element={<Terms />} />
+        <Route path="/Privacy" element={<Privacy />} />
+        <Route path="/Help" element={<Help />} />
       </Routes>
     </>
   );

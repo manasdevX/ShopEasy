@@ -82,9 +82,9 @@ export default function Footer() {
             © {new Date().getFullYear()} ShopEasy. All rights reserved.
           </p>
           <div className="mt-2 flex justify-center gap-6 text-sm text-slate-500 dark:text-slate-500">
-            <Link to="/terms" className="hover:underline hover:text-orange-500 transition-colors">Terms</Link>
-            <Link to="/privacy" className="hover:underline hover:text-orange-500 transition-colors">Privacy</Link>
-            <Link to="/help" className="hover:underline hover:text-orange-500 transition-colors">Help</Link>
+            <Link to="/Terms" className="hover:underline hover:text-orange-500 transition-colors">Terms</Link>
+            <Link to="/Privacy" className="hover:underline hover:text-orange-500 transition-colors">Privacy</Link>
+            <Link to="/Help" className="hover:underline hover:text-orange-500 transition-colors">Help</Link>
           </div>
         </div>
       </div>
