@@ -9,6 +9,7 @@ import sellerRoutes from "./routes/sellerRoutes.js";
 import orderRoutes from "./routes/order.routes.js";
 import cartRoutes from "./routes/cartRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
+import notificationRoutes from "./routes/notification.routes.js";
 
 const app = express();
 
@@ -52,6 +53,7 @@ app.use("/api/cart", cartRoutes);
 // Payment Integration (Razorpay)
 // ✅ This makes the URL: http://localhost:5000/api/payment/create-order
 app.use("/api/payment", paymentRoutes);
+app.use("/api/notifications", notificationRoutes);
 
 /**
  * Health Check Route

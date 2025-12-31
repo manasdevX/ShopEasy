@@ -1,4 +1,5 @@
 import Order from "../models/Order.js";
+import { createNotification } from "./notification.controller.js"; // ✅ Import Notification Helper
 
 // @desc    Create new order (Direct COD or General)
 // @route   POST /api/orders
@@ -19,37 +20,57 @@ export const addOrderItems = async (req, res) => {
       return res.status(400).json({ message: "No order items" });
     }
 
-    // ✅ FIX: Ensure every item includes the required 'seller' ID from the request
-    // This prevents the "Path `seller` is required" validation error
+    // 1. Map items and ensure Seller ID is present
     const mappedOrderItems = orderItems.map((item) => ({
       ...item,
-      product: item.product || item._id, // Ensure product ID is mapped
-      qty: item.qty || item.quantity, // Ensure qty is mapped
-      seller: item.seller, // Explicitly mapping the seller ID
+      product: item.product || item._id,
+      qty: item.qty || item.quantity,
+      seller: item.seller, // Mandatory for multi-vendor
     }));
 
+    // 2. Create the Order
     const order = new Order({
-      user: req.user._id, // Set by protect middleware
+      user: req.user._id,
       orderItems: mappedOrderItems,
-      // ✅ FIX: Ensure address fields match the schema requirements
       shippingAddress: {
         address: shippingAddress.address,
         city: shippingAddress.city,
         postalCode: shippingAddress.postalCode,
-        country: shippingAddress.country || "India", // Default required field
+        country: shippingAddress.country || "India",
       },
       paymentMethod,
       itemsPrice,
       taxPrice,
       shippingPrice,
       totalPrice,
-      // Default statuses for new orders
       isPaid: paymentMethod === "COD" ? false : true,
       paidAt: paymentMethod === "COD" ? null : Date.now(),
       status: "Processing",
     });
 
     const createdOrder = await order.save();
+
+    // 3. ✅ TRIGGER NOTIFICATIONS FOR SELLERS
+    // Group items by seller to send one notification per seller
+    const sellersToNotify = [
+      ...new Set(mappedOrderItems.map((item) => item.seller)),
+    ];
+
+    for (const sellerId of sellersToNotify) {
+      if (sellerId) {
+        await createNotification(
+          sellerId,
+          "order", // Type (Icon: Package)
+          "New Order Received! 📦",
+          `You have a new order #${createdOrder._id
+            .toString()
+            .slice(-6)
+            .toUpperCase()} valued at ₹${itemsPrice}`,
+          createdOrder._id
+        );
+      }
+    }
+
     res.status(201).json(createdOrder);
   } catch (error) {
     console.error("ORDER CREATE ERROR:", error);
@@ -176,6 +197,10 @@ export const updateOrderStatus = async (req, res) => {
       }
 
       await order.save();
+
+      // ✅ Optional: You could also trigger a notification to the USER here
+      // "Your order has been shipped!"
+
       res.json({
         message: "Order status updated successfully",
         itemStatus: item.itemStatus,

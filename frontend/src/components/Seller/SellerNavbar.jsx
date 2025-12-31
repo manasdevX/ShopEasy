@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import {
-  ShoppingBag,
   Moon,
   Sun,
   Search,
@@ -24,13 +23,9 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
   const navigate = useNavigate();
   const location = useLocation();
-
-  // Ref for closing dropdown on outside click
   const searchRef = useRef(null);
 
-  // ==========================================
-  // 1. SAFE DATA RETRIEVAL
-  // ==========================================
+  // --- STATE ---
   const [seller, setSeller] = useState(() => {
     try {
       const stored = localStorage.getItem("sellerUser");
@@ -44,18 +39,17 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
 
   const [token, setToken] = useState(localStorage.getItem("sellerToken"));
 
-  // ==========================================
-  // 2. SEARCH STATES (NEW)
-  // ==========================================
+  // Search States
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const [searchError, setSearchError] = useState(null);
 
-  // ==========================================
-  // 3. SYNC STATE ON CHANGE
-  // ==========================================
+  // Notification State
+  const [hasUnread, setHasUnread] = useState(false);
+
+  // --- AUTH & NOTIFICATION SYNC ---
   useEffect(() => {
     const handleStorageChange = () => {
       setToken(localStorage.getItem("sellerToken"));
@@ -71,27 +65,67 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
       }
     };
 
+    // Initial check for unread notifications
+    const checkUnread = async () => {
+      const currentToken = localStorage.getItem("sellerToken");
+      if (!currentToken) return;
+      try {
+        const res = await fetch(`${API_URL}/api/notifications?filter=unread`, {
+          headers: { Authorization: `Bearer ${currentToken}` },
+        });
+        const data = await res.json();
+        if (res.ok) {
+          setHasUnread(data.length > 0);
+        }
+      } catch (e) {
+        console.error("Badge check failed", e);
+      }
+    };
+
+    if (token) checkUnread();
+
     window.addEventListener("storage", handleStorageChange);
     window.addEventListener("seller-info-updated", handleStorageChange);
+    // Custom event to refresh badge (e.g., when a notification is read)
+    window.addEventListener("notification-updated", checkUnread);
 
     return () => {
       window.removeEventListener("storage", handleStorageChange);
       window.removeEventListener("seller-info-updated", handleStorageChange);
+      window.removeEventListener("notification-updated", checkUnread);
     };
-  }, []);
+  }, [token]);
 
-  // ==========================================
-  // 4. SEARCH FUNCTIONALITY (NEW)
-  // ==========================================
+  const isAuth = propIsLoggedIn || !!token;
+
+  // --- THEME LOGIC ---
+  const [isDark, setIsDark] = useState(
+    document.documentElement.classList.contains("dark")
+  );
+  const toggleTheme = () => {
+    document.documentElement.classList.toggle("dark");
+    setIsDark(!isDark);
+  };
+
+  // --- LOGOUT LOGIC ---
+  const handleLogout = () => {
+    localStorage.removeItem("sellerToken");
+    localStorage.removeItem("sellerUser");
+    localStorage.removeItem("seller_step1");
+    localStorage.removeItem("seller_step2");
+    setSeller(null);
+    setToken(null);
+    navigate("/Seller/Landing");
+  };
+
+  // --- SEARCH LOGIC ---
   useEffect(() => {
-    // 1. Clear if empty
     if (searchQuery.trim().length === 0) {
       setSearchResults(null);
       setShowDropdown(false);
       return;
     }
 
-    // 2. Debounce API Call
     const delayDebounceFn = setTimeout(async () => {
       if (searchQuery.trim().length > 2) {
         setIsSearching(true);
@@ -127,7 +161,7 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
     return () => clearTimeout(delayDebounceFn);
   }, [searchQuery, token]);
 
-  // Close dropdown when clicking outside
+  // Close dropdown logic
   useEffect(() => {
     function handleClickOutside(event) {
       if (searchRef.current && !searchRef.current.contains(event.target)) {
@@ -137,28 +171,6 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [searchRef]);
-
-  const isAuth = propIsLoggedIn || !!token;
-
-  // Theme Logic
-  const [isDark, setIsDark] = useState(
-    document.documentElement.classList.contains("dark")
-  );
-  const toggleTheme = () => {
-    document.documentElement.classList.toggle("dark");
-    setIsDark(!isDark);
-  };
-
-  // Logout Logic
-  const handleLogout = () => {
-    localStorage.removeItem("sellerToken");
-    localStorage.removeItem("sellerUser");
-    localStorage.removeItem("seller_step1");
-    localStorage.removeItem("seller_step2");
-    setSeller(null);
-    setToken(null);
-    navigate("/Seller/Landing");
-  };
 
   const navLinks = [
     { name: "Dashboard", path: "/Seller/Dashboard", icon: LayoutDashboard },
@@ -182,7 +194,7 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
   const isOnboarding = currentStepIndex !== -1;
 
   return (
-    <nav className="sticky top-0 z-50 bg-white dark:bg-[#030712] border-b border-slate-100 dark:border-slate-800 transition-all duration-300">
+    <nav className="sticky top-0 z-[100] bg-white dark:bg-[#030712] border-b border-slate-100 dark:border-slate-800 transition-all duration-300">
       <div className="max-w-7xl mx-auto px-6 py-4">
         <div className="flex items-center justify-between gap-8">
           {/* LOGO */}
@@ -190,7 +202,7 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
             to={isAuth ? "/Seller/Dashboard" : "/Seller/Landing"}
             className="flex items-center gap-2.5 shrink-0 group"
           >
-            <div className="bg-orange-500 p-2 rounded-xl shadow-lg shadow-orange-500/20  transition-transform">
+            <div className="bg-orange-500 p-2 rounded-xl shadow-lg shadow-orange-500/20 transition-transform">
               <Store className="text-white" size={22} />
             </div>
             <div className="hidden sm:block">
@@ -203,7 +215,7 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
             </div>
           </Link>
 
-          {/* CENTER: ONBOARDING STEPS OR SEARCH */}
+          {/* CENTER: SEARCH OR ONBOARDING */}
           <div
             className="hidden lg:flex flex-grow max-w-2xl justify-center"
             ref={searchRef}
@@ -213,11 +225,9 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
                 {steps.map((step, index) => {
                   const isCompleted = index < currentStepIndex;
                   const isActive = Number(index) === Number(currentStepIndex);
-
                   return (
                     <React.Fragment key={step.name}>
                       <div className="flex items-center gap-3">
-                        {/* STEP ICON */}
                         <div
                           className={`w-6 h-6 flex items-center justify-center border-2 transition-all duration-300 ${
                             isCompleted
@@ -234,8 +244,6 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
                             </span>
                           )}
                         </div>
-
-                        {/* STEP NAME */}
                         <div className="flex flex-col items-start">
                           <span
                             className={`text-[10px] font-black tracking-widest uppercase whitespace-nowrap transition-colors ${
@@ -251,8 +259,6 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
                           )}
                         </div>
                       </div>
-
-                      {/* CONNECTOR LINE */}
                       {index < steps.length - 1 && (
                         <div
                           className={`w-12 h-[1px] transition-colors duration-500 ${
@@ -267,9 +273,6 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
                 })}
               </div>
             ) : (
-              /* =============================================
-                 FUNCTIONAL SEARCH BAR (Replaced Static UI)
-                 ============================================= */
               isAuth && (
                 <div className="w-full relative group">
                   <Search
@@ -299,9 +302,9 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
                     </button>
                   )}
 
-                  {/* SEARCH RESULTS DROPDOWN */}
+                  {/* DROPDOWN RESULTS */}
                   {showDropdown && searchQuery.length > 2 && (
-                    <div className="absolute top-full mt-2 left-0 w-full bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 z-[100]">
+                    <div className="absolute top-full mt-2 left-0 w-full bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 z-[101]">
                       {isSearching ? (
                         <div className="p-6 text-center text-slate-500 flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-widest">
                           <Loader2 className="animate-spin" size={16} />{" "}
@@ -383,13 +386,14 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
 
                           {/* Empty State */}
                           {searchResults?.products?.length === 0 &&
-                            searchResults?.orders?.length === 0 && (
+                            searchResults?.orders?.length === 0 &&
+                            !searchError && (
                               <div className="p-8 text-center">
                                 <p className="text-sm font-bold text-slate-900 dark:text-white">
                                   No results found
                                 </p>
                                 <p className="text-xs text-slate-500 mt-1">
-                                  Try a different keyword or SKU.
+                                  Try a different keyword.
                                 </p>
                               </div>
                             )}
@@ -424,7 +428,10 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
                 className="p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 relative transition-colors"
               >
                 <Bell size={20} />
-                <span className="absolute top-2 right-2.5 w-2 h-2 bg-orange-500 rounded-full border-2 border-white dark:border-[#030712]"></span>
+                {/* ✅ DYNAMIC BADGE: Only shows if hasUnread is true */}
+                {hasUnread && (
+                  <span className="absolute top-2 right-2.5 w-2 h-2 bg-orange-500 rounded-full border-2 border-white dark:border-[#030712] animate-pulse"></span>
+                )}
               </Link>
             )}
 
@@ -447,6 +454,7 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
                     className="text-slate-400 transition-transform group-hover:rotate-180"
                   />
                 </button>
+
                 <div className="absolute top-full right-0 w-52 pt-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
                   <div className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 rounded-xl overflow-hidden shadow-xl border border-slate-100 dark:border-slate-800">
                     <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800">
@@ -457,7 +465,6 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
                         {seller?.email || "No Email"}
                       </p>
                     </div>
-
                     <Link
                       to="/Seller/Dashboard"
                       className="block px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 transition font-medium text-sm"
@@ -470,15 +477,12 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
                     >
                       Settings
                     </Link>
-
                     <div className="border-t border-slate-100 dark:border-slate-800" />
-
                     <button
                       onClick={handleLogout}
                       className="w-full text-left px-4 py-2.5 hover:bg-red-50 dark:hover:bg-red-900/20 transition flex items-center gap-2 text-red-500 font-medium text-sm"
                     >
-                      <LogOut size={16} />
-                      Logout
+                      <LogOut size={16} /> Logout
                     </button>
                   </div>
                 </div>
@@ -489,8 +493,7 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
                   to="/Seller/login"
                   className="hidden md:block font-bold text-lg text-slate-600 dark:text-slate-300 hover:text-orange-500 transition-colors"
                 >
-                  <User size={20} className="inline-block mr-1" />
-                  Login
+                  <User size={20} className="inline-block mr-1" /> Login
                 </Link>
               </div>
             )}
@@ -516,8 +519,7 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
                         : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                     }`}
                   >
-                    <link.icon size={14} strokeWidth={3} />
-                    {link.name}
+                    <link.icon size={14} strokeWidth={3} /> {link.name}
                     {isActive && (
                       <span className="absolute bottom-0 left-0 w-full h-0.5 bg-orange-500 rounded-full"></span>
                     )}
