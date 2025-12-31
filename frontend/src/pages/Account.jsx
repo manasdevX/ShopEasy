@@ -25,13 +25,9 @@ import {
   Trash2,
   Home,
   Briefcase,
-  Star,
-  Info,
   LocateFixed,
   Package,
-  ShoppingBag,
 } from "lucide-react";
-import toast from "react-hot-toast";
 
 export default function Account() {
   const fileInputRef = useRef(null);
@@ -49,6 +45,10 @@ export default function Account() {
   const [isLocating, setIsLocating] = useState(false);
   const [ordersLoading, setOrdersLoading] = useState(false);
 
+  // New State for File Upload & Removal Fix
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [isAvatarRemoved, setIsAvatarRemoved] = useState(false); // ✅ Added removal state
+
   const [newAddress, setNewAddress] = useState({
     name: "",
     phone: "",
@@ -65,7 +65,7 @@ export default function Account() {
     email: "",
     phone: "",
     avatar: null,
-    passwordChangedAt: null, // Stores the date from DB
+    passwordChangedAt: null,
     addresses: [],
     address: {
       name: "",
@@ -78,13 +78,10 @@ export default function Account() {
       type: "Home",
     },
     orders: [],
-    order: {},
     wishlist: [],
-    product: {},
   });
 
   const [formData, setFormData] = useState({ ...user });
-  const [errors, setErrors] = useState({});
   const [status, setStatus] = useState("loading");
 
   // ================= UTILS =================
@@ -156,7 +153,8 @@ export default function Account() {
               country: data.address?.country || primaryAddr.country || "India",
               type: data.address?.type || primaryAddr.type || "Home",
             },
-            orders: data.orders || [],
+            // OPTIMIZATION: Don't load orders here to keep request light
+            orders: [],
             wishlist: data.wishlist || [],
           };
           setUser(userData);
@@ -479,6 +477,11 @@ export default function Account() {
   const handleImageChange = (e) => {
     const file = e.target.files[0];
     if (file) {
+      // 1. Store the file for actual upload
+      setSelectedFile(file);
+      setIsAvatarRemoved(false); // ✅ Reset removal flag since user picked a new image
+
+      // 2. Generate a preview URL for the UI
       const reader = new FileReader();
       reader.onloadend = () => {
         setFormData((prev) => ({ ...prev, avatar: reader.result }));
@@ -488,6 +491,25 @@ export default function Account() {
     }
   };
 
+  const handleRemoveImg = () => {
+    // ✅ Generate the fallback initial station URL
+    const fallbackUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(
+      user.name || "User"
+    )}&background=random&color=fff`;
+
+    setFormData((prev) => ({
+      ...prev,
+      avatar: fallbackUrl,
+    }));
+
+    setSelectedFile(null); // Clear any pending upload
+    setIsAvatarRemoved(true); // ✅ Mark for deletion on backend
+    setIsEditing(true);
+
+    // Reset file input so selecting the same file works again if needed
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
   const handleSave = async () => {
     const phoneRegex = /^[0-9]{10}$/;
     if (!phoneRegex.test(formData.phone)) {
@@ -495,21 +517,34 @@ export default function Account() {
       return;
     }
     setStatus("saving");
+
     try {
       const token = localStorage.getItem("token");
-      const payload = {
-        name: formData.name,
-        phone: formData.phone,
-        profilePicture: formData.avatar,
-        address: { ...formData.address },
-      };
+
+      // FIXED: Use FormData for handling File Uploads
+      const formDataToSend = new FormData();
+      formDataToSend.append("name", formData.name);
+      formDataToSend.append("phone", formData.phone);
+
+      // Address needs to be stringified for FormData
+      formDataToSend.append("address", JSON.stringify(formData.address));
+
+      // ✅ LOGIC: Determine whether to upload file or remove it
+      if (selectedFile) {
+        // Case A: Upload new file
+        formDataToSend.append("profilePicture", selectedFile);
+      } else if (isAvatarRemoved) {
+        // Case B: Remove existing file (Initial Station)
+        formDataToSend.append("removeProfilePicture", "true");
+      }
+
       const res = await fetch(`${API_URL}/api/user/profile`, {
         method: "PUT",
         headers: {
-          "Content-Type": "application/json",
+          // "Content-Type": "application/json", <--- Removed to let browser set boundary
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(payload),
+        body: formDataToSend,
       });
 
       const data = await res.json();
@@ -534,18 +569,20 @@ export default function Account() {
         );
         window.dispatchEvent(new Event("user-info-updated"));
         setIsEditing(false);
+        // Clear selected file and reset flags
+        setSelectedFile(null);
+        setIsAvatarRemoved(false);
         showSuccess("Profile Updated Successfully!");
       } else {
         showError("Save failed");
       }
     } catch (err) {
+      console.error(err);
       showError("Server Error");
     } finally {
       setStatus("idle");
     }
   };
-
-  const handleRemoveImg = () => {};
 
   const navItems = [
     { id: "profile", label: "Profile Settings", icon: <User size={18} /> },
@@ -1376,7 +1413,7 @@ export default function Account() {
                         </div>
                       </div>
                       <button
-                        onClick={() => navigate("/update-password??4 ko")}
+                        onClick={() => navigate("/update-password")}
                         className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-blue-500 hover:text-white text-slate-600 dark:text-slate-300 text-xs font-bold rounded-lg transition-all active:scale-95"
                       >
                         Change Password <ChevronRight size={14} />
@@ -1406,7 +1443,7 @@ export default function Account() {
                         </div>
                       </div>
                       <button
-                        onClick={() => navigate("/update-email??4 ko")}
+                        onClick={() => navigate("/update-email")}
                         className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-blue-500 hover:text-white text-slate-600 dark:text-slate-300 text-xs font-bold rounded-lg transition-all active:scale-95"
                       >
                         Change email <ChevronRight size={14} />

@@ -1,6 +1,9 @@
 import express from "express";
 
-// 1. Import Auth Controller
+// 1. Import Cloudinary Config (Make sure this path matches where you created the file)
+import { upload } from "../config/cloudinary.js";
+
+// 2. Import Auth Controller
 import {
   sendEmailOtp,
   sendMobileOtp,
@@ -12,7 +15,7 @@ import {
   resetPasswordWithOTP,
 } from "../controllers/auth.controller.js";
 
-// 2. Import User Profile Controller
+// 3. Import User Profile Controller
 import {
   getUserProfile,
   updateUserProfile,
@@ -25,10 +28,10 @@ import {
   removeFromWishlist,
   updateUserEmail,
   updateUserPassword,
-  verifyUserPassword, // ✅ NEW: Import password controller
+  verifyUserPassword,
 } from "../controllers/user.controller.js";
 
-// 3. Import Middleware
+// 4. Import Middleware
 import { protect } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
@@ -53,7 +56,10 @@ router.post("/reset-password", resetPasswordWithOTP);
 router
   .route("/profile")
   .get(protect, getUserProfile) // Fetch Profile + Wishlist + Addresses
-  .put(protect, updateUserProfile) // Update Info + Primary Address
+
+  // ✅ FIXED: Added 'upload.single' middleware to handle file uploads
+  .put(protect, upload.single("profilePicture"), updateUserProfile)
+
   .delete(protect, deleteUserAccount); // Delete Account
 
 /* ======================================================
@@ -77,7 +83,7 @@ router
   .delete(protect, removeFromWishlist); // Remove item
 
 /* ======================================================
-   E. SECURITY ROUTES (New)
+   E. SECURITY ROUTES
 ====================================================== */
 router.post("/verify-password", protect, verifyUserPassword);
 router.put("/password", protect, updateUserPassword); // Update Password
