@@ -1,6 +1,5 @@
 import User from "../models/User.js";
 import Cart from "../models/Cart.js";
-import bcrypt from "bcryptjs"; // Essential for password operations
 
 /* ======================================================
    1. GET USER PROFILE (Info + Addresses + Wishlist)
@@ -31,7 +30,7 @@ export const getUserProfile = async (req, res) => {
       phone: user.phone,
       role: user.role,
       profilePicture: user.profilePicture,
-      passwordChangedAt: user.passwordChangedAt, // Useful for showing "Last changed"
+      passwordChangedAt: user.passwordChangedAt,
 
       // Full list for "Manage Addresses" tab
       addresses: user.addresses || [],
@@ -60,6 +59,7 @@ export const getUserProfile = async (req, res) => {
 /* ======================================================
    2. UPDATE USER PROFILE (Main Info + Primary Address)
    Route: PUT /api/user/profile
+   NOTE: Handles Multipart/Form-Data now
 ====================================================== */
 export const updateUserProfile = async (req, res) => {
   try {
@@ -72,12 +72,31 @@ export const updateUserProfile = async (req, res) => {
     // 1. Update Account Info
     user.name = req.body.name || user.name;
     user.phone = req.body.phone || user.phone;
-    if (req.body.profilePicture) user.profilePicture = req.body.profilePicture;
+
+    // 1b. Handle Profile Picture (Upload OR Remove)
+    if (req.file) {
+      // Case A: New file uploaded (Cloudinary URL via Multer)
+      user.profilePicture = req.file.path;
+    } else if (req.body.removeProfilePicture === "true") {
+      // Case B: Explicit removal request from Frontend
+      // This sets the DB field to empty string, reverting UI to initial station
+      user.profilePicture = "";
+    }
 
     // 2. Update Shipping Address (Strict Logic)
     if (req.body.address) {
-      const { street, city, pincode, state, name, phone, type } =
-        req.body.address;
+      // PARSING FIX: FormData sends objects as strings. We must parse it.
+      let addressData;
+      try {
+        addressData =
+          typeof req.body.address === "string"
+            ? JSON.parse(req.body.address)
+            : req.body.address;
+      } catch (err) {
+        addressData = {}; // Fallback if parsing fails
+      }
+
+      const { street, city, pincode, state, name, phone, type } = addressData;
 
       // Only proceed if at least the basic fields are present
       const hasValidAddress = street?.trim() && city?.trim() && pincode?.trim();
@@ -132,7 +151,7 @@ export const updateUserProfile = async (req, res) => {
       name: user.name,
       email: user.email,
       phone: user.phone,
-      profilePicture: user.profilePicture,
+      profilePicture: user.profilePicture, // Will be new URL or "" string
       addresses: user.addresses,
       address: {
         name: primaryAddr.fullName || "",
@@ -380,8 +399,6 @@ export const updateUserPassword = async (req, res) => {
   }
 };
 
-// ... existing imports
-
 /* ======================================================
    11. VERIFY PASSWORD (For Security Modal Step 1)
    Route: POST /api/user/verify-password
@@ -389,7 +406,7 @@ export const updateUserPassword = async (req, res) => {
 export const verifyUserPassword = async (req, res) => {
   try {
     const { password } = req.body;
-    
+
     // We need to explicitly select password because select:false is in the model
     const user = await User.findById(req.user._id).select("+password");
 
@@ -411,33 +428,18 @@ export const verifyUserPassword = async (req, res) => {
   }
 };
 
-// ... existing functions (updateUserPassword, etc.)
-
-// ... existing imports
-
-/* ======================================================
-   12. UPDATE EMAIL
-   Route: PUT /api/user/update-email
-====================================================== */
-// ... existing imports
-
-/* ======================================================
-   12. UPDATE EMAIL
-   Route: PUT /api/user/update-email
-====================================================== */
 /* ======================================================
    12. UPDATE EMAIL (Fixed & Safer)
    Route: PUT /api/user/update-email
 ====================================================== */
 export const updateUserEmail = async (req, res) => {
   try {
-
     const { newEmail, password } = req.body;
-    
+
     // 1. Validate Input Presence
     if (!newEmail || !password) {
-      return res.status(400).json({ 
-        message: "Please provide both new email and your current password." 
+      return res.status(400).json({
+        message: "Please provide both new email and your current password.",
       });
     }
 
@@ -472,7 +474,6 @@ export const updateUserEmail = async (req, res) => {
       phone: user.phone,
       profilePicture: user.profilePicture,
     });
-
   } catch (error) {
     console.error("UPDATE EMAIL ERROR:", error);
     res.status(500).json({ message: "Server error updating email" });

@@ -32,7 +32,7 @@ export default function SellerOrders() {
 
   // --- FETCH ORDERS ---
   const fetchOrders = async () => {
-    // Only show full page loader on initial load, not background refreshes
+    // Only show full page loader on initial load
     if (orders.length === 0) setLoading(true);
     try {
       const token = localStorage.getItem("sellerToken");
@@ -64,8 +64,7 @@ export default function SellerOrders() {
     return () => clearTimeout(delayDebounce);
   }, [activeTab, searchQuery]);
 
-  // ✅ CRITICAL FIX: Auto-refresh Modal when Order Data updates
-  // This ensures "PENDING" changes to "PAID" instantly in the popup
+  // ✅ Auto-refresh Modal when Order Data updates (e.g. status change)
   useEffect(() => {
     if (selectedOrder) {
       const updatedOrder = orders.find((o) => o._id === selectedOrder._id);
@@ -197,7 +196,8 @@ export default function SellerOrders() {
             />
             <input
               type="text"
-              placeholder="Search by Order ID/Name or Customer..."
+              // ✅ UPDATED PLACEHOLDER to reflect new backend search capability
+              placeholder="Search by Order ID, Customer or Product..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-12 pr-4 py-3 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl outline-none focus:ring-2 focus:ring-orange-500/20 font-medium text-slate-900 dark:text-white transition-colors"
