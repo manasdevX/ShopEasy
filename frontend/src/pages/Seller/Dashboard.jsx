@@ -7,18 +7,15 @@ import {
   BarChart3,
   ShoppingBag,
   Package,
-  Plus,
-  Settings,
-  Trash2,
   ArrowUpRight,
   Clock,
   CheckCircle2,
   AlertCircle,
-  LayoutGrid,
   Loader2,
   Edit3,
+  Trash2,
+  Settings,
 } from "lucide-react";
-import toast from "react-hot-toast";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -26,7 +23,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
 
-  // Initial State: Empty values
+  // Initial State
   const [data, setData] = useState({
     seller: { name: "", businessName: "My Store", rating: 0 },
     stats: { totalRevenue: 0, activeOrders: 0, totalProducts: 0 },
@@ -97,6 +94,8 @@ export default function Dashboard() {
 
   // --- REAL BACKEND DELETE ---
   const handleRemoveProduct = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this product?"))
+      return;
     try {
       const token = localStorage.getItem("sellerToken");
       const res = await fetch(`${API_URL}/api/products/${id}`, {
@@ -108,8 +107,7 @@ export default function Dashboard() {
 
       if (res.ok) {
         showSuccess(`Product deleted successfully`);
-        // Refresh dashboard data to update stats and list
-        fetchDashboardData();
+        fetchDashboardData(); // Refresh data
       } else {
         const result = await res.json();
         showError(result.message || "Failed to delete product");
@@ -119,7 +117,6 @@ export default function Dashboard() {
     }
   };
 
-  // --- DYNAMIC STATS ---
   const stats = [
     {
       title: "Total Revenue",
@@ -150,10 +147,13 @@ export default function Dashboard() {
 
   return (
     <div className="bg-white dark:bg-[#030712] min-h-screen transition-colors duration-500 font-sans flex flex-col">
+      {/* 1. Moved Search Logic to SellerNavbar so it persists across pages. 
+          Ensure your SellerNavbar component has the search input and API call logic if needed there. 
+      */}
       <SellerNavbar isLoggedIn={true} />
 
       <main className="flex-grow max-w-7xl w-full mx-auto px-6 py-12">
-        {/* HEADER */}
+        {/* HEADER - CLEANED UP */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
           <div>
             <h1 className="text-5xl font-black text-slate-900 dark:text-white tracking-tighter">
@@ -169,20 +169,7 @@ export default function Dashboard() {
             </p>
           </div>
 
-          {/* <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigate("/Seller/Products")}
-              className="flex items-center gap-2 px-6 py-4 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
-            >
-              <LayoutGrid size={18} /> Manage
-            </button>
-            <button
-              onClick={() => navigate("/Seller/add-product")}
-              className="flex items-center gap-2 px-6 py-4 bg-orange-500 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-orange-500/20 hover:scale-105 active:scale-95 transition-all"
-            >
-              <Plus size={18} strokeWidth={3} /> Add Product
-            </button>
-          </div> */}
+          {/* REMOVED DUPLICATE SEARCH BAR HERE */}
         </div>
 
         {/* STATS GRID */}
@@ -325,7 +312,7 @@ export default function Dashboard() {
   );
 }
 
-// 1. Add 'onEdit' to the destructuring props
+// Sub-Component for Product Rows
 function ProductRow({ id, name, stock, amount, onRemove, onEdit }) {
   return (
     <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group border-b border-slate-100 dark:border-slate-800">
@@ -338,7 +325,6 @@ function ProductRow({ id, name, stock, amount, onRemove, onEdit }) {
         </p>
       </td>
       <td className="px-8 py-6">
-        {/* Changed rounded-lg to rounded-none for pointed edges */}
         <span
           className={`px-3 py-1.5 border text-[10px] font-black uppercase tracking-tighter ${
             stock > 0
@@ -353,10 +339,8 @@ function ProductRow({ id, name, stock, amount, onRemove, onEdit }) {
         {amount}
       </td>
 
-      {/* Updated Action Cell */}
       <td className="px-8 py-6 text-right">
         <div className="flex items-center justify-end gap-2">
-          {/* EDIT BUTTON */}
           <button
             onClick={() => onEdit(id)}
             className="p-2.5 text-slate-400 hover:text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-500/10 transition-all border border-transparent hover:border-orange-200 dark:hover:border-orange-900/30"
@@ -365,7 +349,6 @@ function ProductRow({ id, name, stock, amount, onRemove, onEdit }) {
             <Edit3 size={18} />
           </button>
 
-          {/* REMOVE BUTTON */}
           <button
             onClick={() => onRemove(id)}
             className="p-2.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all border border-transparent hover:border-red-200 dark:hover:border-red-900/30"

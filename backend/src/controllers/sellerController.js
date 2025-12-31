@@ -1,4 +1,4 @@
-import Seller from "../models/seller.js"; // Ensure filename case matches your system
+import Seller from "../models/seller.js";
 import Product from "../models/Product.js";
 import Order from "../models/Order.js";
 import jwt from "jsonwebtoken";
@@ -24,8 +24,7 @@ export const registerSeller = async (req, res) => {
   try {
     const { name, email, password, phone, googleId } = req.body;
 
-    // ✅ FIX: Only validate Step 1 fields.
-    // Removed checks for businessName, gstin, etc. as they come later.
+    // Basic validation for Step 1
     if (!name || !email || !password || !phone) {
       return res
         .status(400)
@@ -43,7 +42,6 @@ export const registerSeller = async (req, res) => {
       password,
       phone,
       googleId,
-      // Business fields are left undefined for now (handled by sparse index in DB)
     });
 
     if (seller) {
@@ -233,7 +231,6 @@ export const getSellerProfile = async (req, res) => {
 // @desc    Update Seller Business Profile (Step 2)
 // @route   PUT /api/sellers/profile
 // @access  Private (Seller)
-// ✅ NEW FUNCTION: This was the missing export causing your error
 export const updateSellerProfile = async (req, res) => {
   try {
     const seller = await Seller.findById(req.seller._id);
@@ -271,7 +268,6 @@ export const addBankDetails = async (req, res) => {
     const { accountHolder, accountNumber, ifscCode, bankName, branchName } =
       req.body;
 
-    // Ensure critical bank details are present
     if (!accountHolder || !accountNumber || !ifscCode)
       return res.status(400).json({ message: "Provide all bank details" });
 
@@ -286,7 +282,6 @@ export const addBankDetails = async (req, res) => {
         isVerified: true,
       };
 
-      // Mark onboarding as complete
       if (seller.businessName && seller.gstin) {
         seller.isOnboardingComplete = true;
       }
@@ -381,5 +376,72 @@ export const getSellerDashboard = async (req, res) => {
   } catch (error) {
     console.error("DASHBOARD ERROR:", error);
     res.status(500).json({ message: "Server Error" });
+  }
+};
+
+/* =========================================
+   SEARCH CONTROLLER (NEW)
+========================================= */
+
+// @desc    Search Products & Orders for Dashboard
+// @route   GET /api/sellers/search?query=...
+// @access  Private (Seller)
+export const searchSellerData = async (req, res) => {
+  try {
+    const { query } = req.query;
+    // Safely check for seller ID (supports different auth middlewares)
+    const sellerId = req.seller?._id || req.user?._id;
+
+    if (!sellerId) {
+      return res
+        .status(401)
+        .json({ message: "Unauthorized: Seller ID missing" });
+    }
+
+    if (!query) {
+      return res.status(400).json({ message: "Search query is required" });
+    }
+
+    // Case-insensitive regex
+    const searchRegex = new RegExp(query, "i");
+
+    // 1. Search Products (by Name or Category)
+    const products = await Product.find({
+      seller: sellerId,
+      $or: [
+        { name: searchRegex },
+        { category: searchRegex },
+        // { sku: searchRegex }, // Uncomment if you add SKU later
+      ],
+    })
+      .select("name category price thumbnail stock")
+      .limit(5);
+
+    // 2. Search Orders (by ID or Customer City)
+    // Checking strict ID length prevents CastError for partial IDs
+    const isObjectId = query.length === 24 && /^[0-9a-fA-F]{24}$/.test(query);
+
+    const orders = await Order.find({
+      "orderItems.seller": sellerId,
+      $or: [
+        // If query looks like an ID, search _id, otherwise search address fields
+        ...(isObjectId ? [{ _id: query }] : []),
+        { "shippingAddress.city": searchRegex },
+        { "shippingAddress.address": searchRegex },
+      ],
+    })
+      .select("_id totalPrice status createdAt")
+      .limit(5);
+
+    res.status(200).json({
+      success: true,
+      results: {
+        products,
+        orders,
+      },
+    });
+  } catch (error) {
+    console.error("SEARCH ERROR:", error);
+    res.status(500).json({ message: "Search failed", error: error.message });
   }
 };
