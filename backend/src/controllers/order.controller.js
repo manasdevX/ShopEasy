@@ -1,5 +1,6 @@
 import Order from "../models/Order.js";
-import { createNotification } from "./notification.controller.js"; // ✅ Import Notification Helper
+import Product from "../models/Product.js"; // ✅ Import Product Model
+import { createNotification } from "./notification.controller.js";
 
 // @desc    Create new order (Direct COD or General)
 // @route   POST /api/orders
@@ -10,25 +11,61 @@ export const addOrderItems = async (req, res) => {
       orderItems,
       shippingAddress,
       paymentMethod,
-      itemsPrice,
-      taxPrice,
-      shippingPrice,
-      totalPrice,
+      shippingPrice = 0,
+      // Note: itemsPrice, taxPrice, totalPrice are now calculated server-side for security
     } = req.body;
 
     if (orderItems && orderItems.length === 0) {
       return res.status(400).json({ message: "No order items" });
     }
 
-    // 1. Map items and ensure Seller ID is present
-    const mappedOrderItems = orderItems.map((item) => ({
-      ...item,
-      product: item.product || item._id,
-      qty: item.qty || item.quantity,
-      seller: item.seller, // Mandatory for multi-vendor
-    }));
+    // 1. Fetch Real Products from DB (Security Check)
+    const productIds = orderItems.map((item) => item.product || item._id);
+    const dbProducts = await Product.find({ _id: { $in: productIds } });
 
-    // 2. Create the Order
+    if (dbProducts.length !== orderItems.length) {
+      return res
+        .status(400)
+        .json({ message: "One or more products not found" });
+    }
+
+    // Map for quick lookup { productId: productDoc }
+    const productMap = {};
+    dbProducts.forEach((p) => {
+      productMap[p._id.toString()] = p;
+    });
+
+    // 2. Map Items with Real DB Data (Price & Seller)
+    let calculatedItemsPrice = 0;
+
+    const mappedOrderItems = orderItems.map((item) => {
+      const productId = item.product || item._id;
+      const realProduct = productMap[productId];
+
+      if (!realProduct) {
+        throw new Error(`Product not found: ${productId}`);
+      }
+
+      const itemTotal = realProduct.price * (item.qty || item.quantity);
+      calculatedItemsPrice += itemTotal;
+
+      return {
+        ...item,
+        name: realProduct.name, // Ensure name comes from DB
+        image: realProduct.thumbnail, // Ensure image comes from DB (mapped to 'image' in schema)
+        product: productId,
+        qty: item.qty || item.quantity,
+        price: realProduct.price, // ✅ Force DB Price
+        seller: realProduct.seller, // ✅ Force DB Seller ID
+        itemStatus: "Processing",
+      };
+    });
+
+    // 3. Calculate Final Totals
+    const taxPrice = 0; // or calculatedItemsPrice * 0.18
+    const totalPrice = calculatedItemsPrice + taxPrice + shippingPrice;
+
+    // 4. Create the Order
     const order = new Order({
       user: req.user._id,
       orderItems: mappedOrderItems,
@@ -37,9 +74,10 @@ export const addOrderItems = async (req, res) => {
         city: shippingAddress.city,
         postalCode: shippingAddress.postalCode,
         country: shippingAddress.country || "India",
+        phone: shippingAddress.phone, // Ensure phone is saved
       },
       paymentMethod,
-      itemsPrice,
+      itemsPrice: calculatedItemsPrice,
       taxPrice,
       shippingPrice,
       totalPrice,
@@ -50,22 +88,21 @@ export const addOrderItems = async (req, res) => {
 
     const createdOrder = await order.save();
 
-    // 3. ✅ TRIGGER NOTIFICATIONS FOR SELLERS
-    // Group items by seller to send one notification per seller
+    // 5. Trigger Notifications for Sellers
     const sellersToNotify = [
-      ...new Set(mappedOrderItems.map((item) => item.seller)),
+      ...new Set(mappedOrderItems.map((item) => item.seller.toString())),
     ];
 
     for (const sellerId of sellersToNotify) {
       if (sellerId) {
         await createNotification(
           sellerId,
-          "order", // Type (Icon: Package)
+          "order",
           "New Order Received! 📦",
           `You have a new order #${createdOrder._id
             .toString()
             .slice(-6)
-            .toUpperCase()} valued at ₹${itemsPrice}`,
+            .toUpperCase()} valued at ₹${calculatedItemsPrice}`,
           createdOrder._id
         );
       }
@@ -115,20 +152,37 @@ export const getMyOrders = async (req, res) => {
 };
 
 // @desc    Get orders for the logged-in Seller
-// @route   GET /api/orders/seller-orders
+// @route   GET /api/orders/seller-orders?status=...&search=...
 // @access  Private (Seller)
 export const getSellerOrders = async (req, res) => {
   try {
+    const { status, search } = req.query;
+
     // 1. Find orders where at least one item belongs to this seller
     const orders = await Order.find({ "orderItems.seller": req.seller._id })
       .populate("user", "name email")
+      .populate({
+        path: "orderItems.product",
+        select: "name thumbnail", // Ensure product details are available for UI
+      })
       .sort({ createdAt: -1 });
 
     // 2. Filter items to ONLY show products belonging to this seller
-    const sellerOrders = orders.map((order) => {
+    let sellerOrders = orders.map((order) => {
       const sellerItems = order.orderItems.filter(
         (item) => item.seller.toString() === req.seller._id.toString()
       );
+
+      // Determine the "Seller Status" based on *their* items
+      const itemStatuses = sellerItems.map((i) => i.itemStatus);
+      let derivedStatus = "Processing"; // Default
+
+      if (itemStatuses.every((s) => s === "Delivered"))
+        derivedStatus = "Delivered";
+      else if (itemStatuses.every((s) => s === "Cancelled"))
+        derivedStatus = "Cancelled";
+      else if (itemStatuses.includes("Shipped")) derivedStatus = "Shipped";
+      else derivedStatus = "Processing";
 
       return {
         _id: order._id,
@@ -141,11 +195,25 @@ export const getSellerOrders = async (req, res) => {
           (acc, item) => acc + item.price * item.qty,
           0
         ),
-        totalPrice: order.totalPrice,
+        totalItems: sellerItems.length,
         items: sellerItems,
-        status: order.status,
+        status: derivedStatus, // Use derived status for filtering
       };
     });
+
+    // 3. Apply Status Filter (Tabs)
+    if (status && status !== "All") {
+      sellerOrders = sellerOrders.filter((o) => o.status === status);
+    }
+
+    // 4. Apply Search Filter (Order ID or Customer Name)
+    if (search) {
+      const searchRegex = new RegExp(search, "i");
+      sellerOrders = sellerOrders.filter(
+        (o) =>
+          searchRegex.test(o._id) || (o.user && searchRegex.test(o.user.name))
+      );
+    }
 
     res.json(sellerOrders);
   } catch (error) {
@@ -165,52 +233,72 @@ export const updateOrderStatus = async (req, res) => {
       return res.status(404).json({ message: "Order not found" });
     }
 
-    const item = order.orderItems.find((item) => {
+    let updatedCount = 0;
+
+    // Find items belonging to this seller and update them
+    order.orderItems.forEach((item) => {
       const itemSellerId = item.seller._id
         ? item.seller._id.toString()
         : item.seller.toString();
 
       const isOwner = itemSellerId === req.seller._id.toString();
 
-      return productId
-        ? isOwner && item.product.toString() === productId
-        : isOwner;
+      // If productId is provided, update specific item; otherwise update all items for this seller
+      const isTarget = productId ? item.product.toString() === productId : true;
+
+      if (isOwner && isTarget) {
+        item.itemStatus = status;
+        updatedCount++;
+
+        if (status === "Delivered") {
+          item.deliveredAt = Date.now();
+        }
+      }
     });
 
-    if (item) {
-      item.itemStatus = status;
-
-      if (status === "Delivered") {
-        item.deliveredAt = Date.now();
-      }
-
-      const allDelivered = order.orderItems.every(
-        (i) => i.itemStatus === "Delivered"
-      );
-
-      if (allDelivered) {
-        order.isDelivered = true;
-        order.deliveredAt = Date.now();
-        order.status = "Delivered";
-      } else if (status === "Shipped") {
-        order.status = "Shipped";
-      }
-
-      await order.save();
-
-      // ✅ Optional: You could also trigger a notification to the USER here
-      // "Your order has been shipped!"
-
-      res.json({
-        message: "Order status updated successfully",
-        itemStatus: item.itemStatus,
-        orderStatus: order.status,
-      });
-    } else {
-      res.status(403).json({
-        message: "Item not found or unauthorized",
-      });
+    if (updatedCount === 0) {
+      return res
+        .status(403)
+        .json({ message: "Item not found or unauthorized" });
     }
+
+    // Check Global Order Status (if all items from all sellers are delivered)
+    const allDelivered = order.orderItems.every(
+      (i) => i.itemStatus === "Delivered"
+    );
+
+    if (allDelivered) {
+      order.isDelivered = true;
+      order.deliveredAt = Date.now();
+      order.status = "Delivered";
+
+      // ✅ NEW: Auto-Update Payment for COD on Delivery
+      if (order.paymentMethod === "COD") {
+        order.isPaid = true;
+        order.paidAt = Date.now();
+      }
+    } else if (order.orderItems.some((i) => i.itemStatus === "Shipped")) {
+      order.status = "Shipped";
+    }
+
+    await order.save();
+
+    // Trigger Confirmation Notification for Seller
+    await createNotification(
+      req.seller._id,
+      "alert", // Icon: Alert/Info
+      "Order Updated",
+      `Order #${order._id
+        .toString()
+        .slice(-6)
+        .toUpperCase()} marked as ${status}`,
+      order._id
+    );
+
+    res.json({
+      message: "Order status updated successfully",
+      status: status,
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
