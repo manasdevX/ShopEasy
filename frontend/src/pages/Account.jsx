@@ -828,98 +828,139 @@ export default function Account() {
                     </div>
                   ) : (
                     <div className="space-y-6">
-                      {user.orders.map((order) => (
-                        <div
-                          key={order._id}
-                          className="group border border-slate-100 dark:border-slate-800 rounded-2xl overflow-hidden hover:border-blue-200 dark:hover:border-blue-900/50 transition-all shadow-sm"
-                        >
-                          <div className="bg-slate-50/50 dark:bg-slate-800/30 px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex flex-wrap justify-between items-center gap-4">
-                            <div className="flex items-center gap-4">
-                              <div>
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                  Order ID
-                                </p>
-                                <p className="text-xs font-bold text-blue-600 dark:text-blue-400 font-mono">
-                                  #{order._id.slice(-8).toUpperCase()}
-                                </p>
-                              </div>
-                              <div className="h-8 w-[1px] bg-slate-200 dark:border-slate-700 hidden sm:block"></div>
-                              <div>
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                  Date Placed
-                                </p>
-                                <p className="text-xs font-bold dark:text-slate-300">
-                                  {new Date(order.createdAt).toLocaleDateString(
-                                    "en-IN",
-                                    {
+                      {user.orders.map((order) => {
+                        // Logic for Return Window (14 Days)
+                        const deliveredDate = new Date(order.updatedAt);
+                        const currentDate = new Date();
+                        const diffTime = Math.abs(currentDate - deliveredDate);
+                        const diffDays = Math.ceil(
+                          diffTime / (1000 * 60 * 60 * 24)
+                        );
+                        const isWithinReturnWindow = diffDays <= 14;
+
+                        return (
+                          <div
+                            key={order._id}
+                            className="group border border-slate-100 dark:border-slate-800 rounded-2xl overflow-hidden hover:border-blue-200 dark:hover:border-blue-900/50 transition-all shadow-sm"
+                          >
+                            <div className="bg-slate-50/50 dark:bg-slate-800/30 px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex flex-wrap justify-between items-center gap-4">
+                              <div className="flex items-center gap-4">
+                                <div>
+                                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                    Order ID
+                                  </p>
+                                  <p className="text-xs font-bold text-blue-600 dark:text-blue-400 font-mono">
+                                    #{order._id.slice(-8).toUpperCase()}
+                                  </p>
+                                </div>
+                                <div className="h-8 w-[1px] bg-slate-200 dark:border-slate-700 hidden sm:block"></div>
+                                <div>
+                                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                    Date Placed
+                                  </p>
+                                  <p className="text-xs font-bold dark:text-slate-300">
+                                    {new Date(
+                                      order.createdAt
+                                    ).toLocaleDateString("en-IN", {
                                       day: "numeric",
                                       month: "short",
                                       year: "numeric",
-                                    }
-                                  )}
-                                </p>
+                                    })}
+                                  </p>
+                                </div>
+                              </div>
+                              <div
+                                className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter border ${
+                                  order.status === "Delivered"
+                                    ? "bg-green-50 text-green-600 border-green-100 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800"
+                                    : "bg-orange-50 text-orange-600 border-orange-100 dark:bg-orange-900/20 dark:text-orange-400 dark:border-orange-800"
+                                }`}
+                              >
+                                {order.status}
                               </div>
                             </div>
-                            <div
-                              className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter border ${
-                                order.status === "Delivered"
-                                  ? "bg-green-50 text-green-600 border-green-100 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800"
-                                  : "bg-orange-50 text-orange-600 border-orange-100 dark:bg-orange-900/20 dark:text-orange-400 dark:border-orange-800"
-                              }`}
-                            >
-                              {order.status}
+
+                            <div className="p-5 space-y-4">
+                              {order.orderItems.map((item, idx) => (
+                                <Link
+                                  key={idx}
+                                  to={`/product/${item.product}`}
+                                  className="flex items-center justify-between gap-4 group/item p-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all"
+                                >
+                                  <div className="flex items-center gap-4">
+                                    <div className="h-14 w-14 bg-slate-100 dark:bg-slate-800 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 flex-shrink-0 group-hover/item:border-orange-500 transition-colors">
+                                      <img
+                                        src={getImageUrl(item.image)}
+                                        alt={item.name}
+                                        className="h-full w-full object-cover group-hover/item:scale-110 transition-transform duration-300"
+                                      />
+                                    </div>
+                                    <div>
+                                      <h5 className="text-sm font-bold text-slate-900 dark:text-white line-clamp-1 group-hover/item:text-orange-500 transition-colors">
+                                        {item.name}
+                                      </h5>
+                                      <p className="text-xs text-slate-500 font-medium">
+                                        Qty: {item.qty} • ₹
+                                        {item.price.toLocaleString()}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="p-2 text-slate-400 group-hover/item:text-orange-500 group-hover/item:translate-x-1 transition-all">
+                                    <ChevronRight size={18} />
+                                  </div>
+                                </Link>
+                              ))}
+                            </div>
+
+                            <div className="px-5 py-4 bg-white dark:bg-slate-900 border-t border-slate-50 dark:border-slate-800 flex justify-between items-center">
+                              <div>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                  Total Payable
+                                </p>
+                                <p className="text-lg font-black text-slate-900 dark:text-white">
+                                  ₹{order.totalPrice.toLocaleString()}
+                                </p>
+                              </div>
+
+                              <div className="flex items-center gap-3">
+                                {/* --- CONDITIONAL ACTION BUTTONS --- */}
+
+                                {/* 1. CANCEL BUTTON: Shown if processing/pending */}
+                                {(order.status === "Processing" ||
+                                  order.status === "Pending") && (
+                                  <button
+                                    onClick={() => handleCancelOrder(order._id)}
+                                    className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold rounded-xl transition-all border border-red-100 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400"
+                                  >
+                                    Cancel Order
+                                  </button>
+                                )}
+
+                                {/* 2. RETURN BUTTON: Shown if Delivered and within 14 days */}
+                                {order.status === "Delivered" &&
+                                  isWithinReturnWindow && (
+                                    <button
+                                      onClick={() =>
+                                        handleReturnOrder(order._id)
+                                      }
+                                      className="px-4 py-2 bg-orange-50 hover:bg-orange-100 text-orange-600 text-xs font-bold rounded-xl transition-all border border-orange-100 dark:bg-orange-900/20 dark:border-orange-800 dark:text-orange-400"
+                                    >
+                                      Return Items
+                                    </button>
+                                  )}
+
+                                <Link
+                                  to={`/OrderSummary`}
+                                  state={{ order }}
+                                  className="px-5 py-2 bg-slate-900 dark:bg-white dark:text-slate-900 text-white text-xs font-bold rounded-xl hover:opacity-90 transition-all active:scale-95 flex items-center gap-2"
+                                >
+                                  View Details
+                                </Link>
+                              </div>
                             </div>
                           </div>
-                          <div className="p-5 space-y-4">
-                            {order.orderItems.map((item, idx) => (
-                              <Link
-                                key={idx}
-                                to={`/product/${item.product}`}
-                                className="flex items-center justify-between gap-4 group/item p-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all"
-                              >
-                                <div className="flex items-center gap-4">
-                                  <div className="h-14 w-14 bg-slate-100 dark:bg-slate-800 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 flex-shrink-0 group-hover/item:border-orange-500 transition-colors">
-                                    <img
-                                      src={getImageUrl(item.image)}
-                                      alt={item.name}
-                                      className="h-full w-full object-cover group-hover/item:scale-110 transition-transform duration-300"
-                                    />
-                                  </div>
-                                  <div>
-                                    <h5 className="text-sm font-bold text-slate-900 dark:text-white line-clamp-1 group-hover/item:text-orange-500 transition-colors">
-                                      {item.name}
-                                    </h5>
-                                    <p className="text-xs text-slate-500 font-medium">
-                                      Qty: {item.qty} • ₹
-                                      {item.price.toLocaleString()}
-                                    </p>
-                                  </div>
-                                </div>
-                                <div className="p-2 text-slate-400 group-hover/item:text-orange-500 group-hover/item:translate-x-1 transition-all">
-                                  <ChevronRight size={18} />
-                                </div>
-                              </Link>
-                            ))}
-                          </div>
-                          <div className="px-5 py-4 bg-white dark:bg-slate-900 border-t border-slate-50 dark:border-slate-800 flex justify-between items-center">
-                            <div>
-                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                Total Payable
-                              </p>
-                              <p className="text-lg font-black text-slate-900 dark:text-white">
-                                ₹{order.totalPrice.toLocaleString()}
-                              </p>
-                            </div>
-                            <Link
-                              to={`/OrderSummary`}
-                              state={{ order }}
-                              className="px-5 py-2 bg-slate-900 dark:bg-white dark:text-slate-900 text-white text-xs font-bold rounded-xl hover:opacity-90 transition-all active:scale-95 flex items-center gap-2"
-                            >
-                              View Details
-                            </Link>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
