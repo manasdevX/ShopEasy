@@ -87,6 +87,18 @@ export default function Account() {
   const [errors, setErrors] = useState({});
   const [status, setStatus] = useState("loading");
 
+  // ================= UTILS =================
+  // Correctly resolves image paths for Cloudinary or local storage
+  const getImageUrl = (imagePath) => {
+    if (!imagePath) return "https://via.placeholder.com/150?text=No+Image";
+    if (imagePath.startsWith("data:") || imagePath.startsWith("http"))
+      return imagePath;
+    const cleanPath = imagePath.startsWith("/")
+      ? imagePath.substring(1)
+      : imagePath;
+    return `${API_URL}/${cleanPath}`;
+  };
+
   // ================= FETCH LOGIC =================
   useEffect(() => {
     const fetchProfile = async () => {
@@ -128,7 +140,6 @@ export default function Account() {
               `https://ui-avatars.com/api/?name=${encodeURIComponent(
                 data.name || "User"
               )}&background=random&color=fff`,
-            // ✅ FIX: Capture the passwordChangedAt date
             passwordChangedAt: data.passwordChangedAt,
             addresses: allAddresses,
             address: {
@@ -185,25 +196,34 @@ export default function Account() {
   }, [activeTab]);
 
   // ================= WISHLIST HANDLER =================
-  const handleRemoveFromWishlist = async (productId) => {
-    try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(`${API_URL}/api/user/wishlist/${productId}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
+ const handleRemoveFromWishlist = async (productId) => {
+   try {
+     const token = localStorage.getItem("token");
+     const res = await fetch(`${API_URL}/api/user/wishlist/${productId}`, {
+       method: "DELETE",
+       headers: { Authorization: `Bearer ${token}` },
+     });
 
-      if (res.ok) {
-        const updatedWishlist = await res.json();
-        setUser((prev) => ({ ...prev, wishlist: updatedWishlist }));
-        showSuccess("Item removed from wishlist");
-      } else {
-        showError("Failed to remove item");
-      }
-    } catch (err) {
-      showError("Server error");
-    }
-  };
+     if (res.ok) {
+       const updatedWishlist = await res.json();
+
+       // 1. Update the local page state
+       setUser((prev) => ({ ...prev, wishlist: updatedWishlist }));
+
+       // 2. CRITICAL: Update localStorage so other components see the change
+       const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
+       storedUser.wishlist = updatedWishlist;
+       localStorage.setItem("user", JSON.stringify(storedUser));
+
+       // 3. CRITICAL: Tell other components (like ProductCard) to refresh their hearts
+       window.dispatchEvent(new Event("wishlistUpdated"));
+
+       showSuccess("Item removed from wishlist");
+     }
+   } catch (err) {
+     showError("Server error");
+   }
+ };
 
   const handleDeactivate = async () => {
     const confirmFirst = window.confirm(
@@ -227,12 +247,10 @@ export default function Account() {
 
       if (res.ok) {
         showSuccess("Account successfully deactivated.");
-        // Clear local data and logout
         localStorage.removeItem("token");
         localStorage.removeItem("user");
         localStorage.removeItem("cart");
 
-        // Redirect to home or login
         navigate("/login");
         window.location.reload();
       } else {
@@ -252,7 +270,6 @@ export default function Account() {
 
     setIsLocating(true);
 
-    // Request high accuracy from the browser
     const options = {
       enableHighAccuracy: true,
       timeout: 10000,
@@ -263,7 +280,6 @@ export default function Account() {
       async (position) => {
         const { latitude, longitude } = position.coords;
         try {
-          // Use OpenStreetMap Nominatim with jsonv2 for detailed address breakdown
           const res = await fetch(
             `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`
           );
@@ -271,8 +287,6 @@ export default function Account() {
 
           if (data && data.address) {
             const addr = data.address;
-
-            // 👇 1. Construct DETAILED Street Address (Flipkart Style)
             const streetComponents = [
               addr.house_number,
               addr.building,
@@ -287,11 +301,9 @@ export default function Account() {
               addr.city_district,
             ].filter((part) => part);
 
-            // Remove duplicates and join with commas
             const uniqueStreetComponents = [...new Set(streetComponents)];
             const fullStreet = uniqueStreetComponents.join(", ");
 
-            // 👇 2. Determine City (Fallback cascade)
             const city =
               addr.city ||
               addr.town ||
@@ -323,7 +335,7 @@ export default function Account() {
         setIsLocating(false);
         showError("Location access denied. Please enable GPS.");
       },
-      options // Pass high accuracy options
+      options
     );
   };
 
@@ -378,23 +390,15 @@ export default function Account() {
       return;
     }
 
-    // Validate Phone Number
     if (!phoneRegex.test(newAddress.phone)) {
       showError("Enter a valid 10-digit phone number");
       return;
     }
 
-    // Validate Pincode
     if (!pincodeRegex.test(newAddress.pincode)) {
       showError("Enter a valid 6-digit pincode");
       return;
     }
-
-    // Validate Street Address Length
-    // if (newAddress.street.trim().length < 5) {
-    //   showError("Street address is too short");
-    //   return;
-    // }
 
     setIsAddressSaving(true);
 
@@ -590,25 +594,20 @@ export default function Account() {
     }
   };
 
-  // 👇 UPDATED: Handle QuotaExceededError
   const handleSave = async () => {
-    // 1. --- VALIDATION LOGIC ---
     const phoneRegex = /^[0-9]{10}$/;
     const pincodeRegex = /^[0-9]{6}$/;
 
-    // Validate Main Profile Phone (without +91)
     if (!phoneRegex.test(formData.phone)) {
       showError("Please enter a valid 10-digit profile phone number");
       return;
     }
 
-    // Validate Address Phone (if address exists)
     if (formData.address.phone && !phoneRegex.test(formData.address.phone)) {
       showError("Please enter a valid 10-digit address phone number");
       return;
     }
 
-    // Validate Pincode
     if (
       formData.address.pincode &&
       !pincodeRegex.test(formData.address.pincode)
@@ -642,7 +641,6 @@ export default function Account() {
       const data = await res.json();
 
       if (res.ok) {
-        // 1. Update State
         setUser({
           ...formData,
           avatar: data.profilePicture || formData.avatar,
@@ -654,31 +652,25 @@ export default function Account() {
           address: data.address,
         }));
 
-        // 2. Safe Local Storage Update
         try {
           const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
           const updatedUser = {
             ...storedUser,
             name: formData.name,
-            // Only save picture if it's NOT a massive base64 string, or try to save it
             profilePicture: data.profilePicture || formData.avatar,
           };
           localStorage.setItem("user", JSON.stringify(updatedUser));
         } catch (storageErr) {
-          console.warn(
-            "LocalStorage quota exceeded. Saving minimal user data."
-          );
-          // Fallback: Save ONLY name (skip image) to ensure Navbar updates
+          console.warn("LocalStorage quota exceeded.");
           try {
             const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
-            const safeUser = { ...storedUser, name: formData.name }; // Skip profilePicture
+            const safeUser = { ...storedUser, name: formData.name };
             localStorage.setItem("user", JSON.stringify(safeUser));
           } catch (e) {
             console.error("Critical: LocalStorage completely full", e);
           }
         }
 
-        // 3. Dispatch Custom Event
         window.dispatchEvent(new Event("user-info-updated"));
         window.dispatchEvent(new Event("storage"));
 
@@ -710,11 +702,8 @@ export default function Account() {
     <div className="min-h-screen bg-slate-50 dark:bg-[#030712] text-slate-900 dark:text-slate-100 transition-colors duration-300 font-sans">
       <Navbar />
 
-      {/* Reduced top/bottom padding from py-12 to py-8 */}
       <main className="max-w-6xl mx-auto px-6 py-8">
-        {/* Reduced gap between sidebar and main content from gap-8 to gap-6 */}
         <div className="flex flex-col lg:flex-row gap-6">
-          {/* SIDEBAR - Slightly tighter spacing */}
           <aside className="w-full lg:w-80 space-y-4">
             <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border border-slate-200 dark:border-slate-800 text-center transition-colors">
               <div className="relative w-28 h-28 mx-auto mb-4">
@@ -788,13 +777,10 @@ export default function Account() {
             </nav>
           </aside>
 
-          {/* MAIN CONTENT */}
           <div className="flex-1">
-            {/* 1. PROFILE SETTINGS */}
             {activeTab === "profile" && (
               <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden relative">
-                  {/* Header */}
                   <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between sticky top-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm z-10 transition-colors duration-500">
                     <div>
                       <h3 className="text-lg font-bold text-slate-900 dark:text-white">
@@ -808,14 +794,10 @@ export default function Account() {
                     </div>
 
                     <div className="flex items-center gap-2">
-                      {/* EDIT / SAVE BUTTON - Fixed Dark Mode Visibility */}
                       {!isEditing ? (
                         <button
                           onClick={() => setIsEditing(true)}
-                          className="flex items-center gap-2 px-5 py-2 rounded-xl font-bold text-xs 
-                   bg-slate-900 text-white 
-                   dark:bg-white dark:text-slate-900 
-                   hover:opacity-90 shadow-lg transition-all active:scale-95"
+                          className="flex items-center gap-2 px-5 py-2 rounded-xl font-bold text-xs bg-slate-900 text-white dark:bg-white dark:text-slate-900 hover:opacity-90 shadow-lg transition-all active:scale-95"
                         >
                           <Edit2 size={14} /> Edit
                         </button>
@@ -823,10 +805,7 @@ export default function Account() {
                         <button
                           onClick={handleSave}
                           disabled={status === "saving"}
-                          className="flex items-center gap-2 px-6 py-2 rounded-xl font-bold text-xs 
-                   bg-orange-500 text-white shadow-lg 
-                   hover:bg-orange-600 transition-all 
-                   disabled:opacity-50 active:scale-95"
+                          className="flex items-center gap-2 px-6 py-2 rounded-xl font-bold text-xs bg-orange-500 text-white shadow-lg hover:bg-orange-600 transition-all disabled:opacity-50 active:scale-95"
                         >
                           {status === "saving" ? (
                             <Loader2 className="animate-spin" size={14} />
@@ -839,7 +818,6 @@ export default function Account() {
                     </div>
                   </div>
 
-                  {/* Body - Compact */}
                   <div className="p-6 space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <InputField
@@ -952,7 +930,6 @@ export default function Account() {
               </div>
             )}
 
-            {/* 2. ORDER HISTORY TAB */}
             {activeTab === "orders" && (
               <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500 min-h-[500px]">
                 <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/20">
@@ -1008,7 +985,6 @@ export default function Account() {
                           key={order._id}
                           className="group border border-slate-100 dark:border-slate-800 rounded-2xl overflow-hidden hover:border-blue-200 dark:hover:border-blue-900/50 transition-all shadow-sm"
                         >
-                          {/* Order Header */}
                           <div className="bg-slate-50/50 dark:bg-slate-800/30 px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex flex-wrap justify-between items-center gap-4">
                             <div className="flex items-center gap-4">
                               <div>
@@ -1046,8 +1022,6 @@ export default function Account() {
                               {order.status}
                             </div>
                           </div>
-
-                          {/* Order Items */}
                           <div className="p-5 space-y-4">
                             {order.orderItems.map((item, idx) => (
                               <div
@@ -1057,7 +1031,7 @@ export default function Account() {
                                 <div className="flex items-center gap-4">
                                   <div className="h-14 w-14 bg-slate-100 dark:bg-slate-800 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 flex-shrink-0">
                                     <img
-                                      src={item.image}
+                                      src={getImageUrl(item.image)}
                                       alt={item.name}
                                       className="h-full w-full object-cover"
                                     />
@@ -1081,8 +1055,6 @@ export default function Account() {
                               </div>
                             ))}
                           </div>
-
-                          {/* Order Footer */}
                           <div className="px-5 py-4 bg-white dark:bg-slate-900 border-t border-slate-50 dark:border-slate-800 flex justify-between items-center">
                             <div>
                               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
@@ -1108,22 +1080,25 @@ export default function Account() {
               </div>
             )}
 
-            {/* 3. WISHLIST TAB */}
+            {/* 3. WISHLIST TAB CORRECTED */}
             {activeTab === "wishlist" && (
               <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500 min-h-[500px]">
-                {/* Header - Matches Order History Style */}
-                <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
-                  <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                    My Wishlist
-                  </h3>
-                  <span className="text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-500 px-3 py-1 rounded-full">
+                <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/20">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                      My Wishlist
+                    </h3>
+                    <p className="text-xs text-slate-500 font-medium">
+                      Items you've saved for later
+                    </p>
+                  </div>
+                  <span className="text-xs font-bold bg-pink-50 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400 px-3 py-1 rounded-full border border-pink-100 dark:border-pink-800">
                     {user.wishlist.length} Items Saved
                   </span>
                 </div>
 
                 <div className="p-6">
                   {user.wishlist.length === 0 ? (
-                    /* Empty State - Matches Order History Style */
                     <div className="flex flex-col items-center justify-center py-20 text-center">
                       <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-full mb-4">
                         <Heart
@@ -1139,68 +1114,76 @@ export default function Account() {
                       </p>
                       <Link
                         to="/"
-                        className="mt-6 bg-blue-600 text-white px-6 py-2 rounded-lg font-bold text-sm hover:bg-blue-700 transition-all"
+                        className="mt-6 bg-blue-600 text-white px-8 py-3 rounded-xl font-bold text-sm hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20"
                       >
                         Explore Products
                       </Link>
                     </div>
                   ) : (
-                    /* Wishlist Grid */
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {user.wishlist.map((product) => (
                         <div
                           key={product._id}
-                          className="group border border-slate-100 dark:border-slate-800 rounded-2xl p-4 hover:border-blue-200 dark:hover:border-blue-900/50 hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-all"
+                          className="group border border-slate-100 dark:border-slate-800 rounded-2xl p-4 hover:border-blue-200 dark:hover:border-blue-900/50 hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-all shadow-sm"
                         >
                           <div className="flex justify-between gap-4">
-                            {/* Product Info */}
-                            <div className="flex gap-4">
-                              <div className="h-20 w-20 bg-slate-100 dark:bg-slate-800 rounded-xl overflow-hidden flex-shrink-0">
-                                <img
-                                  src={product.image}
-                                  alt={product.name}
-                                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                                />
-                              </div>
-                              <div className="flex flex-col justify-between py-1">
-                                <div>
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400">
-                                      {product.category || "Product"}
-                                    </span>
-                                  </div>
-                                  <h4 className="text-sm font-bold text-slate-900 dark:text-white line-clamp-1">
+                            {/* Corrected Image: Using Link for clickability and getImageUrl helper for visibility */}
+                            <Link
+                              to={`/product/${product._id}`}
+                              className="h-24 w-24 bg-white dark:bg-slate-800 rounded-xl overflow-hidden flex-shrink-0 border border-slate-100 dark:border-slate-700 group-hover:border-blue-300 transition-colors"
+                            >
+                              <img
+                                src={getImageUrl(
+                                  product.thumbnail ||
+                                    (product.images && product.images[0])
+                                )}
+                                alt={product.name}
+                                className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-500"
+                                onError={(e) => {
+                                  e.target.src =
+                                    "https://via.placeholder.com/150?text=No+Image";
+                                }}
+                              />
+                            </Link>
+
+                            <div className="flex flex-col justify-between py-1 flex-1 min-w-0">
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400 truncate">
+                                    {product.category || "Premium Collection"}
+                                  </span>
+                                </div>
+                                {/* Corrected Title: Using Link for details navigation */}
+                                <Link to={`/product/${product._id}`}>
+                                  <h4 className="text-sm font-bold text-slate-900 dark:text-white line-clamp-2 hover:text-blue-600 transition-colors">
                                     {product.name}
                                   </h4>
-                                </div>
-
-                                <button
-                                  onClick={() =>
-                                    handleRemoveFromWishlist(product._id)
-                                  }
-                                  className="flex items-center gap-1.5 text-[10px] font-bold text-red-500 hover:text-red-600 transition-colors uppercase tracking-tight"
-                                >
-                                  <Trash2 size={12} /> Remove Item
-                                </button>
+                                </Link>
                               </div>
+                              <button
+                                onClick={() =>
+                                  handleRemoveFromWishlist(product._id)
+                                }
+                                className="flex items-center gap-1.5 text-[10px] font-bold text-red-500 hover:text-red-600 transition-colors uppercase tracking-tight"
+                              >
+                                <Trash2 size={12} /> Remove Item
+                              </button>
                             </div>
 
-                            {/* Price & Action */}
-                            <div className="flex flex-col justify-between items-end">
+                            <div className="flex flex-col justify-between items-end shrink-0">
                               <div className="text-right">
-                                <p className="text-xs text-slate-400 font-medium">
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
                                   Price
                                 </p>
                                 <p className="text-lg font-black text-slate-900 dark:text-white">
                                   ₹{product.price.toLocaleString()}
                                 </p>
                               </div>
-
                               <Link
                                 to={`/product/${product._id}`}
-                                className="flex items-center gap-1 text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline group-hover:gap-2 transition-all"
+                                className="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-lg transition-all active:scale-90 shadow-md shadow-blue-500/10"
                               >
-                                BUY NOW <ChevronRight size={14} />
+                                <ChevronRight size={18} />
                               </Link>
                             </div>
                           </div>
@@ -1212,7 +1195,6 @@ export default function Account() {
               </div>
             )}
 
-            {/* 4. MANAGE ADDRESSES TAB */}
             {activeTab === "addresses" && (
               <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500 min-h-[500px]">
                 <div className="p-6 border-b border-slate-100 dark:border-slate-800">
@@ -1233,8 +1215,6 @@ export default function Account() {
                       <h4 className="font-bold text-slate-700 dark:text-slate-300 mb-4 text-xs uppercase tracking-wider">
                         {editingAddressId ? "Edit Address" : "Add New Address"}
                       </h4>
-
-                      {/* 👇 "Use my current location" Button (Left Aligned & Compact) */}
                       <button
                         onClick={handleUseCurrentLocation}
                         disabled={isLocating}
@@ -1249,7 +1229,6 @@ export default function Account() {
                           ? "Fetching Location..."
                           : "Use my current location"}
                       </button>
-
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                         <input
                           placeholder="Receiver's Name"
@@ -1276,7 +1255,6 @@ export default function Account() {
                           className="p-3 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 outline-none focus:border-blue-500 text-sm text-slate-900 dark:text-white"
                         />
                       </div>
-
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                         <input
                           placeholder="Street Address"
@@ -1398,7 +1376,6 @@ export default function Account() {
                     </div>
                   )}
 
-                  {/* ADDRESS LIST */}
                   <div className="mt-6 space-y-4">
                     {user.addresses && user.addresses.length > 0 ? (
                       user.addresses.map((addr, index) => {
@@ -1485,10 +1462,8 @@ export default function Account() {
               </div>
             )}
 
-            {/* 5. PRIVACY & SECURITY TAB */}
             {activeTab === "security" && (
               <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500 min-h-[500px]">
-                {/* Header - EXACT MATCH to Orders/Wishlist */}
                 <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/20">
                   <div>
                     <h3 className="text-lg font-bold text-slate-900 dark:text-white">
@@ -1502,9 +1477,7 @@ export default function Account() {
                     <ShieldCheck size={20} />
                   </div>
                 </div>
-
                 <div className="p-6 space-y-6">
-                  {/* Section 1: Password Change */}
                   <div className="group border border-slate-100 dark:border-slate-800 rounded-2xl p-5 hover:border-blue-200 dark:hover:border-blue-900/50 transition-all">
                     <div className="flex justify-between items-start mb-4">
                       <div className="flex gap-4">
@@ -1518,7 +1491,6 @@ export default function Account() {
                           <h4 className="text-sm font-bold text-slate-900 dark:text-white">
                             Password
                           </h4>
-                          {/* ✅ FIX: Force DD/MM/YYYY using en-GB */}
                           <p className="text-xs text-slate-500 mt-1">
                             Last changed:{" "}
                             {user.passwordChangedAt
@@ -1533,8 +1505,7 @@ export default function Account() {
                         onClick={() => navigate("/update-password??4 ko")}
                         className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-blue-500 hover:text-white text-slate-600 dark:text-slate-300 text-xs font-bold rounded-lg transition-all active:scale-95"
                       >
-                        Change Password
-                        <ChevronRight size={14} />
+                        Change Password <ChevronRight size={14} />
                       </button>
                     </div>
                     <p className="text-xs text-slate-400 leading-relaxed">
@@ -1542,8 +1513,6 @@ export default function Account() {
                       stay secure.
                     </p>
                   </div>
-
-                  {/* Section 2: Email Update */}
                   <div className="group border border-slate-100 dark:border-slate-800 rounded-2xl p-5 hover:border-blue-200 dark:hover:border-blue-900/50 transition-all">
                     <div className="flex justify-between items-center">
                       <div className="flex gap-4">
@@ -1566,14 +1535,10 @@ export default function Account() {
                         onClick={() => navigate("/update-email??4 ko")}
                         className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-blue-500 hover:text-white text-slate-600 dark:text-slate-300 text-xs font-bold rounded-lg transition-all active:scale-95"
                       >
-                        Change email
-                        <ChevronRight size={14} />
+                        Change email <ChevronRight size={14} />
                       </button>
                     </div>
                   </div>
-
-                  {/* Section 3: Danger Zone */}
-
                   <div className="mt-10 pt-6 border-t border-slate-100 dark:border-slate-800">
                     <h4 className="text-xs font-black text-red-500 uppercase tracking-[0.2em] mb-4">
                       Danger Zone
@@ -1663,7 +1628,7 @@ function InputField({
               ? "bg-transparent border-transparent text-slate-700 dark:text-slate-300 cursor-default"
               : readOnly
               ? "bg-slate-100 dark:bg-slate-800/50 border-slate-200 dark:border-slate-800 text-slate-400 cursor-not-allowed"
-              : "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:bg-white dark:focus:bg-slate-800 focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10"
+              : "bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 focus:bg-white dark:focus:bg-slate-800 focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10"
           } ${error ? "!border-red-400" : ""}`}
         />
       </div>
