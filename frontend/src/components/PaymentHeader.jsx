@@ -36,7 +36,7 @@ const ShopEasyHeader = () => {
         {location.pathname != "/payment" && 
           <button
               onClick={() => navigate("/")}
-              className="flex items-center gap-2 text-slate-400 hover:text-orange-500 font-bold text-[10px] uppercase tracking-[0.2em] transition-all hover:-translate-x-1"
+              className="flex items-center gap-2 text-slate-400 hover:text-orange-500 font-bold text-[10px] uppercase tracking-[0.2em]"
             >
               <ArrowLeft size={14} /> 
               <span>Back</span>

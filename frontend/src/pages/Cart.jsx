@@ -211,7 +211,7 @@ export default function Cart() {
                       {item.product.category || "General"}
                     </span>
                     <Link to={`/product/${item.product._id}`}>
-                      <h3 className="font-bold text-slate-900 dark:text-white text-lg line-clamp-1 hover:text-orange-500 transition-colors">
+                      <h3 className="font-bold text-slate-900 dark:text-white text-lg line-clamp-1 group-hover:text-orange-500 transition-colors">
                         {item.product.name}
                       </h3>
                     </Link>
