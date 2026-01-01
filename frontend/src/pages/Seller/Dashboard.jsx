@@ -23,6 +23,37 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
 
+  const [lowStockItems, setLowStockItems] = useState([]);
+
+  const fetchLowStock = async () => {
+  try {
+    const token = localStorage.getItem("sellerToken");
+    
+    // CHANGE THIS LINE: Added the extra '/' to match your product.route.js
+    const res = await fetch(`${API_URL}/api/products/seller/all`, { 
+      headers: { 
+        Authorization: `Bearer ${token}` 
+      },
+    });
+    
+    const result = await res.json();
+
+    if (res.ok) {
+      // Filter the entire inventory for items < 5
+      const low = result.filter((p) => p.stock < 5);
+      setLowStockItems(low);
+    } else {
+      console.error("Failed to fetch low stock:", result.message);
+    }
+  } catch (error) {
+    console.error("Error fetching full inventory:", error);
+  }
+};
+
+  useEffect(() => {
+    fetchLowStock();
+  }, []);
+
   // Initial State
   const [data, setData] = useState({
     seller: { name: "", businessName: "My Store", rating: 0 },
@@ -264,43 +295,93 @@ export default function Dashboard() {
 
           {/* SIDEBAR WIDGETS */}
           <div className="space-y-6">
-            <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-[2.5rem] p-8 text-white relative overflow-hidden shadow-2xl shadow-orange-500/30">
+            <div className="bg-slate-900 dark:bg-slate-900/60 rounded-[2.5rem] p-8 text-white relative border border-slate-800 shadow-2xl">
               <div className="relative z-10">
-                <div className="flex items-center gap-2 mb-4 bg-white/20 w-fit px-3 py-1 rounded-full backdrop-blur-md">
-                  <AlertCircle size={14} />
-                  <span className="text-[10px] font-black uppercase tracking-widest">
-                    Attention
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-2 bg-red-500/10 text-red-500 w-fit px-3 py-1 rounded-full border border-red-500/20">
+                    <AlertCircle size={14} />
+                    <span className="text-[10px] font-black uppercase tracking-widest">
+                      Inventory Alert
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-black text-slate-500 uppercase">
+                    {lowStockItems.length} Items
                   </span>
                 </div>
-                <h3 className="text-2xl font-black mb-2">Restock Alert</h3>
-                <p className="text-sm opacity-90 mb-8 leading-relaxed font-medium">
-                  Monitor your inventory levels to ensure you never miss a sale.
-                </p>
+
+                <h3 className="text-2xl font-black mb-4 tracking-tighter">
+                  Critical Stock
+                </h3>
+
+                {/* Scrollable area for all low stock products */}
+                <div className="space-y-4 mb-8 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                  {lowStockItems.length > 0 ? (
+                    lowStockItems.map((prod) => (
+                      <div
+                        key={prod._id}
+                        onClick={() =>
+                          navigate(`/Seller/edit-product/${prod._id}`)
+                        }
+                        className="group cursor-pointer p-3 rounded-2xl hover:bg-white/5 transition-all border border-transparent hover:border-slate-800"
+                      >
+                        <div className="flex justify-between items-center gap-4">
+                          <div className="flex-grow min-w-0">
+                            <p className="text-sm font-bold text-slate-200 group-hover:text-orange-500 transition-colors truncate">
+                              {prod.name}
+                            </p>
+                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">
+                              SKU: {prod._id.slice(-6).toUpperCase()}
+                            </p>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <span
+                              className={`text-xs font-black px-2 py-1 rounded-lg ${
+                                prod.stock === 0
+                                  ? "bg-red-500 text-white"
+                                  : "bg-orange-500/20 text-orange-500 border border-orange-500/20"
+                              }`}
+                            >
+                              {prod.stock}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Visual Health Bar */}
+                        <div className="w-full bg-slate-800 h-1 mt-3 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full transition-all duration-1000 ${
+                              prod.stock === 0 ? "bg-red-500" : "bg-orange-500"
+                            }`}
+                            style={{
+                              width: `${Math.max((prod.stock / 5) * 100, 5)}%`,
+                            }}
+                          ></div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="py-10 text-center bg-slate-800/20 rounded-[2rem] border border-dashed border-slate-800">
+                      <CheckCircle2
+                        size={32}
+                        className="mx-auto text-emerald-500 mb-3 opacity-20"
+                      />
+                      <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+                        Inventory Healthy
+                      </p>
+                    </div>
+                  )}
+                </div>
+
                 <button
-                  onClick={() => navigate("/Seller/Products")}
-                  className="w-full py-4 bg-white text-orange-600 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-100 transition-all active:scale-95 shadow-lg"
+                  onClick={() => navigate("/Seller/products")}
+                  className="w-full py-4 bg-white text-slate-900 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-orange-500 hover:text-white transition-all active:scale-95"
                 >
-                  Inventory Manager
+                  View Full Inventory
                 </button>
               </div>
             </div>
 
-            <div className="bg-slate-900 dark:bg-slate-800 p-8 rounded-[2.5rem] border border-slate-800 text-white relative">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg font-black flex items-center gap-2">
-                  <Clock className="text-orange-500" size={20} /> Store Hours
-                </h3>
-                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></div>
-              </div>
-              <p className="text-xs text-slate-400 leading-relaxed font-bold uppercase tracking-tighter">
-                Store Status:{" "}
-                <span className="text-emerald-400">Open & Active</span>
-              </p>
-              <p className="text-[10px] text-slate-500 mt-2">
-                Next automated payout:{" "}
-                <span className="text-white">{getNextPayoutDate()}</span>
-              </p>
-            </div>
+            {/* STORE STATUS BOX (Keep your existing one below) */}
           </div>
         </div>
       </main>

@@ -195,7 +195,7 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
 
   return (
     <nav className="sticky top-0 z-[100] bg-white dark:bg-[#030712] border-b border-slate-100 dark:border-slate-800 transition-all duration-300">
-      <div className="max-w-7xl mx-auto px-6 py-4">
+      <div className="w-full px-4 sm:px-8 py-4">
         <div className="flex items-center justify-between gap-8">
           {/* LOGO */}
           <Link
@@ -441,8 +441,8 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
             {isAuth ? (
               <div className="relative group py-2">
                 <button className="flex items-center gap-1 hover:text-orange-500 transition-colors">
-                  <div className="flex items-center gap-2 hover:text-orange-500 transition-colors font-bold text-sm text-slate-700 dark:text-slate-200">
-                    <div className="w-8 h-8 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center text-orange-600 dark:text-orange-400 font-bold border border-orange-200 dark:border-orange-800">
+                  <div className="flex items-center gap-2 hover:text-orange-500 transition-colors font-bold text-sm text-slate-700 dark:text-slate-200 cursor-pointer">
+                    <div className="w-8 h-8 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center text-orange-600 dark:text-orange-400 font-bold border border-orange-200 dark:border-orange-800 cursor-pointer">
                       {seller?.name ? seller.name.charAt(0).toUpperCase() : "S"}
                     </div>
                     <span className="hidden md:block">
@@ -451,7 +451,7 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
                   </div>
                   <ChevronDown
                     size={16}
-                    className="text-slate-400 transition-transform group-hover:rotate-180"
+                    className="text-slate-400 transition-transform group-hover:rotate-180 cursor-pointer"
                   />
                 </button>
 
@@ -480,7 +480,7 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
                     <div className="border-t border-slate-100 dark:border-slate-800" />
                     <button
                       onClick={handleLogout}
-                      className="w-full text-left px-4 py-2.5 hover:bg-red-50 dark:hover:bg-red-900/20 transition flex items-center gap-2 text-red-500 font-medium text-sm"
+                      className="w-full text-left px-4 py-2.5 hover:bg-red-50 dark:hover:bg-red-900/20 transition flex items-center gap-2 text-red-500 font-medium text-sm cursor-pointer"
                     >
                       <LogOut size={16} /> Logout
                     </button>

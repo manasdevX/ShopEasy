@@ -50,7 +50,7 @@ router.put(
 );
 
 // 4. Delete a product
-router.delete("//:id", protectSeller, deleteProduct);
+router.delete("/:id", protectSeller, deleteProduct);
 
 /* =========================================
    PUBLIC ROUTES (Browsing)

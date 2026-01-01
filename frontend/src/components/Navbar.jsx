@@ -247,8 +247,8 @@ export default function Navbar() {
             </Link>
           ) : (
             <div className="relative group flex items-center h-full">
-              <button className="flex items-center gap-1 font-bold hover:text-orange-500 py-2">
-                <div className="w-8 h-8 rounded-full bg-orange-500 text-white flex items-center justify-center text-xs shadow-lg overflow-hidden border-2 border-white dark:border-slate-800">
+              <button className="flex items-center gap-1 font-bold hover:text-orange-500 py-2 cursor-pointer">
+                <div className="w-8 h-8 rounded-full bg-orange-500 text-white flex items-center justify-center text-xs shadow-lg overflow-hidden border-2 border-white dark:border-slate-800 cursor-pointer">
                   {user?.profilePicture ? (
                     <img
                       src={user.profilePicture}
@@ -259,7 +259,7 @@ export default function Navbar() {
                     user?.name?.charAt(0) || "U"
                   )}
                 </div>
-                <span className="max-w-[80px] truncate ml-1 font-bold text-slate-900 dark:text-white">
+                <span className="max-w-[80px] truncate ml-1 font-bold text-slate-900 dark:text-white cursor-pointer">
                   {user?.name ? user.name.split(" ")[0] : "Account"}
                 </span>
                 <ChevronDown
@@ -279,7 +279,7 @@ export default function Navbar() {
                   <div className="border-t border-gray-100 dark:border-slate-800" />
                   <button
                     onClick={handleLogout}
-                    className="w-full text-left px-5 py-3.5 hover:bg-red-500 hover:text-white text-red-500 font-bold text-sm flex items-center gap-2"
+                    className="w-full text-left px-5 py-3.5 hover:bg-red-500 hover:text-white text-red-500 font-bold text-sm flex items-center gap-2 cursor-pointer"
                   >
                     <LogOut size={16} /> Logout
                   </button>
@@ -289,7 +289,7 @@ export default function Navbar() {
           )}
 
           <button
-            className="relative group flex items-center gap-1 font-bold hover:text-orange-500"
+            className="relative group flex items-center gap-1 font-bold hover:text-orange-500 cursor-pointer"
             onClick={handleCart}
           >
             <ShoppingCart size={24} />
