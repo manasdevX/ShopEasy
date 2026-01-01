@@ -13,6 +13,7 @@ import {
   Calendar,
   Download,
   Phone,
+  RefreshCw, // Icon for Returns
 } from "lucide-react";
 import Navbar from "../../components/Seller/SellerNavbar";
 import Footer from "../../components/Seller/SellerFooter";
@@ -32,7 +33,6 @@ export default function SellerOrders() {
 
   // --- FETCH ORDERS ---
   const fetchOrders = async () => {
-    // Only show full page loader on initial load
     if (orders.length === 0) setLoading(true);
     try {
       const token = localStorage.getItem("sellerToken");
@@ -56,7 +56,6 @@ export default function SellerOrders() {
     }
   };
 
-  // Initial Fetch & Filters
   useEffect(() => {
     const delayDebounce = setTimeout(() => {
       fetchOrders();
@@ -64,7 +63,7 @@ export default function SellerOrders() {
     return () => clearTimeout(delayDebounce);
   }, [activeTab, searchQuery]);
 
-  // ✅ Auto-refresh Modal when Order Data updates (e.g. status change)
+  // Auto-refresh Modal when Order Data updates
   useEffect(() => {
     if (selectedOrder) {
       const updatedOrder = orders.find((o) => o._id === selectedOrder._id);
@@ -74,7 +73,7 @@ export default function SellerOrders() {
     }
   }, [orders]);
 
-  // --- UPDATE STATUS ACTION ---
+  // --- GENERIC UPDATE STATUS ---
   const updateStatus = async (orderId, newStatus) => {
     try {
       const token = localStorage.getItem("sellerToken");
@@ -91,7 +90,7 @@ export default function SellerOrders() {
 
       if (res.ok) {
         showSuccess(`Order marked as ${newStatus}`);
-        fetchOrders(); // This triggers the useEffect above to update the modal
+        fetchOrders();
         setActiveDropdown(null);
       } else {
         showError(data.message || "Update failed");
@@ -101,7 +100,68 @@ export default function SellerOrders() {
     }
   };
 
-  // --- STATS CALCULATION ---
+  // --- SPECIAL HANDLER: RETURN APPROVAL ---
+  // This calls the specific endpoint that handles stock restoration & refunds
+  const handleReturnApproval = async (orderId, action) => {
+    // action = "Returned" (Approve) or "Delivered" (Reject)
+    try {
+      const token = localStorage.getItem("sellerToken");
+      const res = await fetch(`${API_URL}/api/orders/handle-return`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ orderId, status: action }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        showSuccess(data.message); // Backend sends specific refund message
+        fetchOrders();
+        setActiveDropdown(null);
+      } else {
+        showError(data.message);
+      }
+    } catch (error) {
+      showError("Server error processing return");
+    }
+  };
+
+  // --- SMART CANCEL/RETURN LOGIC ---
+  const handleRefundOrReturn = async (order, action) => {
+    let newStatus = "";
+    let confirmMessage = "";
+
+    // 1. CANCELLATION LOGIC
+    if (action === "cancel") {
+      newStatus = "Cancelled";
+
+      if (order.paymentMethod === "COD") {
+        confirmMessage =
+          "Are you sure? Since this is COD, it will just be cancelled.";
+      } else {
+        confirmMessage =
+          "Are you sure? This order is PAID online. Cancelling will initiate a REFUND.";
+      }
+    }
+    // 2. RETURN LOGIC (Initiated by Seller manually if needed)
+    else if (action === "return") {
+      if (order.status !== "Delivered") {
+        showError("Order must be delivered before returning.");
+        return;
+      }
+      newStatus = "Return Requested"; // Or directly "Returned" if you want to bypass approval
+      confirmMessage = "Mark this order for return processing?";
+    }
+
+    if (window.confirm(confirmMessage)) {
+      await updateStatus(order._id, newStatus);
+    }
+  };
+
+  // --- UI HELPERS ---
   const stats = {
     total: orders.length,
     pending: orders.filter((o) => o.status === "Processing").length,
@@ -117,12 +177,24 @@ export default function SellerOrders() {
         return "bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-500 border-blue-200 dark:border-blue-500/20";
       case "Cancelled":
         return "bg-rose-100 text-rose-700 dark:bg-rose-500/10 dark:text-rose-500 border-rose-200 dark:border-rose-500/20";
+      case "Returned":
+        return "bg-purple-100 text-purple-700 dark:bg-purple-500/10 dark:text-purple-500 border-purple-200 dark:border-purple-500/20";
+      case "Return Requested":
+        return "bg-orange-100 text-orange-700 dark:bg-orange-500/10 dark:text-orange-500 border-orange-200 dark:border-orange-500/20 animate-pulse";
       default:
         return "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-500 border-amber-200 dark:border-amber-500/20";
     }
   };
 
-  const tabs = ["All", "Processing", "Shipped", "Delivered", "Cancelled"];
+  const tabs = [
+    "All",
+    "Processing",
+    "Shipped",
+    "Delivered",
+    "Cancelled",
+    "Return Requested",
+    "Returned",
+  ];
 
   return (
     <div className="bg-white dark:bg-[#030712] min-h-screen transition-colors duration-500 font-sans">
@@ -196,7 +268,6 @@ export default function SellerOrders() {
             />
             <input
               type="text"
-              // ✅ UPDATED PLACEHOLDER to reflect new backend search capability
               placeholder="Search by Order ID, Customer or Product..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -265,12 +336,9 @@ export default function SellerOrders() {
                     key={order._id}
                     className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors group"
                   >
-                    {/* 1. Order ID */}
                     <td className="px-8 py-6 font-bold text-slate-900 dark:text-white text-sm">
                       #{order._id.slice(-6).toUpperCase()}
                     </td>
-
-                    {/* 2. PRODUCT DETAILS */}
                     <td className="px-8 py-6">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 overflow-hidden shrink-0">
@@ -302,8 +370,6 @@ export default function SellerOrders() {
                         </div>
                       </div>
                     </td>
-
-                    {/* 3. Customer */}
                     <td className="px-8 py-6">
                       <div className="flex flex-col">
                         <span className="text-sm font-bold text-slate-900 dark:text-white">
@@ -314,8 +380,6 @@ export default function SellerOrders() {
                         </span>
                       </div>
                     </td>
-
-                    {/* 4. Status Badge */}
                     <td className="px-8 py-6">
                       <span
                         className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter border ${getStatusColor(
@@ -325,20 +389,16 @@ export default function SellerOrders() {
                         {order.status}
                       </span>
                     </td>
-
-                    {/* 5. Amount */}
                     <td className="px-8 py-6 font-black text-slate-900 dark:text-white text-sm">
                       ₹{order.sellerTotal?.toLocaleString()}
                     </td>
 
-                    {/* 6. ACTION BUTTONS */}
+                    {/* ACTIONS */}
                     <td className="px-8 py-6 text-right relative">
                       <div className="flex items-center justify-end gap-2">
-                        {/* View */}
                         <button
                           onClick={() => setSelectedOrder(order)}
                           className="p-2.5 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-xl hover:bg-orange-500 hover:text-white transition-all"
-                          title="View Details"
                         >
                           <Eye size={18} />
                         </button>
@@ -348,13 +408,12 @@ export default function SellerOrders() {
                           <button
                             onClick={() => updateStatus(order._id, "Shipped")}
                             className="p-2.5 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-xl hover:bg-blue-500 hover:text-white transition-all"
-                            title="Mark as Shipped"
                           >
                             <Truck size={18} />
                           </button>
                         )}
 
-                        {/* More Actions */}
+                        {/* 3 DOTS MENU */}
                         <div className="relative">
                           <button
                             onClick={() =>
@@ -368,23 +427,89 @@ export default function SellerOrders() {
                           </button>
 
                           {activeDropdown === order._id && (
-                            <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-xl z-50 overflow-hidden">
-                              <button
-                                onClick={() =>
-                                  updateStatus(order._id, "Delivered")
-                                }
-                                className="w-full text-left px-4 py-3 text-xs font-bold text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 flex items-center gap-2"
-                              >
-                                <CheckCircle size={14} /> Mark Delivered
-                              </button>
-                              <button
-                                onClick={() =>
-                                  updateStatus(order._id, "Cancelled")
-                                }
-                                className="w-full text-left px-4 py-3 text-xs font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 flex items-center gap-2"
-                              >
-                                <XCircle size={14} /> Cancel Order
-                              </button>
+                            <div className="absolute right-0 top-full mt-2 w-52 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-xl z-50 overflow-hidden py-1">
+                              {/* 1. Mark Delivered */}
+                              {order.status === "Shipped" && (
+                                <button
+                                  onClick={() =>
+                                    updateStatus(order._id, "Delivered")
+                                  }
+                                  className="w-full text-left px-4 py-3 text-xs font-bold text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 flex items-center gap-2"
+                                >
+                                  <CheckCircle size={14} /> Mark Delivered
+                                </button>
+                              )}
+
+                              {/* 2. Cancel Order */}
+                              {(order.status === "Processing" ||
+                                order.status === "Pending") && (
+                                <button
+                                  onClick={() =>
+                                    handleRefundOrReturn(order, "cancel")
+                                  }
+                                  className="w-full text-left px-4 py-3 text-xs font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 flex items-center gap-2"
+                                >
+                                  <XCircle size={14} /> Cancel Order
+                                </button>
+                              )}
+
+                              {/* 3. Handle Return Requests (Approve/Reject) */}
+                              {order.status === "Return Requested" && (
+                                <>
+                                  <button
+                                    onClick={() =>
+                                      handleReturnApproval(
+                                        order._id,
+                                        "Returned"
+                                      )
+                                    }
+                                    className="w-full text-left px-4 py-3 text-xs font-bold text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-500/10 flex items-center gap-2"
+                                  >
+                                    <RefreshCw size={14} /> Approve Return
+                                  </button>
+                                  <button
+                                    onClick={() =>
+                                      handleReturnApproval(
+                                        order._id,
+                                        "Delivered"
+                                      )
+                                    }
+                                    className="w-full text-left px-4 py-3 text-xs font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 flex items-center gap-2"
+                                  >
+                                    <XCircle size={14} /> Reject Return
+                                  </button>
+                                </>
+                              )}
+
+                              {/* 4. Manual Process Return (If Delivered) */}
+                              {order.status === "Delivered" && (
+                                <button
+                                  onClick={() =>
+                                    handleRefundOrReturn(order, "return")
+                                  }
+                                  className="w-full text-left px-4 py-3 text-xs font-bold text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-500/10 flex items-center gap-2"
+                                >
+                                  <RefreshCw size={14} /> Process Return
+                                </button>
+                              )}
+
+                              {/* 5. ✅ FALLBACK: View Details (Fix for "empty menu" on Cancelled/Returned) */}
+                              {[
+                                "Cancelled",
+                                "Returned",
+                                "Refunded",
+                                "Return Requested",
+                              ].includes(order.status) && (
+                                <button
+                                  onClick={() => {
+                                    setSelectedOrder(order);
+                                    setActiveDropdown(null);
+                                  }}
+                                  className="w-full text-left px-4 py-3 text-xs font-bold text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2"
+                                >
+                                  <Eye size={14} /> View Details
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>
@@ -402,7 +527,6 @@ export default function SellerOrders() {
       {selectedOrder && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 w-full max-w-2xl rounded-[2rem] overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
-            {/* Modal Header */}
             <div className="p-8 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-950/50">
               <div>
                 <h2 className="text-2xl font-black text-slate-900 dark:text-white">
@@ -421,7 +545,6 @@ export default function SellerOrders() {
             </div>
 
             <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
-              {/* Left Col: Customer Info */}
               <div className="space-y-6">
                 <div>
                   <h3 className="text-xs font-black uppercase text-slate-400 tracking-widest mb-3 flex items-center gap-2">
@@ -437,14 +560,12 @@ export default function SellerOrders() {
                       {selectedOrder.shippingAddress.postalCode}
                     </p>
                     <p>{selectedOrder.shippingAddress.country}</p>
-                    {/* PHONE NUMBER */}
                     <p className="mt-2 pt-2 border-t border-slate-200 dark:border-slate-700 font-mono text-xs text-slate-500 flex items-center gap-2">
                       <Phone size={12} />{" "}
                       {selectedOrder.shippingAddress.phone || "No Phone"}
                     </p>
                   </div>
                 </div>
-
                 <div>
                   <h3 className="text-xs font-black uppercase text-slate-400 tracking-widest mb-3 flex items-center gap-2">
                     <CreditCard size={14} /> Payment Info
@@ -470,7 +591,6 @@ export default function SellerOrders() {
                 </div>
               </div>
 
-              {/* Right Col: Items List */}
               <div>
                 <h3 className="text-xs font-black uppercase text-slate-400 tracking-widest mb-3 flex items-center gap-2">
                   <Package size={14} /> Order Items
@@ -507,7 +627,6 @@ export default function SellerOrders() {
                     </div>
                   ))}
                 </div>
-
                 <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center">
                   <span className="text-sm text-slate-500 font-bold">
                     Total Earnings
@@ -519,16 +638,32 @@ export default function SellerOrders() {
               </div>
             </div>
 
-            {/* Modal Footer */}
             <div className="p-6 bg-slate-50 dark:bg-slate-950/30 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3">
+              {/* Modal Actions */}
               {selectedOrder.status === "Processing" && (
                 <button
-                  onClick={() => {
-                    updateStatus(selectedOrder._id, "Shipped");
-                  }}
+                  onClick={() => updateStatus(selectedOrder._id, "Shipped")}
                   className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-sm transition-all shadow-lg shadow-blue-500/20"
                 >
                   Mark as Shipped
+                </button>
+              )}
+              {selectedOrder.status === "Shipped" && (
+                <button
+                  onClick={() => updateStatus(selectedOrder._id, "Delivered")}
+                  className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-sm transition-all shadow-lg shadow-emerald-500/20"
+                >
+                  Mark as Delivered
+                </button>
+              )}
+              {selectedOrder.status === "Return Requested" && (
+                <button
+                  onClick={() =>
+                    handleReturnApproval(selectedOrder._id, "Returned")
+                  }
+                  className="px-6 py-3 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl text-sm transition-all shadow-lg shadow-purple-500/20"
+                >
+                  Approve Return
                 </button>
               )}
               <button

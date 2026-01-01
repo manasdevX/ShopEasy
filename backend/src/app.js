@@ -77,4 +77,20 @@ app.use((req, res) => {
   });
 });
 
+/**
+ * 🚨 GLOBAL ERROR HANDLER
+ * Catches any errors thrown in controllers (e.g., throw new Error(...))
+ */
+app.use((err, req, res, next) => {
+  console.error("🔥 Error Stack:", err.stack); // Log error stack for debugging
+
+  const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
+
+  res.status(statusCode).json({
+    success: false,
+    message: err.message || "Internal Server Error",
+    stack: process.env.NODE_ENV === "production" ? null : err.stack, // Hide stack in production
+  });
+});
+
 export default app;

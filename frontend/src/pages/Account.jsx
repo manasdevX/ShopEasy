@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { showSuccess, showError } from "../utils/toast";
 import Footer from "../components/Footer";
@@ -31,9 +31,13 @@ import {
 
 export default function Account() {
   const fileInputRef = useRef(null);
+  const location = useLocation();
 
   // STATE
-  const [activeTab, setActiveTab] = useState("profile");
+  const [activeTab, setActiveTab] = useState(
+    location.state?.activeTab || "profile"
+  );
+
   const [isEditing, setIsEditing] = useState(false);
   const navigate = useNavigate();
 
@@ -47,7 +51,7 @@ export default function Account() {
 
   // New State for File Upload & Removal Fix
   const [selectedFile, setSelectedFile] = useState(null);
-  const [isAvatarRemoved, setIsAvatarRemoved] = useState(false); // ✅ Added removal state
+  const [isAvatarRemoved, setIsAvatarRemoved] = useState(false);
 
   const [newAddress, setNewAddress] = useState({
     name: "",
@@ -84,6 +88,13 @@ export default function Account() {
   const [formData, setFormData] = useState({ ...user });
   const [status, setStatus] = useState("loading");
 
+  // Effect to handle tab switching
+  useEffect(() => {
+    if (location.state?.activeTab) {
+      setActiveTab(location.state.activeTab);
+    }
+  }, [location.state]);
+
   // ================= UTILS =================
   const getImageUrl = (imagePath) => {
     if (!imagePath) return "https://via.placeholder.com/150?text=No+Image";
@@ -93,6 +104,25 @@ export default function Account() {
       ? imagePath.substring(1)
       : imagePath;
     return `${API_URL}/${cleanPath}`;
+  };
+
+  // ✅ NEW: Unified Status Colors (Matching Seller Dashboard & Screenshots)
+  const getStatusColor = (status) => {
+    switch (status) {
+      case "Delivered":
+        return "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-500 dark:border-emerald-500/20";
+      case "Shipped":
+        return "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-500 dark:border-blue-500/20";
+      case "Cancelled":
+        return "bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-500/10 dark:text-rose-500 dark:border-rose-500/20";
+      case "Returned":
+        return "bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-500/10 dark:text-purple-500 dark:border-purple-500/20";
+      case "Return Requested":
+        return "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-500/10 dark:text-orange-500 dark:border-orange-500/20";
+      case "Processing":
+      default:
+        return "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-500 dark:border-amber-500/20";
+    }
   };
 
   // ================= FETCH LOGIC =================
@@ -153,12 +183,12 @@ export default function Account() {
               country: data.address?.country || primaryAddr.country || "India",
               type: data.address?.type || primaryAddr.type || "Home",
             },
-            // OPTIMIZATION: Don't load orders here to keep request light
-            orders: [],
             wishlist: data.wishlist || [],
           };
-          setUser(userData);
-          setFormData(userData);
+
+          // Merge with existing state to preserve orders if they loaded first
+          setUser((prev) => ({ ...prev, ...userData }));
+          setFormData((prev) => ({ ...prev, ...userData }));
         }
       } catch (err) {
         console.error(err);
@@ -191,6 +221,65 @@ export default function Account() {
       fetchOrders();
     }
   }, [activeTab]);
+
+  // ================= ORDER ACTION HANDLERS =================
+  const handleCancelOrder = async (orderId) => {
+    if (!window.confirm("Are you sure you want to cancel this order?")) return;
+
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_URL}/api/orders/${orderId}/cancel`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        showSuccess("Order cancelled successfully");
+        // Update local state immediately
+        setUser((prev) => ({
+          ...prev,
+          orders: prev.orders.map((o) =>
+            o._id === orderId ? { ...o, status: "Cancelled" } : o
+          ),
+        }));
+      } else {
+        showError(data.message || "Failed to cancel order");
+      }
+    } catch (err) {
+      showError("Server Error");
+    }
+  };
+
+  const handleReturnOrder = async (orderId) => {
+    if (!window.confirm("Are you sure you want to return this order?")) return;
+
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_URL}/api/orders/${orderId}/return`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        showSuccess("Return request submitted");
+        // Update local state immediately
+        setUser((prev) => ({
+          ...prev,
+          orders: prev.orders.map((o) =>
+            o._id === orderId ? { ...o, status: "Return Requested" } : o
+          ),
+        }));
+      } else {
+        showError(data.message || "Failed to request return");
+      }
+    } catch (err) {
+      showError("Server Error");
+    }
+  };
 
   // ================= WISHLIST HANDLER =================
   const handleRemoveFromWishlist = async (productId) => {
@@ -474,11 +563,9 @@ export default function Account() {
   const handleImageChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      // 1. Store the file for actual upload
       setSelectedFile(file);
-      setIsAvatarRemoved(false); // ✅ Reset removal flag since user picked a new image
+      setIsAvatarRemoved(false);
 
-      // 2. Generate a preview URL for the UI
       const reader = new FileReader();
       reader.onloadend = () => {
         setFormData((prev) => ({ ...prev, avatar: reader.result }));
@@ -489,7 +576,6 @@ export default function Account() {
   };
 
   const handleRemoveImg = () => {
-    // ✅ Generate the fallback initial station URL
     const fallbackUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(
       user.name || "User"
     )}&background=random&color=fff`;
@@ -499,11 +585,10 @@ export default function Account() {
       avatar: fallbackUrl,
     }));
 
-    setSelectedFile(null); // Clear any pending upload
-    setIsAvatarRemoved(true); // ✅ Mark for deletion on backend
+    setSelectedFile(null);
+    setIsAvatarRemoved(true);
     setIsEditing(true);
 
-    // Reset file input so selecting the same file works again if needed
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -518,27 +603,20 @@ export default function Account() {
     try {
       const token = localStorage.getItem("token");
 
-      // FIXED: Use FormData for handling File Uploads
       const formDataToSend = new FormData();
       formDataToSend.append("name", formData.name);
       formDataToSend.append("phone", formData.phone);
-
-      // Address needs to be stringified for FormData
       formDataToSend.append("address", JSON.stringify(formData.address));
 
-      // ✅ LOGIC: Determine whether to upload file or remove it
       if (selectedFile) {
-        // Case A: Upload new file
         formDataToSend.append("profilePicture", selectedFile);
       } else if (isAvatarRemoved) {
-        // Case B: Remove existing file (Initial Station)
         formDataToSend.append("removeProfilePicture", "true");
       }
 
       const res = await fetch(`${API_URL}/api/user/profile`, {
         method: "PUT",
         headers: {
-          // "Content-Type": "application/json", <--- Removed to let browser set boundary
           Authorization: `Bearer ${token}`,
         },
         body: formDataToSend,
@@ -546,11 +624,11 @@ export default function Account() {
 
       const data = await res.json();
       if (res.ok) {
-        setUser({
-          ...formData,
+        setUser((prev) => ({
+          ...prev,
+          ...data,
           avatar: data.profilePicture || formData.avatar,
-          addresses: data.addresses,
-        });
+        }));
         setFormData((prev) => ({
           ...prev,
           addresses: data.addresses,
@@ -566,7 +644,6 @@ export default function Account() {
         );
         window.dispatchEvent(new Event("user-info-updated"));
         setIsEditing(false);
-        // Clear selected file and reset flags
         setSelectedFile(null);
         setIsAvatarRemoved(false);
         showSuccess("Profile Updated Successfully!");
@@ -904,11 +981,10 @@ export default function Account() {
                                 </div>
                               </div>
                               <div
-                                className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter border ${
-                                  order.status === "Delivered"
-                                    ? "bg-green-50 text-green-600 border-green-100 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800"
-                                    : "bg-orange-50 text-orange-600 border-orange-100 dark:bg-orange-900/20 dark:text-orange-400 dark:border-orange-800"
-                                }`}
+                                // ✅ UPDATED: Using getStatusColor for unified styling
+                                className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter border ${getStatusColor(
+                                  order.status
+                                )}`}
                               >
                                 {order.status}
                               </div>

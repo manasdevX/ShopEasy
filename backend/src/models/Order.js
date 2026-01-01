@@ -27,10 +27,18 @@ const orderSchema = new mongoose.Schema(
           ref: "Seller",
           required: true,
         },
-        // Track status per item
+        // Track status per item (with strict enum validation)
         itemStatus: {
           type: String,
           default: "Processing",
+          enum: [
+            "Processing",
+            "Shipped",
+            "Delivered",
+            "Cancelled",
+            "Return Requested",
+            "Returned",
+          ],
         },
       },
     ],
@@ -40,7 +48,6 @@ const orderSchema = new mongoose.Schema(
       city: { type: String, required: true },
       postalCode: { type: String, required: true },
       country: { type: String, required: true },
-      // ✅ NEW: Added Phone Number
       phone: { type: String, required: true },
     },
 
@@ -64,9 +71,32 @@ const orderSchema = new mongoose.Schema(
     isPaid: { type: Boolean, required: true, default: false },
     paidAt: { type: Date },
 
+    // ✅ NEW: Fields for tracking refunds
+    isRefunded: {
+      type: Boolean,
+      default: false,
+    },
+    refundedAt: {
+      type: Date,
+    },
+
     isDelivered: { type: Boolean, required: true, default: false },
     deliveredAt: { type: Date },
-    status: { type: String, required: true, default: "Processing" },
+
+    // Global Order Status (with strict enum validation)
+    status: {
+      type: String,
+      required: true,
+      default: "Processing",
+      enum: [
+        "Processing",
+        "Shipped",
+        "Delivered",
+        "Cancelled",
+        "Return Requested",
+        "Returned",
+      ],
+    },
   },
   {
     timestamps: true,
