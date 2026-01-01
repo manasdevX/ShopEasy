@@ -12,7 +12,7 @@ export const getNotifications = async (req, res) => {
 
     // Apply Filters based on UI tabs
     if (filter === "unread") {
-      query.isRead = false;
+      query.read = false; // ✅ MATCHED SCHEMA: 'read' instead of 'isRead'
     } else if (filter === "orders") {
       query.type = "order";
     }
@@ -43,7 +43,7 @@ export const markAsRead = async (req, res) => {
       return res.status(401).json({ message: "Not authorized" });
     }
 
-    notification.isRead = true;
+    notification.read = true; // ✅ MATCHED SCHEMA
     await notification.save();
 
     res.status(200).json(notification);
@@ -58,8 +58,8 @@ export const markAsRead = async (req, res) => {
 export const markAllAsRead = async (req, res) => {
   try {
     await Notification.updateMany(
-      { recipient: req.seller._id, isRead: false },
-      { $set: { isRead: true } }
+      { recipient: req.seller._id, read: false }, // ✅ MATCHED SCHEMA
+      { $set: { read: true } }
     );
     res.status(200).json({ message: "All notifications marked as read" });
   } catch (error) {
@@ -81,6 +81,7 @@ export const createNotification = async (
       type,
       title,
       message,
+      read: false, // ✅ MATCHED SCHEMA
       relatedId,
     });
   } catch (error) {

@@ -5,6 +5,8 @@ import {
   getMyOrders,
   getSellerOrders,
   updateOrderStatus,
+  cancelOrder, // ✅ IMPORTED
+  requestReturn, // ✅ IMPORTED
 } from "../controllers/order.controller.js";
 import { protect, protectSeller } from "../middlewares/auth.middleware.js";
 
@@ -14,30 +16,36 @@ const router = express.Router();
    CUSTOMER ROUTES
 ========================================= */
 
-// Matches: POST /api/orders
+// Matches: POST /api/orders (Create Order)
 router.post("/", protect, addOrderItems);
 
-// Matches: GET /api/orders/myorders
+// Matches: GET /api/orders/myorders (Get History)
 router.get("/myorders", protect, getMyOrders);
+
+// ✅ NEW: Cancel Order
+// Matches: PUT /api/orders/:id/cancel
+router.put("/:id/cancel", protect, cancelOrder);
+
+// ✅ NEW: Request Return
+// Matches: PUT /api/orders/:id/return
+router.put("/:id/return", protect, requestReturn);
 
 /* =========================================
    SELLER ROUTES
-   Note: Specialized routes MUST come before /:id
+   Note: Specialized routes MUST come before /:id to prevent CastErrors
 ========================================= */
 
 // Matches: GET /api/orders/seller-orders
 router.get("/seller-orders", protectSeller, getSellerOrders);
 
 // Matches: PUT /api/orders/:id/status
-// We use updateOrderStatus which handles the multi-vendor logic
 router.put("/:id/status", protectSeller, updateOrderStatus);
 
 /* =========================================
    GENERAL ROUTES
 ========================================= */
 
-// Matches: GET /api/orders/:id
-// Keep this at the bottom to avoid catching 'myorders' or 'seller-orders'
+// Matches: GET /api/orders/:id (Get Single Order Details)
 router.get("/:id", protect, getOrderById);
 
 export default router;

@@ -9,8 +9,9 @@ const notificationSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ["order", "alert", "promotion", "system"], // Maps to icons (Box, AlertCircle, Tag)
-      default: "system",
+      // "order": New orders, "alert": Cancellations/Returns, "info": General
+      enum: ["order", "alert", "info", "promotion", "system"],
+      default: "info",
     },
     title: {
       type: String,
@@ -20,12 +21,14 @@ const notificationSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    isRead: {
+    // ✅ CHANGED: renamed from 'isRead' to 'read' to match Controller logic
+    read: {
       type: Boolean,
       default: false,
     },
+    // ✅ CHANGED: Type ObjectId allows for better DB querying later
     relatedId: {
-      type: String, // Optional: Store Order ID or Product ID here for linking
+      type: mongoose.Schema.Types.ObjectId,
     },
   },
   { timestamps: true }

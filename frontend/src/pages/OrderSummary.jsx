@@ -208,6 +208,7 @@ export default function OrderSuccess() {
         <div className="mt-12 flex flex-col sm:flex-row gap-4 justify-center items-center">
           <Link
             to="/account"
+            state={{ activeTab: "orders" }} // ✅ FIXED: Redirects to Orders Tab
             className="w-full sm:w-auto px-10 py-4 bg-blue-600 text-white font-black rounded-2xl hover:bg-blue-500 transition-all flex items-center justify-center gap-3 active:scale-95 shadow-xl shadow-blue-600/20 uppercase text-xs tracking-widest"
           >
             Track My Order <ArrowRight size={18} />
