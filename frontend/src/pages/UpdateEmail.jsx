@@ -126,6 +126,10 @@ export default function UpdateEmail() {
       return;
     }
 
+    if(!isVerified) {
+      return showError("Verify your new email first.");
+    }
+
     setLoading(true);
 
     try {
@@ -313,7 +317,7 @@ export default function UpdateEmail() {
             {/* SUBMIT BUTTON */}
             <button
               type="submit"
-              disabled={loading || !isVerified}
+              disabled={loading}
               className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 dark:disabled:bg-slate-800 text-white py-4 rounded-xl font-bold text-sm uppercase tracking-widest transition-all flex items-center justify-center gap-2 mt-4"
             >
               {loading ? (

@@ -1,180 +1,425 @@
-import React, { useState } from 'react';
-import { 
-  User, Package, ShieldCheck, Landmark, 
-  MapPin, Bell, LogOut, ChevronRight, 
-  Edit3, ExternalLink, Smartphone, Mail,
-  CreditCard, ShieldAlert, Zap ,Trash2
-} from 'lucide-react';
+import React, { useState, useEffect } from "react";
+import {
+  User,
+  Package,
+  ShieldCheck,
+  Landmark,
+  MapPin,
+  LogOut,
+  ChevronRight,
+  Edit3,
+  Smartphone,
+  Mail,
+  CreditCard,
+  ShieldAlert,
+  Zap,
+  Trash2,
+  Plus,
+  Key,
+  Globe,
+} from "lucide-react";
 
 // Imported Components
-import Navbar from '../../components/Seller/SellerNavbar';
-import Footer from '../../components/Seller/SellerFooter';
+import Navbar from "../../components/Seller/SellerNavbar";
+import Footer from "../../components/Seller/SellerFooter";
+import { useNavigate } from "react-router-dom";
+import { showSuccess, showError } from "../../utils/toast";
 
-
-const RedesignedSettings = () => {
-  const [activeView, setActiveView] = useState("menu"); // menu, personal, business, bank, privacy
+const Settings = () => {
+  const [activeTab, setActiveTab] = useState("personal");
   const [isEditing, setIsEditing] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
 
-  // Mock data
-  const profile = {
-    name: "Alex Thompson",
-    email: "alex.t@design.com",
-    phone: "+1 234 567 890",
-    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Alex",
-    level: "Plus Member"
-  };
+  // Seller profile state
+  const [profile, setProfile] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Seller",
+  });
 
-  // Main navigation tiles (Amazon Style)
-  const menuTiles = [
-    { id: "personal", title: "Personal Info", desc: "Edit name, email, and mobile number", icon: <User className="text-blue-500" /> },
-    { id: "business", title: "Business Profile", desc: "Manage tax IDs and company details", icon: <Zap className="text-orange-500" /> },
-    { id: "bank", title: "Payments & Bank", desc: "Saved cards, UPI, and bank accounts", icon: <Landmark className="text-emerald-500" /> },
-    { id: "privacy", title: "Login & Security", icon: <ShieldCheck className="text-red-500" />, desc: "Edit password and 2FA settings" },
-    { id: "addresses", title: "Your Addresses", icon: <MapPin className="text-purple-500" />, desc: "Set default shipping address" },
-    { id: "orders", title: "Your Orders", icon: <Package className="text-amber-600" />, desc: "Track, return, or buy things again" },
+  const [addressForm, setAddressForm] = useState({
+    street: "",
+    city: "",
+    state: "",
+    zip: "",
+  });
+
+  const [loadingProfile, setLoadingProfile] = useState(false);
+  const [savingPersonal, setSavingPersonal] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [bankDetails, setBankDetails] = useState(null);
+
+  const [personalForm, setPersonalForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+  });
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: "",
+    newPassword: "",
+  });
+
+  const navigate = useNavigate();
+
+
+  // Sidebar Items
+  const navItems = [
+    { id: "personal", label: "Account Info", icon: <User size={18} /> },
+    { id: "business", label: "Business Details", icon: <Zap size={18} /> },
+    { id: "bank", label: "Payments & Payouts", icon: <Landmark size={18} /> },
+    { id: "address", label: "Store Address", icon: <MapPin size={18} /> },
   ];
 
   return (
-    <div className="bg-[#f1f3f6] dark:bg-[#030712] min-h-screen transition-colors duration-300 font-sans text-slate-900 dark:text-white">
+    <div className="bg-[#f8fafc] dark:bg-[#020617] min-h-screen font-sans">
       <Navbar />
 
-      <main className="max-w-6xl mx-auto px-4 py-8">
-        
-        {/* --- BREADCRUMBS --- */}
-        <nav className="flex items-center gap-2 text-sm text-slate-500 mb-6 px-2">
-          <button onClick={() => setActiveView("menu")} className="hover:text-orange-500 transition-colors">Your Account</button>
-          {activeView !== "menu" && (
-            <>
-              <ChevronRight size={14} />
-              <span className="text-orange-500 font-semibold capitalize">{activeView}</span>
-            </>
-          )}
-        </nav>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        <header className="mb-8">
+          <h1 className="text-3xl font-bold text-slate-900 dark:text-white">
+            Settings
+          </h1>
+          <p className="text-slate-500 text-sm">
+            Manage your store presence and account security.
+          </p>
+        </header>
 
-        {/* --- MAIN CONTENT AREA --- */}
-        {activeView === "menu" ? (
-          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <h1 className="text-2xl font-bold mb-8 px-2 uppercase tracking-tight">Settings</h1>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {menuTiles.map((tile) => (
+        <div className="flex flex-col lg:flex-row items-start gap-12">
+          {/* LEFT SIDEBAR NAVIGATION */}
+          <aside className="lg:w-64 flex-shrink-0">
+            <nav className="space-y-1">
+              {navItems.map((item) => (
                 <button
-                  key={tile.id}
-                  onClick={() => setActiveView(tile.id)}
-                  className="flex items-start gap-5 p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all text-left group shadow-sm"
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id)}
+                  className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all ${
+                    activeTab === item.id
+                      ? "bg-orange-500 text-white shadow-md shadow-orange-500/20"
+                      : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  }`}
                 >
-                  <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-full group-hover:scale-110 transition-transform">
-                    {tile.icon}
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-lg mb-1">{tile.title}</h3>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 leading-snug">{tile.desc}</p>
-                  </div>
+                  {item.icon}
+                  {item.label}
                 </button>
               ))}
-            </div>
-
-            {/* --- DANGER ZONE SECTION --- */}
-<div className="mt-12 pt-8 border-t border-slate-200 dark:border-slate-800">
-  <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 p-6 bg-red-50/50 dark:bg-red-500/5 border border-red-100 dark:border-red-900/20 rounded-2xl">
-    <div>
-      <h4 className="text-sm font-black uppercase tracking-wider text-red-600 dark:text-red-500 flex items-center gap-2">
-        <Trash2 size={16} /> Delete Account
-      </h4>
-      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-        Permanently remove your account data, history, and active sessions. This action is irreversible.
-      </p>
-    </div>
-    
-    <button
-      onClick={() => {
-        if(window.confirm("Are you sure? This will permanently delete your account.")) {
-          // Add your delete logic here
-        }
-      }}
-      className="flex items-center justify-center gap-2 px-6 py-3 bg-white dark:bg-slate-900 border border-red-200 dark:border-red-900/40 text-red-600 hover:bg-red-600 hover:text-white dark:hover:bg-red-600 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all active:scale-95 shadow-sm"
-    >
-      Close Account
-    </button>
-  </div>
-</div>
-          </div>
-        ) : (
-          /* --- DETAILED SUB-PAGES (Flipkart Style) --- */
-          <div className="flex flex-col lg:flex-row gap-8 animate-in fade-in slide-in-from-right-4 duration-500">
-            
-            {/* Left Mini Sidebar */}
-            <div className="lg:w-1/4 space-y-4">
-              <div className="bg-white dark:bg-slate-900 p-4 rounded-lg flex items-center gap-4 border border-slate-200 dark:border-slate-800">
-                <img src={profile.avatar} className="w-12 h-12 rounded-full" alt="User" />
-                <div>
-                    <p className="text-xs text-slate-500">Hello,</p>
-                    <p className="font-bold">{profile.name}</p>
-                </div>
-              </div>
-              
-              <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden">
-                <button onClick={() => setActiveView("menu")} className="w-full text-left px-6 py-4 border-b border-slate-100 dark:border-slate-800 text-sm font-bold text-orange-500 hover:bg-slate-50 dark:hover:bg-slate-800">
-                   Back to Account Menu
-                </button>
-                {['Personal Info', 'Payments', 'Security'].map((item) => (
-                    <button key={item} className="w-full text-left px-6 py-4 border-b border-slate-100 dark:border-slate-800 text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800">
-                        {item}
-                    </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Right Detailed Panel */}
-            <div className="lg:w-3/4 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-              <div className="p-6 md:p-10">
-                <div className="flex items-center justify-between mb-10 border-b border-slate-100 dark:border-slate-800 pb-6">
-                    <h2 className="text-xl font-bold uppercase tracking-wide">
-                        {activeView === 'personal' ? 'Personal Information' : 'Section Details'}
-                    </h2>
-                    <button 
-                        onClick={() => setIsEditing(!isEditing)}
-                        className="text-orange-500 text-sm font-bold hover:underline underline-offset-4"
-                    >
-                        {isEditing ? 'Cancel' : 'Edit'}
-                    </button>
-                </div>
-
-                {activeView === 'personal' && (
-                  <div className="space-y-8 max-w-2xl">
-                    <SimpleInput label="Full Name" value={profile.name} isEditing={isEditing} />
-                    <SimpleInput label="Email Address" value={profile.email} isEditing={false} />
-                    <SimpleInput label="Mobile Number" value={profile.phone} isEditing={isEditing} />
-                    
-                    {isEditing && (
-                        <button className="bg-orange-500 text-white px-10 py-3 rounded-md font-bold text-sm shadow-md hover:bg-orange-600 transition-all">
-                            SAVE CHANGES
-                        </button>
-                    )}
+              <div className="pt-4 mt-4 border-t border-slate-200 dark:border-slate-800 space-y-2">
+                {/* Dynamic Delete Section */}
+                {!isConfirming ? (
+                  <button
+                    onClick={() => setIsConfirming(true)}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition-all animate-in fade-in duration-200"
+                  >
+                    <Trash2 size={18} />
+                    Delete Account
+                  </button>
+                ) : (
+                  <div className="flex flex-col gap-2 p-2 bg-red-50/50 dark:bg-red-500/5 rounded-xl border border-red-100 dark:border-red-900/20 animate-in zoom-in-95 duration-200">
+                    <p className="text-[10px] font-bold text-red-600 uppercase tracking-tight text-center mb-1">
+                      Are you sure?
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setIsConfirming(false)}
+                        className="flex-1 px-2 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-700 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+  onClick={handleDeleteAccount} // <-- Simply call the function here
+  className="flex-1 px-2 py-2 bg-red-600 text-white text-xs font-bold rounded-lg hover:bg-red-700 transition-colors shadow-sm"
+>
+  Confirm
+</button>
+                    </div>
                   </div>
                 )}
-
-                {activeView === 'bank' && (
-                   <div className="space-y-6">
-                      <div className="p-6 border border-slate-200 dark:border-slate-800 rounded-xl flex items-center justify-between">
-                         <div className="flex items-center gap-4">
-                            <CreditCard className="text-slate-400" />
-                            <div>
-                                <p className="font-bold">HDFC Bank Card</p>
-                                <p className="text-xs text-slate-500">Ending in 8829</p>
-                            </div>
-                         </div>
-                         <button className="text-red-500 text-xs font-bold uppercase">Remove</button>
-                      </div>
-                      <button className="w-full py-4 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl text-slate-500 font-bold hover:border-orange-500 hover:text-orange-500 transition-all">
-                        + Add New Payment Method
-                      </button>
-                   </div>
-                )}
               </div>
+            </nav>
+          </aside>
+
+          {/* RIGHT CONTENT PANEL */}
+          <div className="flex-grow bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
+            <div className="p-6 md:p-8">
+              {/* PERSONAL INFO SECTION */}
+              {activeTab === "personal" && (
+                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  <div className="flex items-center justify-between mb-8">
+                    <div>
+                      <h2 className="text-xl font-bold">Account Information</h2>
+                      <p className="text-sm text-slate-500">
+                        Update your personal identification details.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() =>
+                        isEditing ? savePersonalInfo() : setIsEditing(true)
+                      }
+                      className="px-5 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-bold transition-all flex items-center gap-2"
+                    >
+                      {savingPersonal
+                        ? "Saving..."
+                        : isEditing
+                        ? "Save Changes"
+                        : "Edit Profile"}
+                    </button>
+                  </div>
+
+                  <div className="flex flex-col md:flex-row gap-8">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-grow">
+                      <FormInput
+                        label="Full Name"
+                        value={personalForm.name}
+                        disabled={!isEditing}
+                        onChange={(val) =>
+                          setPersonalForm({ ...personalForm, name: val })
+                        }
+                      />
+                      <FormInput
+                        label="Phone Number"
+                        value={personalForm.phone}
+                        disabled={!isEditing}
+                        onChange={(val) =>
+                          setPersonalForm({ ...personalForm, phone: val })
+                        }
+                      />
+                      <div className="md:col-span-2">
+                        <FormInput
+                          label="Email Address"
+                          value={personalForm.email}
+                          disabled={true}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* BUSINESS SECTION */}
+              {activeTab === "business" && (
+                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-6">
+                  <div>
+                    <h2 className="text-xl font-bold">Business Profile</h2>
+                    <p className="text-sm text-slate-500">
+                      Manage your tax and legal business entity details.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <FormInput
+                      label="Legal Entity Name"
+                      value="Thompson Digital Ltd."
+                      disabled
+                    />
+                    <FormInput
+                      label="GSTIN / TAX ID"
+                      value="22AAAAA0000A1Z5"
+                      disabled
+                    />
+                    <div className="md:col-span-2">
+                      <FormInput
+                        label="Registered Address"
+                        value="102 Business Hub, Silicon Valley, CA"
+                        disabled
+                      />
+                    </div>
+                  </div>
+                  <div className="p-4 bg-blue-50 dark:bg-blue-500/5 border border-blue-100 dark:border-blue-500/20 rounded-xl flex gap-3 text-blue-600 dark:text-blue-400 text-sm">
+                    <ShieldAlert size={20} className="flex-shrink-0" />
+                    <p>
+                      To change business details, please contact seller support
+                      for verification.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* BANK SECTION */}
+              {activeTab === "bank" && (
+                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-8">
+                  <div>
+                    <h2 className="text-xl font-bold">Payout Methods</h2>
+                    <p className="text-sm text-slate-500">
+                      Manage where you receive your earnings.
+                    </p>
+                  </div>
+
+                  {bankDetails ? (
+                    <div className="max-w-md p-6 rounded-2xl bg-gradient-to-br from-slate-800 to-slate-950 text-white shadow-xl relative overflow-hidden group">
+                      <div className="relative z-10 space-y-6">
+                        <div className="flex justify-between items-start">
+                          <Landmark size={28} className="text-orange-400" />
+                          <button className="text-slate-400 hover:text-white transition-colors">
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase tracking-widest opacity-60">
+                            Primary Bank Account
+                          </p>
+                          <h3 className="text-lg font-semibold">
+                            {bankDetails.bankName || "Global Settlement Bank"}
+                          </h3>
+                        </div>
+                        <p className="font-mono text-xl tracking-widest">
+                          **** **** ****{" "}
+                          {bankDetails.accountNumber?.slice(-4) || "4421"}
+                        </p>
+                      </div>
+                      <div className="absolute top-0 right-0 -mr-16 -mt-16 w-48 h-48 bg-white/5 rounded-full blur-3xl group-hover:bg-white/10 transition-all" />
+                    </div>
+                  ) : (
+                    <div className="border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl p-10 text-center">
+                      <CreditCard
+                        size={40}
+                        className="mx-auto text-slate-300 mb-4"
+                      />
+                      <p className="text-slate-500 text-sm font-medium">
+                        No bank account linked
+                      </p>
+                      <button className="mt-4 text-orange-500 font-bold text-sm hover:underline flex items-center gap-1 mx-auto">
+                        <Plus size={16} /> Link New Account
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+              {/* ADDRESS SECTION */}
+              {activeTab === "address" && (
+                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  <div className="flex items-center justify-between mb-8">
+                    <div>
+                      <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+                        Registered Store Address
+                      </h2>
+                      <p className="text-sm text-slate-500">
+                        This is your official business location used for
+                        logistics and tax invoices.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setIsEditing(!isEditing)}
+                      className="px-5 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-bold transition-all flex items-center gap-2"
+                    >
+                      <Edit3 size={16} />
+                      {isEditing ? "Save Address" : "Edit Address"}
+                    </button>
+                  </div>
+
+                  <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 rounded-2xl p-6 md:p-8">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                      {/* Left Column: Address Details */}
+                      <div className="space-y-6">
+                        <div className="flex gap-4">
+                          <div className="p-3 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 h-fit">
+                            <MapPin className="text-orange-500" size={24} />
+                          </div>
+                          <div className="space-y-4 flex-grow">
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                Street Address
+                              </label>
+                              {isEditing ? (
+                                <input
+                                  className="..."
+                                  value={addressForm.street}
+                                  onChange={(e) =>
+                                    setAddressForm({
+                                      ...addressForm,
+                                      street: e.target.value,
+                                    })
+                                  }
+                                />
+                              ) : (
+                                <p className="...">
+                                  {addressForm.street || "No street added"}
+                                </p>
+                              )}
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                  City
+                                </label>
+                                {isEditing ? (
+                                  <input
+                                    className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm outline-none"
+                                    defaultValue="San Jose"
+                                  />
+                                ) : (
+                                  <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                                    San Jose
+                                  </p>
+                                )}
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                  Postal Code
+                                </label>
+                                {isEditing ? (
+                                  <input
+                                    className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm outline-none"
+                                    defaultValue="94027"
+                                  />
+                                ) : (
+                                  <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                                    94027
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                State / Province
+                              </label>
+                              {isEditing ? (
+                                <input
+                                  className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm outline-none"
+                                  defaultValue="California"
+                                />
+                              ) : (
+                                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                                  California, USA
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right Column: Visual Verification */}
+                      <div className="flex flex-col justify-center items-center border-t md:border-t-0 md:border-l border-slate-200 dark:border-slate-700 pt-8 md:pt-0 md:pl-8 text-center">
+                        <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 rounded-full flex items-center justify-center mb-4">
+                          <ShieldCheck size={32} />
+                        </div>
+                        <h4 className="font-bold text-slate-900 dark:text-white">
+                          Verified Location
+                        </h4>
+                        <p className="text-xs text-slate-500 mt-2 max-w-[200px]">
+                          This address has been verified against your business
+                          GSTIN/Tax documents.
+                        </p>
+                        <button className="mt-4 text-[10px] font-black uppercase tracking-widest text-orange-500 hover:underline">
+                          Request Re-verification
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-8 p-4 bg-blue-50 dark:bg-blue-500/5 rounded-xl border border-blue-100 dark:border-blue-500/20 flex gap-3 text-blue-600 dark:text-blue-400 text-sm">
+                    <Smartphone size={20} className="flex-shrink-0" />
+                    <p>
+                      <strong>Note:</strong> Pickup services are currently
+                      active for this location. Changing this address may affect
+                      your shipping eligibility in certain regions.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-        )}
+        </div>
       </main>
 
       <Footer />
@@ -182,19 +427,4 @@ const RedesignedSettings = () => {
   );
 };
 
-const SimpleInput = ({ label, value, isEditing }) => (
-  <div className="flex flex-col gap-2">
-    <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">{label}</label>
-    <input 
-      disabled={!isEditing}
-      defaultValue={value}
-      className={`p-3 rounded-lg border text-sm font-medium transition-all ${
-        isEditing 
-        ? "border-orange-500 ring-4 ring-orange-500/5 bg-white dark:bg-slate-900" 
-        : "border-transparent bg-slate-50 dark:bg-slate-800/50 cursor-not-allowed text-slate-500"
-      }`}
-    />
-  </div>
-);
-
-export default RedesignedSettings;
+export default Settings;

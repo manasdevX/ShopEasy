@@ -221,6 +221,12 @@ export default function Signup() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!isEmailVerified)
+      return showError("Please verify your email address first");
+    if (!isMobileVerified)
+      return showError("Please verify your phone number first");
+
     const password = formData.password;
     const isValidPassword = (pass) =>
       /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/.test(
@@ -232,9 +238,6 @@ export default function Signup() {
         "Password must be 8+ characters with uppercase, lowercase, number, and special char."
       );
     }
-
-    if (!isEmailVerified || !isMobileVerified)
-      return showError("Verify your email and phone first");
 
     setLoading(true);
     try {
@@ -491,7 +494,7 @@ export default function Signup() {
 
             <button
               type="submit"
-              disabled={loading || !isEmailVerified || !isMobileVerified}
+              disabled={loading}
               className="w-full bg-orange-500 text-white py-3 rounded-lg hover:bg-orange-600 transition-all font-bold shadow-lg disabled:opacity-50"
             >
               {loading ? (

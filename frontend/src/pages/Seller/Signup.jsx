@@ -475,7 +475,7 @@ export default function SellerSignup() {
 
             <button
               type="submit"
-              disabled={loading || !isEmailVerified || !isMobileVerified}
+              disabled={loading}
               className="w-full bg-orange-500 text-white py-3 rounded-lg hover:bg-orange-600 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed font-bold shadow-lg shadow-orange-500/20"
             >
               {loading ? (
