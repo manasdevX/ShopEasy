@@ -324,17 +324,25 @@ export default function ProductDetails() {
                 <button
                   onClick={() => handleAddToCart(false)}
                   disabled={product.stock === 0}
-                  className="flex-1 bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white font-black py-4 rounded-2xl transition-all active:scale-95 flex items-center justify-center gap-2 uppercase tracking-widest text-xs disabled:opacity-50"
+                  className={`flex-1 font-black py-4 rounded-2xl transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-xs
+    ${
+      product.stock === 0
+        ? "bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed"
+        : "bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white active:scale-95"
+    }`}
                 >
-                  <ShoppingCart size={18} /> Add to Cart
+                  <ShoppingCart size={18} />{" "}
+                  {product.stock === 0 ? "Sold Out" : "Add to Cart"}
                 </button>
-                <button
-                  onClick={handleBuyNow}
-                  disabled={product.stock === 0}
-                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-orange-500/20 transition-all active:scale-95 flex items-center justify-center gap-2 uppercase tracking-widest text-xs disabled:opacity-50"
-                >
-                  <Zap size={18} fill="currentColor" /> Buy Now
-                </button>
+
+                {product.stock > 0 && (
+                  <button
+                    onClick={handleBuyNow}
+                    className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-orange-500/20 transition-all active:scale-95 flex items-center justify-center gap-2 uppercase tracking-widest text-xs"
+                  >
+                    <Zap size={18} fill="currentColor" /> Buy Now
+                  </button>
+                )}
               </div>
 
               <div className="flex items-center justify-between bg-slate-100/50 dark:bg-slate-800/50 rounded-2xl p-1.5 border border-slate-200/60 dark:border-slate-700/50">
@@ -344,16 +352,26 @@ export default function ProductDetails() {
                 <div className="flex items-center bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
                   <button
                     onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                    className="w-10 h-10 flex items-center justify-center text-slate-500 hover:text-orange-500 transition-colors"
+                    disabled={product.stock === 0}
+                    className="w-10 h-10 flex items-center justify-center text-slate-500 hover:text-orange-500 disabled:opacity-20"
                   >
                     <Minus size={14} strokeWidth={3} />
                   </button>
                   <span className="w-10 text-center font-black text-sm text-slate-900 dark:text-white">
-                    {quantity}
+                    {product.stock === 0 ? 0 : quantity}
                   </span>
                   <button
-                    onClick={() => setQuantity((q) => q + 1)}
-                    className="w-10 h-10 flex items-center justify-center text-slate-500 hover:text-orange-500 transition-colors"
+                    onClick={() => {
+                      if (quantity < product.stock) {
+                        setQuantity((q) => q + 1);
+                      } else {
+                        toast.error(`Only ${product.stock} items available`, {
+                          id: "stock-limit",
+                        });
+                      }
+                    }}
+                    disabled={product.stock === 0 || quantity >= product.stock}
+                    className="w-10 h-10 flex items-center justify-center text-slate-500 hover:text-orange-500 disabled:opacity-20"
                   >
                     <Plus size={14} strokeWidth={3} />
                   </button>
@@ -423,6 +441,51 @@ export default function ProductDetails() {
                 <p className="text-[10px] font-bold text-green-400 uppercase tracking-widest mt-1">
                   Free Express Delivery Included
                 </p>
+                {/* STOCK STATUS & URGENCY */}
+                <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+                  {product.stock > 0 ? (
+                    <div className="space-y-2.5">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className={`h-2 w-2 rounded-full ${
+                            product.stock <= 5
+                              ? "bg-red-500 animate-pulse"
+                              : "bg-emerald-500"
+                          }`}
+                        />
+                        <span
+                          className={`text-[10px] font-black uppercase tracking-[0.2em] ${
+                            product.stock <= 5
+                              ? "text-red-500"
+                              : "text-emerald-500"
+                          }`}
+                        >
+                          {product.stock <= 5
+                            ? `Hurry! Only ${product.stock} left`
+                            : "Item Available"}
+                        </span>
+                      </div>
+                      {product.stock <= 10 && (
+                        <div className="w-full max-w-[180px] h-1 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full transition-all duration-1000 ${
+                              product.stock <= 5
+                                ? "bg-red-500"
+                                : "bg-orange-500"
+                            }`}
+                            style={{ width: `${(product.stock / 10) * 100}%` }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/30 p-3 rounded-xl">
+                      <p className="text-red-500 text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+                        <ImageOff size={14} /> Temporarily Out of Stock
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 

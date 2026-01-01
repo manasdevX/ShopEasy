@@ -224,7 +224,7 @@ export default function EditProduct() {
 
       if (res.ok) {
         showSuccess("Product Updated Successfully!");
-        navigate("/Seller/Products");
+        navigate("/Seller/Dashboard");
       } else {
         const error = await res.json();
         throw new Error(error.message);
