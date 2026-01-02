@@ -77,7 +77,7 @@ export const addOrderItems = async (req, res) => {
 
     // 4. Create Order
     const order = new Order({
-      user: req.user._id, // ✅ Links order to user
+      user: req.user._id, // Links order to user
       orderItems: mappedOrderItems,
       shippingAddress: {
         address: shippingAddress.address,
@@ -179,7 +179,7 @@ export const getMyOrders = async (req, res) => {
   }
 };
 
-// @desc    Cancel Order (Customer)
+// @desc    Cancel Order (Customer) - Restores Stock & Refunds
 // @route   PUT /api/orders/:id/cancel
 // @access  Private (Customer)
 export const cancelOrder = async (req, res) => {
@@ -190,10 +190,9 @@ export const cancelOrder = async (req, res) => {
       return res.status(404).json({ message: "Order not found" });
     }
 
-    // ✅ UPDATED: Allow cancellation for Shipped orders too
     if (
-      order.status !== "Processing" && 
-      order.status !== "Pending" && 
+      order.status !== "Processing" &&
+      order.status !== "Pending" &&
       order.status !== "Shipped"
     ) {
       return res
@@ -204,13 +203,11 @@ export const cancelOrder = async (req, res) => {
     order.status = "Cancelled";
     order.orderItems.forEach((item) => (item.itemStatus = "Cancelled"));
 
-    // 💰 REFUND LOGIC
+    // 💰 REFUND LOGIC (For Cancelled Orders)
     if (order.paymentMethod !== "COD" && order.isPaid) {
       order.isRefunded = true;
       order.refundedAt = Date.now();
     }
-
-    await order.save();
 
     // ✅ RESTORE STOCK
     for (const item of order.orderItems) {
@@ -221,7 +218,9 @@ export const cancelOrder = async (req, res) => {
       }
     }
 
-    // ✅ Notify Sellers (DB & Socket)
+    await order.save();
+
+    // ✅ Notify Sellers
     const sellersToNotify = [
       ...new Set(order.orderItems.map((item) => item.seller.toString())),
     ];
@@ -255,7 +254,7 @@ export const cancelOrder = async (req, res) => {
   }
 };
 
-// @desc    Request Return (Customer)
+// @desc    Request Return (Customer) - AUTO APPROVES & RESTORES STOCK
 // @route   PUT /api/orders/:id/return
 // @access  Private (Customer)
 export const requestReturn = async (req, res) => {
@@ -272,7 +271,7 @@ export const requestReturn = async (req, res) => {
         .json({ message: "Order must be delivered to request return" });
     }
 
-    // ✅ NEW: 14-Day Return Window Validation
+    // 14-Day Return Window Validation
     const deliveredDate = new Date(order.updatedAt);
     const currentDate = new Date();
     const diffTime = Math.abs(currentDate - deliveredDate);
@@ -282,12 +281,29 @@ export const requestReturn = async (req, res) => {
        return res.status(400).json({ message: "Return period (14 days) has expired." });
     }
 
-    order.status = "Return Requested";
-    order.orderItems.forEach((item) => (item.itemStatus = "Return Requested"));
+    // ✅ AUTO-UPDATE STATUS TO "Return Initiated"
+    order.status = "Return Initiated";
+    order.orderItems.forEach((item) => (item.itemStatus = "Return Initiated"));
+
+    // ✅ 1. RESTORE STOCK IMMEDIATELY (Auto-Accepted)
+    for (const item of order.orderItems) {
+      const product = await Product.findById(item.product);
+      if (product) {
+        product.stock += item.qty;
+        await product.save();
+      }
+    }
+
+    // ✅ 2. PROCESS REFUND IMMEDIATELY (Auto-Accepted)
+    // If the order was paid (Online or COD that was delivered), mark as Refunded
+    if (order.isPaid && !order.isRefunded) {
+      order.isRefunded = true;
+      order.refundedAt = Date.now();
+    }
 
     await order.save();
 
-    // ✅ Notify Sellers
+    // ✅ 3. Notify Sellers (Informational Only)
     const sellersToNotify = [
       ...new Set(order.orderItems.map((item) => item.seller.toString())),
     ];
@@ -296,17 +312,17 @@ export const requestReturn = async (req, res) => {
       await createNotification(
         sellerId,
         "alert",
-        "Return Requested ↩️",
-        `Return requested for Order #${order._id
+        "Return Initiated ↩️",
+        `Order #${order._id
           .toString()
           .slice(-6)
-          .toUpperCase()}`,
+          .toUpperCase()} has been returned. Stock updated & Refund initiated.`,
         order._id
       );
 
       if (req.io) {
         req.io.to(sellerId).emit("order_alert", {
-          message: `Return Requested for Order #${order._id
+          message: `Return Auto-Approved for Order #${order._id
             .toString()
             .slice(-6)
             .toUpperCase()}`,
@@ -315,7 +331,7 @@ export const requestReturn = async (req, res) => {
       }
     }
 
-    res.json({ message: "Return requested successfully" });
+    res.json({ message: "Return initiated and refund processed successfully." });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -348,9 +364,9 @@ export const getSellerOrders = async (req, res) => {
         derivedStatus = "Delivered";
       else if (itemStatuses.every((s) => s === "Cancelled"))
         derivedStatus = "Cancelled";
-      else if (itemStatuses.every((s) => s === "Returned"))
-        derivedStatus = "Returned";
-      else if (itemStatuses.includes("Return Requested"))
+      else if (itemStatuses.every((s) => s === "Returned" || s === "Return Initiated"))
+        derivedStatus = "Return Initiated"; // ✅ Mapped to new status
+      else if (itemStatuses.includes("Return Requested")) // Legacy check
         derivedStatus = "Return Requested";
       else if (itemStatuses.includes("Shipped")) derivedStatus = "Shipped";
       else derivedStatus = "Processing";
@@ -361,6 +377,7 @@ export const getSellerOrders = async (req, res) => {
         shippingAddress: order.shippingAddress,
         paymentMethod: order.paymentMethod,
         isPaid: order.isPaid,
+        isRefunded: order.isRefunded, // ✅ Added to view in frontend
         createdAt: order.createdAt,
         sellerTotal: sellerItems.reduce(
           (acc, item) => acc + item.price * item.qty,
@@ -376,7 +393,7 @@ export const getSellerOrders = async (req, res) => {
       sellerOrders = sellerOrders.filter((o) => o.status === status);
     }
 
-    // ✅ Search Logic
+    // Search Logic
     if (search) {
       const searchRegex = new RegExp(search, "i");
       sellerOrders = sellerOrders.filter(
@@ -393,7 +410,7 @@ export const getSellerOrders = async (req, res) => {
   }
 };
 
-// @desc    Update Order Item Status (Seller Only)
+// @desc    Update Order Item Status (Seller Only) - Shipping Only
 // @route   PUT /api/orders/:id/status
 // @access  Private (Seller)
 export const updateOrderStatus = async (req, res) => {
@@ -441,7 +458,7 @@ export const updateOrderStatus = async (req, res) => {
       order.deliveredAt = Date.now();
       order.status = "Delivered";
 
-      // ✅ Auto-Update Payment for COD
+      // ✅ Auto-Update Payment for COD on Delivery
       if (order.paymentMethod === "COD") {
         order.isPaid = true;
         order.paidAt = Date.now();
@@ -466,108 +483,6 @@ export const updateOrderStatus = async (req, res) => {
     res.json({
       message: "Order status updated successfully",
       status: status,
-    });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// @desc    Handle Return Request (Approve/Reject)
-// @route   PUT /api/orders/handle-return
-// @access  Private (Seller)
-export const handleReturnRequest = async (req, res) => {
-  try {
-    const { orderId, status } = req.body; // "Returned" (Approved) or "Delivered" (Rejected)
-    const order = await Order.findById(orderId);
-
-    if (!order) return res.status(404).json({ message: "Order not found" });
-
-    // Validate Status
-    if (order.status !== "Return Requested") {
-      return res
-        .status(400)
-        .json({ message: "Order is not waiting for return approval" });
-    }
-
-    let updatedCount = 0;
-
-    // 1. Update Items
-    order.orderItems.forEach((item) => {
-      if (
-        item.seller.toString() === req.seller._id.toString() &&
-        item.itemStatus === "Return Requested"
-      ) {
-        item.itemStatus = status;
-        updatedCount++;
-      }
-    });
-
-    if (updatedCount === 0) {
-      return res
-        .status(400)
-        .json({ message: "No pending return requests found." });
-    }
-
-    // 2. Check Global Status
-    const allReturned = order.orderItems.every(
-      (i) => i.itemStatus === "Returned"
-    );
-    if (allReturned) order.status = "Returned";
-
-    const allDelivered = order.orderItems.every(
-      (i) => i.itemStatus === "Delivered"
-    );
-    if (allDelivered) order.status = "Delivered";
-
-    // 3. 💰 REFUND LOGIC & STOCK RESTORATION
-    if (status === "Returned") {
-      // Restore Stock
-      for (const item of order.orderItems) {
-        if (item.seller.toString() === req.seller._id.toString()) {
-          const product = await Product.findById(item.product);
-          if (product) {
-            product.stock += item.qty;
-            await product.save();
-          }
-        }
-      }
-
-      // Mark Refunded if Paid
-      if (order.isPaid && !order.isRefunded) {
-        order.isRefunded = true;
-        order.refundedAt = Date.now();
-      }
-    }
-
-    await order.save();
-
-    // 4. Notify Customer
-    if (req.io) {
-      req.io.to(order.user.toString()).emit("order_alert", {
-        message: `Your return for Order #${order._id
-          .toString()
-          .slice(-6)
-          .toUpperCase()} was ${
-          status === "Returned" ? "APPROVED" : "REJECTED"
-        }.`,
-        type: status === "Returned" ? "success" : "error",
-      });
-    }
-
-    // 5. Notify Seller
-    if (req.io) {
-      req.io.to(req.seller._id.toString()).emit("order_alert", {
-        message: `Return ${
-          status === "Returned" ? "Approved" : "Rejected"
-        } for Order #${order._id.toString().slice(-6).toUpperCase()}`,
-        type: "success",
-      });
-    }
-
-    res.json({
-      message: `Return request ${
-        status === "Returned" ? "Approved & Refund Processed" : "Rejected"
-      }`,
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
