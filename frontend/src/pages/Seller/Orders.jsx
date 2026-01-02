@@ -101,7 +101,6 @@ export default function SellerOrders() {
   };
 
   // --- SPECIAL HANDLER: RETURN APPROVAL ---
-  // This calls the specific endpoint that handles stock restoration & refunds
   const handleReturnApproval = async (orderId, action) => {
     // action = "Returned" (Approve) or "Delivered" (Reject)
     try {
@@ -576,16 +575,34 @@ export default function SellerOrders() {
                       {selectedOrder.paymentMethod}
                     </span>
                   </div>
+                  {/* ✅ UPDATED: SHOW REFUNDED STATUS */}
                   <div className="bg-slate-50 dark:bg-slate-800/50 p-5 rounded-2xl text-sm flex justify-between items-center mt-2 border border-slate-100 dark:border-slate-800">
                     <span className="text-slate-500">Status:</span>
                     <span
                       className={`font-bold ${
-                        selectedOrder.isPaid
+                        selectedOrder.isRefunded
+                          ? "text-purple-500" // Purple for Refunded
+                          : selectedOrder.isPaid
                           ? "text-emerald-500"
                           : "text-orange-500"
                       }`}
                     >
-                      {selectedOrder.isPaid ? "PAID" : "PENDING"}
+                      {selectedOrder.isRefunded
+                        ? "REFUNDED"
+                        : selectedOrder.isPaid
+                        ? "PAID"
+                        : "PENDING"}
+                    </span>
+                  </div>
+                  {/* ✅ NEW: ORDER STATUS ROW */}
+                  <div className="bg-slate-50 dark:bg-slate-800/50 p-5 rounded-2xl text-sm flex justify-between items-center mt-2 border border-slate-100 dark:border-slate-800">
+                    <span className="text-slate-500">Current Status:</span>
+                    <span
+                      className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter border ${getStatusColor(
+                        selectedOrder.status
+                      )}`}
+                    >
+                      {selectedOrder.status}
                     </span>
                   </div>
                 </div>
