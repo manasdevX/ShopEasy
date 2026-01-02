@@ -1,5 +1,19 @@
 import User from "../models/User.js";
 import Cart from "../models/Cart.js";
+import redisClient from "../config/redis.js"; // <--- IMPORT REDIS
+
+/**
+ * Helper: Clear User Profile Cache
+ * Call this whenever user data (info, address, wishlist) is modified.
+ */
+const clearUserCache = async (userId) => {
+  try {
+    await redisClient.del(`user_profile:${userId}`);
+    console.log(`🧹 Cache Cleared for User: ${userId}`);
+  } catch (error) {
+    console.error("Cache Clear Error:", error);
+  }
+};
 
 /* ======================================================
    1. GET USER PROFILE (Info + Addresses + Wishlist)
@@ -7,6 +21,16 @@ import Cart from "../models/Cart.js";
 ====================================================== */
 export const getUserProfile = async (req, res) => {
   try {
+    const cacheKey = `user_profile:${req.user._id}`;
+
+    // 1. Check Redis Cache
+    const cachedProfile = await redisClient.get(cacheKey);
+    if (cachedProfile) {
+      console.log("⚡ Serving User Profile from Redis");
+      return res.status(200).json(JSON.parse(cachedProfile));
+    }
+
+    // 2. Fetch from DB if not in Cache
     // Populate wishlist with product details for the UI cards
     const user = await User.findById(req.user._id).populate({
       path: "wishlist",
@@ -23,7 +47,7 @@ export const getUserProfile = async (req, res) => {
       user.addresses[user.addresses.length - 1] ||
       {};
 
-    res.status(200).json({
+    const responseData = {
       _id: user._id,
       name: user.name,
       email: user.email,
@@ -49,7 +73,12 @@ export const getUserProfile = async (req, res) => {
 
       // Full product objects for "My Wishlist" tab
       wishlist: user.wishlist || [],
-    });
+    };
+
+    // 3. Save to Redis (Expires in 1 hour)
+    await redisClient.setEx(cacheKey, 3600, JSON.stringify(responseData));
+
+    res.status(200).json(responseData);
   } catch (error) {
     console.error("GET PROFILE ERROR:", error);
     res.status(500).json({ message: "Server Error" });
@@ -79,7 +108,6 @@ export const updateUserProfile = async (req, res) => {
       user.profilePicture = req.file.path;
     } else if (req.body.removeProfilePicture === "true") {
       // Case B: Explicit removal request from Frontend
-      // This sets the DB field to empty string, reverting UI to initial station
       user.profilePicture = "";
     }
 
@@ -142,6 +170,9 @@ export const updateUserProfile = async (req, res) => {
 
     await user.save();
 
+    // ✅ INVALIDATE CACHE
+    await clearUserCache(user._id);
+
     // 3. Return Response (Re-fetch primary address for consistency)
     const primaryAddr =
       user.addresses.find((a) => a.isDefault) || user.addresses[0] || {};
@@ -201,6 +232,9 @@ export const addAddress = async (req, res) => {
     user.addresses.push(newAddress);
     await user.save();
 
+    // ✅ INVALIDATE CACHE
+    await clearUserCache(user._id);
+
     res.status(201).json(user.addresses);
   } catch (error) {
     console.error("ADD ADDRESS ERROR:", error.message);
@@ -226,6 +260,10 @@ export const deleteAddress = async (req, res) => {
     }
 
     await user.save();
+
+    // ✅ INVALIDATE CACHE
+    await clearUserCache(user._id);
+
     res.json(user.addresses);
   } catch (error) {
     console.error("DELETE ADDRESS ERROR:", error);
@@ -253,6 +291,10 @@ export const updateAddress = async (req, res) => {
       address.type = req.body.type || address.type;
 
       await user.save();
+
+      // ✅ INVALIDATE CACHE
+      await clearUserCache(user._id);
+
       res.json(user.addresses);
     } else {
       res.status(404).json({ message: "Address not found" });
@@ -281,6 +323,10 @@ export const setDefaultAddress = async (req, res) => {
     addressToUpdate.isDefault = true;
 
     await user.save();
+
+    // ✅ INVALIDATE CACHE
+    await clearUserCache(user._id);
+
     res.json(user.addresses);
   } catch (error) {
     console.error("SET DEFAULT ERROR:", error);
@@ -304,6 +350,9 @@ export const addToWishlist = async (req, res) => {
 
     user.wishlist.push(productId);
     await user.save();
+
+    // ✅ INVALIDATE CACHE
+    await clearUserCache(user._id);
 
     // Return populated wishlist for immediate UI update
     const updatedUser = await User.findById(req.user._id).populate({
@@ -331,6 +380,9 @@ export const removeFromWishlist = async (req, res) => {
     );
 
     await user.save();
+
+    // ✅ INVALIDATE CACHE
+    await clearUserCache(user._id);
 
     // Return populated wishlist
     const updatedUser = await User.findById(req.user._id).populate({
@@ -360,6 +412,8 @@ export const deleteUserAccount = async (req, res) => {
     const deletedUser = await User.findByIdAndDelete(userId);
 
     if (deletedUser) {
+      // ✅ INVALIDATE CACHE (Ensure no stale data remains)
+      await clearUserCache(userId);
       res.json({ message: "Account deleted successfully" });
     } else {
       res.status(404).json({ message: "User not found" });
@@ -388,7 +442,12 @@ export const updateUserPassword = async (req, res) => {
     // Check if current password matches using the model method
     if (await user.matchPassword(currentPassword)) {
       user.password = newPassword;
+      user.passwordChangedAt = Date.now(); // Mark change time
       await user.save(); // Model hook handles hashing
+
+      // ✅ INVALIDATE CACHE (To update passwordChangedAt timestamp)
+      await clearUserCache(user._id);
+
       res.json({ message: "Password updated successfully" });
     } else {
       res.status(401).json({ message: "Invalid current password" });
@@ -465,6 +524,9 @@ export const updateUserEmail = async (req, res) => {
     // 5. Update Email
     user.email = newEmail;
     await user.save();
+
+    // ✅ INVALIDATE CACHE
+    await clearUserCache(user._id);
 
     // 6. Return updated user info
     res.json({

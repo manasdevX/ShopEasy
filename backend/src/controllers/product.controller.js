@@ -2,13 +2,13 @@ import Product from "../models/Product.js";
 import cloudinary from "cloudinary";
 import streamifier from "streamifier";
 import dotenv from "dotenv";
+import redisClient from "../config/redis.js"; // <--- 1. IMPORT REDIS CLIENT
 
 // Load environment variables
 dotenv.config();
 
 /**
  * Helper: Upload Buffer to Cloudinary
- * Wraps the upload stream in a Promise for async/await usage
  */
 const uploadToCloudinary = (buffer) => {
   return new Promise((resolve, reject) => {
@@ -29,6 +29,35 @@ const uploadToCloudinary = (buffer) => {
   });
 };
 
+/**
+ * Helper: Clear Product Caches
+ * Clears specific product ID and any list/search caches to ensure data freshness
+ */
+const clearProductCache = async (productId = null, sellerId = null) => {
+  try {
+    // 1. Clear "All Products" search/filter caches (Pattern Match)
+    // We scan for keys starting with "products:" (lists) and delete them
+    const keys = await redisClient.keys("products:*");
+    if (keys.length > 0) {
+      await redisClient.del(keys);
+    }
+
+    // 2. Clear specific product detail cache
+    if (productId) {
+      await redisClient.del(`product:${productId}`);
+    }
+
+    // 3. Clear specific seller's list cache
+    if (sellerId) {
+      await redisClient.del(`seller_products:${sellerId}`);
+    }
+
+    console.log("🧹 Redis Cache Cleared (Lists & Details)");
+  } catch (error) {
+    console.error("Cache Clear Error:", error);
+  }
+};
+
 /* =========================================
    PUBLIC ROUTES
 ========================================= */
@@ -38,12 +67,22 @@ const uploadToCloudinary = (buffer) => {
 // @access  Public
 export const getAllProducts = async (req, res) => {
   try {
+    // 1. Generate Unique Cache Key based on Query Params
+    // This ensures ?keyword=shoe is cached differently from ?keyword=shirt
+    const cacheKey = `products:${JSON.stringify(req.query)}`;
+
+    // 2. Check Redis
+    const cachedResult = await redisClient.get(cacheKey);
+    if (cachedResult) {
+      console.log("⚡ Serving Search Results from Redis");
+      return res.json(JSON.parse(cachedResult));
+    }
+
     const pageSize = Number(req.query.limit) || 12;
     const page = Number(req.query.pageNumber) || 1;
 
-    // --- 1. Base Search Query (Keyword Only) ---
+    // --- Base Search Query ---
     let keywordQuery = {};
-
     if (req.query.keyword) {
       keywordQuery.$or = [
         { name: { $regex: req.query.keyword, $options: "i" } },
@@ -54,39 +93,29 @@ export const getAllProducts = async (req, res) => {
       ];
     }
 
-    // --- 2. Filter Query (Sidebar Filters) ---
+    // --- Filter Query ---
     let filterQuery = {};
-
-    if (req.query.category) {
-      filterQuery.category = req.query.category;
-    }
-
+    if (req.query.category) filterQuery.category = req.query.category;
     if (req.query.minPrice || req.query.maxPrice) {
       filterQuery.price = {};
-      if (req.query.minPrice) {
+      if (req.query.minPrice)
         filterQuery.price.$gte = Number(req.query.minPrice);
-      }
-      if (req.query.maxPrice) {
+      if (req.query.maxPrice)
         filterQuery.price.$lte = Number(req.query.maxPrice);
-      }
     }
-
     if (req.query.rating) {
       filterQuery.rating = { $gte: Number(req.query.rating) };
     }
 
-    // --- 3. Combined Query for Results ---
     const finalQuery = { ...keywordQuery, ...filterQuery };
 
-    // --- 4. Execute Queries in Parallel ---
+    // --- Execute DB Queries ---
     const [products, count, facetsResult] = await Promise.all([
       Product.find(finalQuery)
         .limit(pageSize)
         .skip(pageSize * (page - 1))
         .sort({ createdAt: -1 }),
-
       Product.countDocuments(finalQuery),
-
       Product.aggregate([
         { $match: keywordQuery },
         {
@@ -96,11 +125,7 @@ export const getAllProducts = async (req, res) => {
               { $sort: { count: -1 } },
             ],
             ratings: [
-              {
-                $project: {
-                  rating: { $floor: "$rating" },
-                },
-              },
+              { $project: { rating: { $floor: "$rating" } } },
               { $group: { _id: "$rating", count: { $sum: 1 } } },
               { $sort: { _id: -1 } },
             ],
@@ -109,13 +134,18 @@ export const getAllProducts = async (req, res) => {
       ]),
     ]);
 
-    res.json({
+    const responseData = {
       products,
       page,
       pages: Math.ceil(count / pageSize),
       total: count,
       facets: facetsResult[0],
-    });
+    };
+
+    // 3. Save to Redis (TTL: 1 hour)
+    await redisClient.setEx(cacheKey, 3600, JSON.stringify(responseData));
+
+    res.json(responseData);
   } catch (error) {
     console.error("Search Error:", error);
     res.status(500).json({ message: error.message });
@@ -127,12 +157,24 @@ export const getAllProducts = async (req, res) => {
 // @access  Public
 export const getProductById = async (req, res) => {
   try {
+    const cacheKey = `product:${req.params.id}`;
+
+    // 1. Check Redis
+    const cachedProduct = await redisClient.get(cacheKey);
+    if (cachedProduct) {
+      console.log("⚡ Serving Product Detail from Redis");
+      return res.json(JSON.parse(cachedProduct));
+    }
+
+    // 2. Fetch from DB
     const product = await Product.findById(req.params.id).populate(
       "reviews.user",
       "name"
     );
 
     if (product) {
+      // 3. Save to Redis (TTL: 1 hour)
+      await redisClient.setEx(cacheKey, 3600, JSON.stringify(product));
       res.json(product);
     } else {
       res.status(404).json({ message: "Product not found" });
@@ -151,9 +193,21 @@ export const getProductById = async (req, res) => {
 // @access  Private (Seller Only)
 export const getSellerProducts = async (req, res) => {
   try {
+    const cacheKey = `seller_products:${req.seller._id}`;
+
+    // 1. Check Redis
+    const cachedSellerProducts = await redisClient.get(cacheKey);
+    if (cachedSellerProducts) {
+      return res.json(JSON.parse(cachedSellerProducts));
+    }
+
     const products = await Product.find({ seller: req.seller._id }).sort({
       createdAt: -1,
     });
+
+    // 2. Save to Redis
+    await redisClient.setEx(cacheKey, 3600, JSON.stringify(products));
+
     res.json(products);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -221,6 +275,9 @@ export const createProduct = async (req, res) => {
       isBestSeller: isBestSeller === "true" || isBestSeller === true,
     });
 
+    // ✅ INVALIDATE CACHE (Clear lists so new product appears)
+    await clearProductCache(null, req.seller._id);
+
     res.status(201).json(product);
   } catch (error) {
     console.error("ADD PRODUCT ERROR:", error);
@@ -245,6 +302,7 @@ export const updateProduct = async (req, res) => {
         .json({ message: "Not authorized to edit this product" });
     }
 
+    // --- Image Handling Logic ---
     if (req.files && req.files.thumbnail) {
       product.thumbnail = await uploadToCloudinary(
         req.files.thumbnail[0].buffer
@@ -276,11 +334,12 @@ export const updateProduct = async (req, res) => {
       req.body.existingImages === undefined &&
       req.files?.images === undefined
     ) {
-      // Do nothing (user didn't touch gallery)
+      // Keep existing
     } else {
       product.images = [];
     }
 
+    // --- Text Field Updates ---
     product.name = req.body.name || product.name;
     product.price = req.body.price || product.price;
     product.mrp = req.body.mrp || product.mrp;
@@ -298,14 +357,16 @@ export const updateProduct = async (req, res) => {
       }
     }
 
-    if (req.body.isFeatured !== undefined) {
+    if (req.body.isFeatured !== undefined)
       product.isFeatured = req.body.isFeatured === "true";
-    }
-    if (req.body.isBestSeller !== undefined) {
+    if (req.body.isBestSeller !== undefined)
       product.isBestSeller = req.body.isBestSeller === "true";
-    }
 
     const updatedProduct = await product.save();
+
+    // ✅ INVALIDATE CACHE (Clear specific product & lists)
+    await clearProductCache(product._id, req.seller._id);
+
     res.json(updatedProduct);
   } catch (error) {
     console.error("UPDATE ERROR:", error);
@@ -328,6 +389,10 @@ export const deleteProduct = async (req, res) => {
       }
 
       await product.deleteOne();
+
+      // ✅ INVALIDATE CACHE
+      await clearProductCache(req.params.id, req.seller._id);
+
       res.json({ message: "Product removed" });
     } else {
       res.status(404).json({ message: "Product not found" });
@@ -348,7 +413,6 @@ export const createProductReview = async (req, res) => {
   try {
     const { rating, comment } = req.body;
 
-    // Validate ID before query to prevent CastError crash
     if (!req.params.id || req.params.id.match(/^[0-9a-fA-F]{24}$/) === null) {
       return res.status(400).json({ message: "Invalid Product ID format" });
     }
@@ -377,12 +441,16 @@ export const createProductReview = async (req, res) => {
         product.reviews.length;
 
       await product.save();
+
+      // ✅ INVALIDATE CACHE (Clear product detail cache to show new review)
+      await clearProductCache(product._id);
+
       res.status(201).json({ message: "Review added" });
     } else {
       res.status(404).json({ message: "Product not found" });
     }
   } catch (error) {
-    console.error("Review Error:", error); // Log the actual error
+    console.error("Review Error:", error);
     res.status(500).json({ message: "Server Error: " + error.message });
   }
 };
