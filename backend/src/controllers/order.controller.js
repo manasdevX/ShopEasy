@@ -1,6 +1,7 @@
 import Order from "../models/Order.js";
 import Product from "../models/Product.js";
 import { createNotification } from "./notification.controller.js";
+import sendEmail from "../utils/emailHelper.js";
 
 // @desc    Create new order (Direct COD or General)
 // @route   POST /api/orders
@@ -104,7 +105,76 @@ export const addOrderItems = async (req, res) => {
       await item.product.save();
     }
 
-    // 6. Notify Sellers (DB & Socket)
+    // 6. ✅ SEND DETAILED ORDER CONFIRMATION EMAIL
+    try {
+      // A. Generate HTML for Order Items
+      const orderItemsHTML = mappedOrderItems
+        .map(
+          (item) => `
+          <tr>
+            <td style="padding: 10px; border-bottom: 1px solid #eee;">
+              <img src="${item.image}" alt="${item.name}" width="50" style="border-radius: 5px; display: block;">
+            </td>
+            <td style="padding: 10px; border-bottom: 1px solid #eee; font-size: 14px;">
+              ${item.name} <br>
+              <span style="font-size: 12px; color: #777;">Qty: ${item.qty}</span>
+            </td>
+            <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: right; font-weight: bold;">
+              ₹${(item.price * item.qty).toLocaleString()}
+            </td>
+          </tr>
+        `
+        )
+        .join("");
+
+      // B. Construct Full Email Template
+      const emailMessage = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden;">
+          
+          <div style="background-color: #2563eb; padding: 20px; text-align: center;">
+            <h1 style="color: #ffffff; margin: 0; font-size: 24px;">Order Confirmed!</h1>
+          </div>
+
+          <div style="padding: 20px;">
+            <p>Hi <strong>${req.user.name}</strong>,</p>
+            <p>Thank you for shopping with us! We have received your order.</p>
+
+            <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin: 20px 0;">
+              <p style="margin: 5px 0;"><strong>Order ID:</strong> ${createdOrder._id}</p>
+              <p style="margin: 5px 0;"><strong>Payment Method:</strong> ${paymentMethod}</p>
+              <p style="margin: 5px 0; font-size: 18px; color: #2563eb;"><strong>Total: ₹${totalPrice.toLocaleString()}</strong></p>
+            </div>
+
+            <h3 style="border-bottom: 2px solid #eee; padding-bottom: 10px; margin-top: 30px;">Order Details</h3>
+            <table style="width: 100%; border-collapse: collapse; text-align: left;">
+              ${orderItemsHTML}
+            </table>
+
+            <div style="text-align: center; margin-top: 30px; margin-bottom: 20px;">
+              <a href="${process.env.FRONTEND_URL}/account" 
+                 style="background-color: #2563eb; color: white; padding: 12px 25px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">
+                 View Order History
+              </a>
+            </div>
+            
+            <p style="font-size: 12px; color: #999; text-align: center; margin-top: 20px;">
+              If you have any questions, reply to this email.
+            </p>
+          </div>
+        </div>
+      `;
+
+      await sendEmail({
+        email: req.user.email,
+        subject: `Order Confirmation - ${createdOrder._id}`,
+        message: emailMessage,
+      });
+    } catch (emailError) {
+      console.error("Failed to send order confirmation email:", emailError);
+      // We do not crash the request if email fails
+    }
+
+    // 7. Notify Sellers (DB & Socket)
     const sellersToNotify = [
       ...new Set(mappedOrderItems.map((item) => item.seller.toString())),
     ];
@@ -195,11 +265,9 @@ export const cancelOrder = async (req, res) => {
       order.status !== "Pending" &&
       order.status !== "Shipped"
     ) {
-      return res
-        .status(400)
-        .json({
-          message: "Cannot cancel order at this stage (Already Delivered)",
-        });
+      return res.status(400).json({
+        message: "Cannot cancel order at this stage (Already Delivered)",
+      });
     }
 
     order.status = "Cancelled";
@@ -373,7 +441,7 @@ export const getSellerOrders = async (req, res) => {
       else if (
         itemStatuses.every((s) => s === "Returned" || s === "Return Initiated")
       )
-        derivedStatus = "Return Initiated"; // ✅ Maps both to new status
+        derivedStatus = "Return Initiated";
       else if (itemStatuses.includes("Shipped")) derivedStatus = "Shipped";
       else derivedStatus = "Processing";
 
