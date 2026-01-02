@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import {
   CheckCircle2,
@@ -10,18 +10,55 @@ import {
   ShoppingBag,
   MapPin,
   ExternalLink,
-  RotateCcw, // Icon for Returns
-  Calendar,
+  RotateCcw,
+  Loader2,
 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 
-export default function OrderSuccess() {
+const API_URL = import.meta.env.VITE_API_URL;
+
+export default function OrderSummary() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Data passed from CheckoutPage or OrderHistory
-  const order = location.state?.order || location.state;
+  // 1. Initialize with passed state (if available)
+  const initialOrder = location.state?.order || location.state;
+  const [order, setOrder] = useState(initialOrder);
+  const [loading, setLoading] = useState(!initialOrder);
+
+  // 2. Fetch Fresh Data on Mount (Vital for Status Updates)
+  useEffect(() => {
+    const fetchLatestOrder = async () => {
+      if (!initialOrder?._id) return;
+      
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch(`${API_URL}/api/orders/${initialOrder._id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        
+        if (res.ok) {
+          const freshData = await res.json();
+          setOrder(freshData); // ✅ Updates UI with "Delivered" / "Returned"
+        }
+      } catch (error) {
+        console.error("Failed to refresh order:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchLatestOrder();
+  }, [initialOrder?._id]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#030712] flex items-center justify-center">
+        <Loader2 className="animate-spin text-blue-500" size={40} />
+      </div>
+    );
+  }
 
   if (!order) {
     return (
@@ -46,8 +83,7 @@ export default function OrderSuccess() {
       return {
         label: "Return Status",
         value: "Pickup Scheduled",
-        // ✅ UPDATED: Explicitly states Refund Processed
-        subtext: "Refund Processed to Original Source", 
+        subtext: "Refund Processed to Original Source",
         color: "text-purple-500",
         bg: "bg-purple-500/10",
         icon: <RotateCcw size={20} className="text-purple-500" />,
@@ -69,14 +105,13 @@ export default function OrderSuccess() {
       return {
         label: "Delivery Status",
         value: "Delivered Successfully",
-        subtext: `Delivered on ${new Date(order.updatedAt).toLocaleDateString(
-          "en-IN",
-          {
-            day: "numeric",
-            month: "long",
-            year: "numeric",
-          }
-        )}`,
+        subtext: `Delivered on ${new Date(
+          order.deliveredAt || order.updatedAt
+        ).toLocaleDateString("en-IN", {
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+        })}`,
         color: "text-green-500",
         bg: "bg-green-500/10",
         icon: <CheckCircle2 size={20} className="text-green-500" />,
@@ -136,6 +171,8 @@ export default function OrderSuccess() {
               ? "Return Processed"
               : order.status === "Cancelled"
               ? "Order Cancelled"
+              : order.status === "Delivered"
+              ? "Order Delivered"
               : "Order Summary"}
           </h1>
           <p className="text-slate-400">
@@ -163,7 +200,7 @@ export default function OrderSuccess() {
               <div className="flex justify-between text-sm">
                 <span className="text-slate-500">Order ID</span>
                 <span className="font-mono font-bold text-orange-500 tracking-tighter">
-                  {order._id || order.orderId}
+                  {order._id ? order._id.slice(-8).toUpperCase() : "N/A"}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
@@ -190,7 +227,7 @@ export default function OrderSuccess() {
                   {order.isPaid ? "Paid" : "Pending (COD)"}
                 </span>
               </div>
-              {/* Show Refund Status if applicable */}
+              {/* Refund Status */}
               {order.isRefunded && (
                 <div className="flex justify-between text-sm animate-in fade-in slide-in-from-left-2">
                   <span className="text-slate-500">Refund Status</span>

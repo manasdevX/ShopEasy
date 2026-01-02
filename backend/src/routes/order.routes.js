@@ -5,8 +5,9 @@ import {
   getMyOrders,
   getSellerOrders,
   updateOrderStatus,
-  cancelOrder, // ✅ IMPORTED
-  requestReturn, // ✅ IMPORTED
+  cancelOrder,
+  requestReturn,
+  handleReturnRequest, // 👈 1. Import this function
 } from "../controllers/order.controller.js";
 import { protect, protectSeller } from "../middlewares/auth.middleware.js";
 
@@ -22,11 +23,9 @@ router.post("/", protect, addOrderItems);
 // Matches: GET /api/orders/myorders (Get History)
 router.get("/myorders", protect, getMyOrders);
 
-// ✅ NEW: Cancel Order
 // Matches: PUT /api/orders/:id/cancel
 router.put("/:id/cancel", protect, cancelOrder);
 
-// ✅ NEW: Request Return
 // Matches: PUT /api/orders/:id/return
 router.put("/:id/return", protect, requestReturn);
 
@@ -37,6 +36,10 @@ router.put("/:id/return", protect, requestReturn);
 
 // Matches: GET /api/orders/seller-orders
 router.get("/seller-orders", protectSeller, getSellerOrders);
+
+// ✅ 2. NEW ROUTE: Handle Returns (Approve/Reject)
+// Matches: PUT /api/orders/handle-return
+router.put("/handle-return", protectSeller, handleReturnRequest);
 
 // Matches: PUT /api/orders/:id/status
 router.put("/:id/status", protectSeller, updateOrderStatus);
