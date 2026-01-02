@@ -40,7 +40,7 @@ export default function OrderSummary() {
         
         if (res.ok) {
           const freshData = await res.json();
-          setOrder(freshData); // ✅ Updates UI with "Delivered" / "Returned"
+          setOrder(freshData); 
         }
       } catch (error) {
         console.error("Failed to refresh order:", error);
@@ -79,17 +79,19 @@ export default function OrderSummary() {
   const getDeliveryContent = () => {
     const status = order.status;
 
-    if (status === "Returned") {
+    // 1. Return Initiated / Returned
+    if (status === "Return Initiated" || status === "Returned") {
       return {
         label: "Return Status",
-        value: "Pickup Scheduled",
-        subtext: "Refund Processed to Original Source",
+        value: "Return Initiated",
+        subtext: "Refund processing has started automatically.",
         color: "text-purple-500",
         bg: "bg-purple-500/10",
         icon: <RotateCcw size={20} className="text-purple-500" />,
       };
     }
 
+    // 2. Return Requested (Legacy/Manual)
     if (status === "Return Requested") {
       return {
         label: "Return Status",
@@ -101,6 +103,7 @@ export default function OrderSummary() {
       };
     }
 
+    // 3. Delivered
     if (status === "Delivered") {
       return {
         label: "Delivery Status",
@@ -118,18 +121,26 @@ export default function OrderSummary() {
       };
     }
 
+    // 4. Cancelled (Smart Subtext)
     if (status === "Cancelled") {
+      let cancelSubtext = "No Payment Deducted"; // Default for COD or Unpaid
+
+      // If Online Payment AND Paid -> Show Refund Message
+      if (order.paymentMethod !== "COD" && order.isPaid) {
+        cancelSubtext = "Refund Processed to Original Source";
+      }
+
       return {
         label: "Order Status",
         value: "Order Cancelled",
-        subtext: order.isRefunded ? "Refund Processed" : "No Payment Deducted",
+        subtext: cancelSubtext,
         color: "text-red-500",
         bg: "bg-red-500/10",
         icon: <CheckCircle2 size={20} className="text-red-500" />,
       };
     }
 
-    // Default (Processing/Shipped)
+    // 5. Default (Processing/Shipped)
     return {
       label: "Estimated Delivery",
       value: "3-5 Business Days",
@@ -151,14 +162,14 @@ export default function OrderSummary() {
         <div className="text-center mb-12 animate-in fade-in zoom-in duration-700">
           <div
             className={`inline-flex items-center justify-center w-20 h-20 rounded-full border mb-6 ${
-              order.status === "Returned"
+              order.status === "Returned" || order.status === "Return Initiated"
                 ? "bg-purple-500/10 border-purple-500/20"
                 : order.status === "Cancelled"
                 ? "bg-red-500/10 border-red-500/20"
                 : "bg-green-500/10 border-green-500/20"
             }`}
           >
-            {order.status === "Returned" ? (
+            {order.status === "Returned" || order.status === "Return Initiated" ? (
               <RotateCcw size={48} className="text-purple-500" />
             ) : order.status === "Cancelled" ? (
               <CheckCircle2 size={48} className="text-red-500" />
@@ -167,8 +178,8 @@ export default function OrderSummary() {
             )}
           </div>
           <h1 className="text-4xl font-black tracking-tight mb-3">
-            {order.status === "Returned"
-              ? "Return Processed"
+            {order.status === "Returned" || order.status === "Return Initiated"
+              ? "Return Initiated"
               : order.status === "Cancelled"
               ? "Order Cancelled"
               : order.status === "Delivered"
@@ -176,8 +187,8 @@ export default function OrderSummary() {
               : "Order Summary"}
           </h1>
           <p className="text-slate-400">
-            {order.status === "Returned"
-              ? "Your return has been approved and refund processed."
+            {order.status === "Returned" || order.status === "Return Initiated"
+              ? "Your return has been initiated and refund is processing."
               : order.status === "Cancelled"
               ? "This order has been cancelled."
               : "Thank you for your purchase."}
