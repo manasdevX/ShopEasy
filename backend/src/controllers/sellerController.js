@@ -233,22 +233,46 @@ export const getSellerProfile = async (req, res) => {
     // 2. Fetch from DB
     const seller = await Seller.findById(req.seller._id);
     if (seller) {
+<<<<<<< Updated upstream
       const responseData = {
+=======
+      // Try to provide structured address components to the client without changing DB schema
+      const addressParts = (seller.address || "").split(",").map((p) => p.trim());
+      const addressObject = {
+        street: addressParts[0] || "",
+        city: addressParts[1] || "",
+        state: addressParts[2] || "",
+        zip: addressParts[3] || "",
+      };
+
+      res.json({
+>>>>>>> Stashed changes
         _id: seller._id,
         name: seller.name,
         email: seller.email,
-        businessName: seller.businessName,
-        address: seller.address,
         phone: seller.phone,
+        businessName: seller.businessName,
+        businessType: seller.businessType,
+        gstin: seller.gstin,
+        address: seller.address,
+        addressObject,
         role: seller.role,
         isVerified: seller.isVerified,
+        isActive: seller.isActive,
+        isOnboardingComplete: seller.isOnboardingComplete,
         bankDetails: seller.bankDetails,
+<<<<<<< Updated upstream
       };
 
       // 3. Save to Redis (TTL: 1 hour)
       await redisClient.setEx(cacheKey, 3600, JSON.stringify(responseData));
 
       res.json(responseData);
+=======
+        createdAt: seller.createdAt,
+        updatedAt: seller.updatedAt,
+      });
+>>>>>>> Stashed changes
     } else {
       res.status(404).json({ message: "Seller not found" });
     }
@@ -265,10 +289,24 @@ export const updateSellerProfile = async (req, res) => {
     const seller = await Seller.findById(req.seller._id);
 
     if (seller) {
+      // Allow updating basic contact fields as well
+      seller.name = req.body.name || seller.name;
+      seller.phone = req.body.phone || seller.phone;
+
       seller.businessName = req.body.businessName || seller.businessName;
       seller.businessType = req.body.businessType || seller.businessType;
       seller.gstin = req.body.gstin || seller.gstin;
       seller.address = req.body.address || seller.address;
+
+      // If all business & bank details present, mark onboarding complete
+      if (
+        seller.businessName &&
+        seller.gstin &&
+        seller.bankDetails &&
+        seller.bankDetails.accountNumber
+      ) {
+        seller.isOnboardingComplete = true;
+      }
 
       const updatedSeller = await seller.save();
 
@@ -279,8 +317,13 @@ export const updateSellerProfile = async (req, res) => {
         _id: updatedSeller._id,
         name: updatedSeller.name,
         email: updatedSeller.email,
+        phone: updatedSeller.phone,
         businessName: updatedSeller.businessName,
+        businessType: updatedSeller.businessType,
+        gstin: updatedSeller.gstin,
+        address: updatedSeller.address,
         role: updatedSeller.role,
+        isOnboardingComplete: updatedSeller.isOnboardingComplete,
         token: generateToken(updatedSeller._id),
       });
     } else {
@@ -331,6 +374,71 @@ export const addBankDetails = async (req, res) => {
       res.status(404).json({ message: "Seller not found" });
     }
   } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Update Seller Personal Info (Name / Phone)
+// @route   PUT /api/sellers/profile/personal
+// @access  Private (Seller)
+export const updatePersonalProfile = async (req, res) => {
+  try {
+    const { name, phone } = req.body;
+    if (!name && !phone) {
+      return res.status(400).json({ message: "No fields to update" });
+    }
+
+    const seller = await Seller.findById(req.seller._id);
+    if (!seller) return res.status(404).json({ message: "Seller not found" });
+
+    if (name) seller.name = name;
+    if (phone) seller.phone = phone;
+
+    await seller.save();
+
+    res.status(200).json({
+      message: "Personal info updated",
+      name: seller.name,
+      phone: seller.phone,
+    });
+  } catch (error) {
+    console.error("UPDATE PERSONAL ERROR:", error.message);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Update Seller Address
+// @route   PUT /api/sellers/profile/address
+// @access  Private (Seller)
+export const updateSellerAddress = async (req, res) => {
+  try {
+    let { address } = req.body;
+    if (!address) return res.status(400).json({ message: "Address is required" });
+
+    // Accept either a string or an object with components
+    if (typeof address === "object") {
+      const { street = "", city = "", state = "", zip = "" } = address;
+      address = `${street}${city ? ", " + city : ""}${state ? ", " + state : ""}${zip ? ", " + zip : ""}`;
+    }
+
+    const seller = await Seller.findById(req.seller._id);
+    if (!seller) return res.status(404).json({ message: "Seller not found" });
+
+    seller.address = address;
+    await seller.save();
+
+    // Return both raw string and structured object for convenience
+    const parts = (address || "").split(",").map((p) => p.trim());
+    const addressObject = {
+      street: parts[0] || "",
+      city: parts[1] || "",
+      state: parts[2] || "",
+      zip: parts[3] || "",
+    };
+
+    res.status(200).json({ message: "Address updated", address: seller.address, addressObject });
+  } catch (error) {
+    console.error("UPDATE ADDRESS ERROR:", error.message);
     res.status(500).json({ message: error.message });
   }
 };

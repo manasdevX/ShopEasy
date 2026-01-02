@@ -13,6 +13,8 @@
     "@react-google-maps/api": "^2.20.8",
     "@react-oauth/google": "^0.12.2",
     "@tailwindcss/vite": "^4.1.18",
+    "jspdf": "^3.0.4",
+    "jspdf-autotable": "^5.0.2",
     "lucide-react": "^0.561.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
