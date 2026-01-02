@@ -23,35 +23,28 @@ app.use(
       "http://localhost:5173", // Localhost (Vite)
       "https://shop-easy-livid.vercel.app", // Production Client
     ],
-    credentials: true, // Allow cookies/headers
+    credentials: true,
   })
 );
 
-/**
- * Body Parsers
- */
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
+// --- 🟢 SOCKET.IO MIDDLEWARE ---
+// This allows you to use req.io.to(id).emit() in controllers
+app.use((req, res, next) => {
+  // We grab the io instance attached to the app in server.listen
+  req.io = req.app.get("socketio");
+  next();
+});
+
 // --- API ENDPOINTS ---
-
-// Product & Catalog Management
 app.use("/api/products", productRoutes);
-
-// User Authentication & Customer Profile
 app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);
-
-// Seller Management
 app.use("/api/sellers", sellerRoutes);
-
-// Order Processing & Management
 app.use("/api/orders", orderRoutes);
-
-// Persistent Cart
 app.use("/api/cart", cartRoutes);
-
-// Payment Integration (Razorpay)
 app.use("/api/payment", paymentRoutes);
 app.use("/api/notifications", notificationRoutes);
 
@@ -82,9 +75,7 @@ app.use((req, res) => {
  */
 app.use((err, req, res, next) => {
   console.error("🔥 Error Stack:", err.stack);
-
   const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
-
   res.status(statusCode).json({
     success: false,
     message: err.message || "Internal Server Error",

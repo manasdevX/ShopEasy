@@ -17,6 +17,7 @@ import {
 import Navbar from "../../components/Seller/SellerNavbar";
 import Footer from "../../components/Seller/SellerFooter";
 import { showSuccess, showError } from "../../utils/toast";
+import { useSocket } from "../../context/SocketContext"; // ✅ Added Socket Hook
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -27,10 +28,30 @@ export default function SellerOrders() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
+  const socket = useSocket(); // ✅ Initialize Socket
 
   // State for Dropdown and Modal
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [selectedOrder, setSelectedOrder] = useState(null);
+
+  // --- SOCKET.IO REAL-TIME LOGIC ---
+  useEffect(() => {
+    const seller = JSON.parse(localStorage.getItem("user"));
+    if (socket && seller?._id) {
+      // Ensure seller is in their room to receive new order broadcasts
+      socket.emit("join_seller_room", seller._id);
+
+      // Listen for new orders to refresh the list automatically
+      socket.on("order_alert", (data) => {
+        console.log("📦 New Order Broadcast Received");
+        fetchOrders(); // Refresh the list when a new order comes in
+      });
+    }
+
+    return () => {
+      if (socket) socket.off("order_alert");
+    };
+  }, [socket]);
 
   // --- FETCH ORDERS ---
   const fetchOrders = async () => {
@@ -135,60 +156,57 @@ export default function SellerOrders() {
   ];
 
   const handleExportPDF = () => {
-  const doc = new jsPDF();
-  
-  // 1. ADD BRANDING
-  doc.setFontSize(22);
-  doc.setTextColor(249, 115, 22); // ShopEasy Orange
-  doc.text("ShopEasy", 14, 20);
-  
-  doc.setFontSize(10);
-  doc.setTextColor(100);
-  doc.text("Seller Central Fulfillment Report", 14, 27);
-  doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 33);
+    const doc = new jsPDF();
+    doc.setFontSize(22);
+    doc.setTextColor(249, 115, 22);
+    doc.text("ShopEasy", 14, 20);
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text("Seller Central Fulfillment Report", 14, 27);
+    doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 33);
 
-  // 2. PREPARE DATA (Including Shipping Info)
-  const tableColumn = ["Order ID", "Customer & Contact", "Shipping Address", "Total"];
-  const tableRows = orders.map(order => [
-    `#${order._id.slice(-6).toUpperCase()}`,
-    `${order.user?.name}\nPh: ${order.shippingAddress?.phone || 'N/A'}`,
-    `${order.shippingAddress?.address}, ${order.shippingAddress?.city}`,
-    `INR ${order.sellerTotal?.toLocaleString()}`
-  ]);
+    const tableColumn = [
+      "Order ID",
+      "Customer & Contact",
+      "Shipping Address",
+      "Total",
+    ];
+    const tableRows = orders.map((order) => [
+      `#${order._id.slice(-6).toUpperCase()}`,
+      `${order.user?.name}\nPh: ${order.shippingAddress?.phone || "N/A"}`,
+      `${order.shippingAddress?.address}, ${order.shippingAddress?.city}`,
+      `INR ${order.sellerTotal?.toLocaleString()}`,
+    ]);
 
-  // 3. GENERATE TABLE WITH STYLING
-  autoTable(doc, {
-    head: [tableColumn],
-    body: tableRows,
-    startY: 40,
-    theme: 'striped',
-    headStyles: { fillColor: [249, 115, 22], fontSize: 10 },
-    styles: { fontSize: 8, cellPadding: 4 },
-    columnStyles: {
-      2: { cellWidth: 60 }, // Give more width to the Address column
-    }
-  });
+    autoTable(doc, {
+      head: [tableColumn],
+      body: tableRows,
+      startY: 40,
+      theme: "striped",
+      headStyles: { fillColor: [249, 115, 22], fontSize: 10 },
+      styles: { fontSize: 8, cellPadding: 4 },
+      columnStyles: { 2: { cellWidth: 60 } },
+    });
 
-  // 4. ADD TOTAL SUMMARY BOX
-  const finalY = doc.lastAutoTable.finalY + 15;
-  doc.setFillColor(245, 245, 245);
-  doc.rect(14, finalY, 182, 20, 'F'); // Gray background box
-  
-  doc.setFont(undefined, 'bold');
-  doc.setTextColor(0);
-  doc.text(`Total Orders: ${orders.length}`, 20, finalY + 12);
-  doc.text(`Total Tab Revenue: INR ${stats.revenue.toLocaleString()}`, 100, finalY + 12);
-
-  // 5. DOWNLOAD
-  doc.save(`ShopEasy_${activeTab}_Report.pdf`);
-};
+    const finalY = doc.lastAutoTable.finalY + 15;
+    doc.setFillColor(245, 245, 245);
+    doc.rect(14, finalY, 182, 20, "F");
+    doc.setFont(undefined, "bold");
+    doc.setTextColor(0);
+    doc.text(`Total Orders: ${orders.length}`, 20, finalY + 12);
+    doc.text(
+      `Total Tab Revenue: INR ${stats.revenue.toLocaleString()}`,
+      100,
+      finalY + 12
+    );
+    doc.save(`ShopEasy_${activeTab}_Report.pdf`);
+  };
 
   return (
     <div className="bg-white dark:bg-[#030712] min-h-screen transition-colors duration-500 font-sans">
       <Navbar isLoggedIn={true} />
 
       <main className="max-w-7xl mx-auto px-6 py-12">
-        {/* HEADER */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
           <div>
             <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tighter">
@@ -199,14 +217,13 @@ export default function SellerOrders() {
             </p>
           </div>
           <button
-            onClick={handleExportPDF} // Added click handler
+            onClick={handleExportPDF}
             className="flex items-center gap-2 bg-orange-500 text-white px-6 py-3 rounded-2xl font-black shadow-lg shadow-orange-500/20 hover:scale-105 transition-all"
           >
             <Download size={20} /> Export PDF
           </button>
         </div>
 
-        {/* STATS */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
           {[
             {
@@ -249,7 +266,6 @@ export default function SellerOrders() {
           ))}
         </div>
 
-        {/* SEARCH & TABS */}
         <div className="bg-slate-50 dark:bg-slate-900/40 p-4 rounded-3xl mb-8 border border-transparent dark:border-slate-800 flex flex-col md:flex-row gap-4 items-center justify-between">
           <div className="relative w-full md:w-96">
             <Search
@@ -281,7 +297,6 @@ export default function SellerOrders() {
           </div>
         </div>
 
-        {/* ORDERS TABLE */}
         <div className="bg-white dark:bg-slate-900/20 border border-slate-100 dark:border-slate-800 rounded-[2.5rem] overflow-hidden shadow-sm">
           <table className="w-full text-left border-collapse">
             <thead className="bg-slate-50 dark:bg-slate-800/50 text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-[0.1em]">
@@ -339,9 +354,6 @@ export default function SellerOrders() {
                             }
                             alt=""
                             className="w-full h-full object-cover"
-                            onError={(e) =>
-                              (e.target.src = "https://via.placeholder.com/50")
-                            }
                           />
                         </div>
                         <div>
@@ -382,8 +394,6 @@ export default function SellerOrders() {
                     <td className="px-8 py-6 font-black text-slate-900 dark:text-white text-sm">
                       ₹{order.sellerTotal?.toLocaleString()}
                     </td>
-
-                    {/* ACTIONS */}
                     <td className="px-8 py-6 text-right relative">
                       <div className="flex items-center justify-end gap-2">
                         <button
@@ -392,8 +402,6 @@ export default function SellerOrders() {
                         >
                           <Eye size={18} />
                         </button>
-
-                        {/* Quick Ship (Only for Processing) */}
                         {order.status === "Processing" && (
                           <button
                             onClick={() => updateStatus(order._id, "Shipped")}
@@ -402,8 +410,6 @@ export default function SellerOrders() {
                             <Truck size={18} />
                           </button>
                         )}
-
-                        {/* 3 DOTS MENU */}
                         <div className="relative">
                           <button
                             onClick={() =>
@@ -415,10 +421,8 @@ export default function SellerOrders() {
                           >
                             <MoreVertical size={18} />
                           </button>
-
                           {activeDropdown === order._id && (
                             <div className="absolute right-0 top-full mt-2 w-52 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-xl z-50 overflow-hidden py-1">
-                              {/* 1. Mark Delivered (Only if Shipped) */}
                               {order.status === "Shipped" && (
                                 <button
                                   onClick={() =>
@@ -429,8 +433,6 @@ export default function SellerOrders() {
                                   <CheckCircle size={14} /> Mark Delivered
                                 </button>
                               )}
-
-                              {/* 2. Default: View Details (Always available) */}
                               <button
                                 onClick={() => {
                                   setSelectedOrder(order);
@@ -453,7 +455,6 @@ export default function SellerOrders() {
         </div>
       </main>
 
-      {/* --- MODAL (Read Only for Returns) --- */}
       {selectedOrder && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 w-full max-w-2xl rounded-[2rem] overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
@@ -473,7 +474,6 @@ export default function SellerOrders() {
                 <XCircle size={24} />
               </button>
             </div>
-
             <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="space-y-6">
                 <div>
@@ -506,13 +506,12 @@ export default function SellerOrders() {
                       {selectedOrder.paymentMethod}
                     </span>
                   </div>
-                  {/* SHOW REFUNDED STATUS */}
                   <div className="bg-slate-50 dark:bg-slate-800/50 p-5 rounded-2xl text-sm flex justify-between items-center mt-2 border border-slate-100 dark:border-slate-800">
                     <span className="text-slate-500">Status:</span>
                     <span
                       className={`font-bold ${
                         selectedOrder.isRefunded
-                          ? "text-purple-500" // Purple for Refunded
+                          ? "text-purple-500"
                           : selectedOrder.isPaid
                           ? "text-emerald-500"
                           : "text-orange-500"
@@ -525,20 +524,8 @@ export default function SellerOrders() {
                         : "PENDING"}
                     </span>
                   </div>
-                  {/* ORDER STATUS ROW */}
-                  <div className="bg-slate-50 dark:bg-slate-800/50 p-5 rounded-2xl text-sm flex justify-between items-center mt-2 border border-slate-100 dark:border-slate-800">
-                    <span className="text-slate-500">Current Status:</span>
-                    <span
-                      className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter border ${getStatusColor(
-                        selectedOrder.status
-                      )}`}
-                    >
-                      {selectedOrder.status}
-                    </span>
-                  </div>
                 </div>
               </div>
-
               <div>
                 <h3 className="text-xs font-black uppercase text-slate-400 tracking-widest mb-3 flex items-center gap-2">
                   <Package size={14} /> Order Items
@@ -556,9 +543,6 @@ export default function SellerOrders() {
                         }
                         alt=""
                         className="w-12 h-12 rounded-xl bg-slate-200 dark:bg-slate-700 object-cover"
-                        onError={(e) =>
-                          (e.target.src = "https://via.placeholder.com/50")
-                        }
                       />
                       <div>
                         <p className="text-sm font-bold text-slate-900 dark:text-white line-clamp-1">
@@ -585,9 +569,7 @@ export default function SellerOrders() {
                 </div>
               </div>
             </div>
-
             <div className="p-6 bg-slate-50 dark:bg-slate-950/30 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3">
-              {/* Modal Actions */}
               {selectedOrder.status === "Processing" && (
                 <button
                   onClick={() => updateStatus(selectedOrder._id, "Shipped")}
