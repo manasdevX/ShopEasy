@@ -38,6 +38,11 @@ export default function ProductDetails() {
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [wishlisting, setWishlisting] = useState(false);
 
+  const DELIVERY_THRESHOLD = 400;
+  const SHIPPING_FEE = 50;
+  const finalPrice = product?.price || 0;
+  const isFreeDelivery = finalPrice >= DELIVERY_THRESHOLD;
+
   const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
   const SAFE_API_URL = BASE_URL.startsWith("http")
     ? BASE_URL
@@ -438,8 +443,15 @@ export default function ProductDetails() {
                     </div>
                   )}
                 </div>
-                <p className="text-[10px] font-bold text-green-400 uppercase tracking-widest mt-1">
-                  Free Express Delivery Included
+                {/* Replace the static green p tag with this: */}
+                <p
+                  className={`text-[10px] font-black uppercase tracking-widest mt-1 ${
+                    isFreeDelivery ? "text-green-500" : "text-orange-500"
+                  }`}
+                >
+                  {isFreeDelivery
+                    ? "Free Express Delivery Included"
+                    : `Delivery Charge: ₹${SHIPPING_FEE} (Free above ₹${DELIVERY_THRESHOLD})`}
                 </p>
                 {/* STOCK STATUS & URGENCY */}
                 <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
@@ -465,15 +477,11 @@ export default function ProductDetails() {
                             : "Item Available"}
                         </span>
                       </div>
-                      {product.stock <= 10 && (
+                      {product.stock <= 5 && (
                         <div className="w-full max-w-[180px] h-1 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                           <div
-                            className={`h-full transition-all duration-1000 ${
-                              product.stock <= 5
-                                ? "bg-red-500"
-                                : "bg-orange-500"
-                            }`}
-                            style={{ width: `${(product.stock / 10) * 100}%` }}
+                            className={`h-full transition-all duration-1000 bg-red-500`}
+                            style={{ width: `${(product.stock / 5) * 100}%` }}
                           />
                         </div>
                       )}

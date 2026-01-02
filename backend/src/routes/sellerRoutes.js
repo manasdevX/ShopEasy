@@ -49,6 +49,4 @@ router.get("/dashboard", protectSeller, getSellerDashboard);
 // ✅ NEW: Search Products & Orders in Dashboard
 router.get("/search", protectSeller, searchSellerData);
 
-router.delete("/profile", protectSeller, deleteSellerAccount);
-
 export default router;
