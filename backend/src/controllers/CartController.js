@@ -1,5 +1,19 @@
 import Cart from "../models/Cart.js";
 import Product from "../models/Product.js";
+import redisClient from "../config/redis.js"; // <--- IMPORT REDIS
+
+/**
+ * Helper: Clear Cart Cache
+ * Call this whenever cart items are modified (Add, Remove, Update, Sync)
+ */
+const clearCartCache = async (userId) => {
+  try {
+    await redisClient.del(`cart:${userId}`);
+    // console.log(`🧹 Cart Cache Cleared for User: ${userId}`);
+  } catch (error) {
+    console.error("Cart Cache Clear Error:", error);
+  }
+};
 
 // @desc    Add item to cart
 // @route   POST /api/cart/add
@@ -34,6 +48,9 @@ export const addToCart = async (req, res) => {
       await cart.save();
     }
 
+    // ✅ INVALIDATE CACHE (So navbar updates instantly)
+    await clearCartCache(userId);
+
     const totalItems = cart.items.reduce((acc, item) => acc + item.quantity, 0);
 
     res.status(200).json({
@@ -53,9 +70,19 @@ export const addToCart = async (req, res) => {
 // @access  Private
 export const getUserCart = async (req, res) => {
   try {
+    const userId = req.user._id;
+    const cacheKey = `cart:${userId}`;
+
+    // 1. Check Redis Cache
+    const cachedCart = await redisClient.get(cacheKey);
+    if (cachedCart) {
+      // console.log("⚡ Serving Cart from Redis");
+      return res.json(JSON.parse(cachedCart));
+    }
+
+    // 2. Fetch from DB (if not cached)
     // ✅ CRITICAL FIX: Ensure 'seller' is included in population string
-    // This allows the frontend to send the required seller ID to the Order API
-    const cart = await Cart.findOne({ user: req.user._id }).populate(
+    const cart = await Cart.findOne({ user: userId }).populate(
       "items.product",
       "name price images category stock seller mrp thumbnail"
     );
@@ -64,12 +91,16 @@ export const getUserCart = async (req, res) => {
       return res.json({ items: [] });
     }
 
+    // 3. Filter invalid items (if product was deleted)
     const validItems = cart.items.filter((item) => item.product !== null);
 
     if (validItems.length !== cart.items.length) {
       cart.items = validItems;
       await cart.save();
     }
+
+    // 4. Save to Redis (TTL: 1 hour)
+    await redisClient.setEx(cacheKey, 3600, JSON.stringify(cart));
 
     res.json(cart);
   } catch (error) {
@@ -108,6 +139,9 @@ export const syncCart = async (req, res) => {
       }
       await cart.save();
     }
+
+    // ✅ INVALIDATE CACHE (Since we just merged local items)
+    await clearCartCache(userId);
 
     // ✅ CRITICAL FIX: Ensure 'seller' is populated here as well
     let populatedCart = await Cart.findOne({ user: userId }).populate(
@@ -155,6 +189,9 @@ export const updateCartItem = async (req, res) => {
       }
       await cart.save();
 
+      // ✅ INVALIDATE CACHE
+      await clearCartCache(userId);
+
       const totalItems = cart.items.reduce(
         (acc, item) => acc + item.quantity,
         0
@@ -185,6 +222,9 @@ export const removeCartItem = async (req, res) => {
     );
 
     await cart.save();
+
+    // ✅ INVALIDATE CACHE
+    await clearCartCache(userId);
 
     const totalItems = cart.items.reduce((acc, item) => acc + item.quantity, 0);
 

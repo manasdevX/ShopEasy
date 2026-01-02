@@ -5,12 +5,26 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import sendEmail from "../utils/emailHelper.js";
 import twilio from "twilio";
+import redisClient from "../config/redis.js"; // <--- IMPORT REDIS
 
 // --- Helper: Generate JWT ---
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
     expiresIn: "30d",
   });
+};
+
+/**
+ * Helper: Clear Seller Cache
+ * Clears the specific seller profile cache.
+ */
+const clearSellerCache = async (sellerId) => {
+  try {
+    await redisClient.del(`seller_profile:${sellerId}`);
+    console.log(`🧹 Cache Cleared for Seller: ${sellerId}`);
+  } catch (error) {
+    console.error("Cache Clear Error:", error);
+  }
 };
 
 /* =========================================
@@ -207,9 +221,19 @@ export const getSellerProfile = async (req, res) => {
   try {
     if (!req.seller) return res.status(401).json({ message: "Not authorized" });
 
+    // 1. Check Redis Cache
+    const cacheKey = `seller_profile:${req.seller._id}`;
+    const cachedProfile = await redisClient.get(cacheKey);
+
+    if (cachedProfile) {
+      // console.log("⚡ Serving Seller Profile from Redis");
+      return res.json(JSON.parse(cachedProfile));
+    }
+
+    // 2. Fetch from DB
     const seller = await Seller.findById(req.seller._id);
     if (seller) {
-      res.json({
+      const responseData = {
         _id: seller._id,
         name: seller.name,
         email: seller.email,
@@ -219,7 +243,12 @@ export const getSellerProfile = async (req, res) => {
         role: seller.role,
         isVerified: seller.isVerified,
         bankDetails: seller.bankDetails,
-      });
+      };
+
+      // 3. Save to Redis (TTL: 1 hour)
+      await redisClient.setEx(cacheKey, 3600, JSON.stringify(responseData));
+
+      res.json(responseData);
     } else {
       res.status(404).json({ message: "Seller not found" });
     }
@@ -242,6 +271,9 @@ export const updateSellerProfile = async (req, res) => {
       seller.address = req.body.address || seller.address;
 
       const updatedSeller = await seller.save();
+
+      // ✅ INVALIDATE CACHE
+      await clearSellerCache(updatedSeller._id);
 
       res.json({
         _id: updatedSeller._id,
@@ -287,6 +319,10 @@ export const addBankDetails = async (req, res) => {
       }
 
       await seller.save();
+
+      // ✅ INVALIDATE CACHE
+      await clearSellerCache(seller._id);
+
       res.status(200).json({
         message: "Bank details updated",
         bankDetails: seller.bankDetails,
@@ -380,7 +416,7 @@ export const getSellerDashboard = async (req, res) => {
 };
 
 /* =========================================
-   SEARCH CONTROLLER (NEW)
+   SEARCH CONTROLLER
 ========================================= */
 
 // @desc    Search Products & Orders for Dashboard
@@ -454,11 +490,16 @@ export const deleteSellerAccount = async (req, res) => {
     const seller = await Seller.findById(req.seller._id);
     if (!seller) return res.status(404).json({ message: "Seller not found" });
 
-    // Optional: Delete seller's products too? 
+    // Optional: Delete seller's products too?
     // await Product.deleteMany({ seller: req.seller._id });
 
+    // ✅ INVALIDATE CACHE before deleting
+    await clearSellerCache(req.seller._id);
+
     await seller.deleteOne();
-    res.status(200).json({ success: true, message: "Account deleted successfully" });
+    res
+      .status(200)
+      .json({ success: true, message: "Account deleted successfully" });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
