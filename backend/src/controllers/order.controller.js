@@ -116,6 +116,9 @@ export const addOrderItems = async (req, res) => {
 
     const createdOrder = await order.save();
 
+    // 🔴 [DEBUG] Log creation
+    console.log("📦 [DEBUG] Order Saved to DB:", createdOrder._id);
+
     // 5. ✅ DEDUCT STOCK
     for (const item of itemsToUpdate) {
       item.product.stock -= item.qty;
@@ -199,13 +202,20 @@ export const addOrderItems = async (req, res) => {
 
         // ⚡ Real-time Socket Alert
         if (req.io) {
+          // 🔴 [DEBUG] Log Emission
+          console.log(`📡 [DEBUG] Emitting 'order_alert' to Seller Room: ${sellerId}`);
+          
           req.io.to(sellerId).emit("order_alert", {
             message: `New Order #${createdOrder._id
               .toString()
               .slice(-6)
               .toUpperCase()} Received!`,
             type: "success",
+            orderId: createdOrder._id, // Included for Frontend list refresh
           });
+        } else {
+          // 🔴 [DEBUG] Log Missing Middleware
+          console.log("⚠️ [DEBUG] req.io is undefined! Socket server not linked.");
         }
       }
     }
@@ -524,14 +534,15 @@ export const updateOrderStatus = async (req, res) => {
     // ✅ INVALIDATE REDIS CACHE
     await clearOrderCache(order.user, order._id);
 
+    // ✅ NOTIFY THE CUSTOMER (Corrected from notifying seller)
     await createNotification(
-      req.seller._id,
-      "alert",
+      order.user, // Notify the User
+      "order",
       "Order Updated",
-      `Order #${order._id
+      `Your item in Order #${order._id
         .toString()
         .slice(-6)
-        .toUpperCase()} marked as ${status}`,
+        .toUpperCase()} is now ${status}`,
       order._id
     );
 
