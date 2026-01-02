@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Link, useNavigate, useLocation } from "react-router-dom";
+import { Link, useNavigate, useLocation, useSearchParams } from "react-router-dom"; 
 import Navbar from "../components/Navbar";
 import { showSuccess, showError } from "../utils/toast";
 import Footer from "../components/Footer";
@@ -32,14 +32,18 @@ import {
 export default function Account() {
   const fileInputRef = useRef(null);
   const location = useLocation();
+  const navigate = useNavigate();
+  
+  // ✅ 1. SETUP URL PARAMS
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  // STATE
+  // ✅ 2. INITIALIZE STATE (Priority: URL > Location State > Default)
+  // This ensures that on refresh, we look at ?tab=... first
   const [activeTab, setActiveTab] = useState(
-    location.state?.activeTab || "profile"
+    searchParams.get("tab") || location.state?.activeTab || "profile"
   );
 
   const [isEditing, setIsEditing] = useState(false);
-  const navigate = useNavigate();
 
   // Address State
   const [showAddAddress, setShowAddAddress] = useState(false);
@@ -49,7 +53,7 @@ export default function Account() {
   const [isLocating, setIsLocating] = useState(false);
   const [ordersLoading, setOrdersLoading] = useState(false);
 
-  // New State for File Upload & Removal Fix
+  // File Upload State
   const [selectedFile, setSelectedFile] = useState(null);
   const [isAvatarRemoved, setIsAvatarRemoved] = useState(false);
 
@@ -88,7 +92,14 @@ export default function Account() {
   const [formData, setFormData] = useState({ ...user });
   const [status, setStatus] = useState("loading");
 
-  // Effect to handle tab switching
+  // ✅ 3. EFFECT: SYNC URL WHEN TAB CHANGES
+  // Whenever the user clicks a sidebar link, update the URL ?tab=value
+  useEffect(() => {
+    setSearchParams({ tab: activeTab }, { replace: true });
+  }, [activeTab, setSearchParams]);
+
+  // ✅ 4. EFFECT: HANDLE EXTERNAL REDIRECTS 
+  // Captures state passed from other pages (like Order Success)
   useEffect(() => {
     if (location.state?.activeTab) {
       setActiveTab(location.state.activeTab);
@@ -106,7 +117,6 @@ export default function Account() {
     return `${API_URL}/${cleanPath}`;
   };
 
-  // Status Colors
   const getStatusColor = (status) => {
     switch (status) {
       case "Delivered":
