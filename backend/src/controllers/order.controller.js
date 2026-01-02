@@ -1,7 +1,7 @@
 import Order from "../models/Order.js";
 import Product from "../models/Product.js";
 import { createNotification } from "./notification.controller.js";
-import sendEmail from "../utils/sendEmail.js";
+import sendEmail from "../utils/emailHelper.js";
 
 // @desc    Create new order (Direct COD or General)
 // @route   POST /api/orders
