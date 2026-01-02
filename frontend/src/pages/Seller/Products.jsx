@@ -3,22 +3,32 @@ import { Link, useNavigate } from "react-router-dom";
 import SellerNavbar from "../../components/Seller/SellerNavbar";
 import SellerFooter from "../../components/Seller/SellerFooter";
 import { Plus, Search, Edit3, Trash2, Loader2, Package } from "lucide-react";
-import toast from "react-hot-toast";
+import { useSocket } from "../../context/SocketContext"; // ✅ Added Socket Hook
 import { showSuccess, showError } from "../../utils/toast";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export default function Products() {
   const navigate = useNavigate();
+  const socket = useSocket(); // ✅ Initialize Socket
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+
+  // --- SOCKET.IO REAL-TIME CONNECTION ---
+  useEffect(() => {
+    const seller = JSON.parse(localStorage.getItem("user"));
+    if (socket && seller?._id) {
+      // Ensure seller is in their notification room while browsing inventory
+      socket.emit("join_seller_room", seller._id);
+      console.log("📡 Product Inventory: Joined notification room");
+    }
+  }, [socket]);
 
   // --- Fetch Seller Products ---
   const fetchProducts = async () => {
     try {
       const token = localStorage.getItem("sellerToken");
-      // Fetch specifically from the seller-only route
       const res = await fetch(`${API_URL}/api/products/seller/all`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -40,6 +50,9 @@ export default function Products() {
 
   // --- Delete Product ---
   const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this product?"))
+      return;
+
     try {
       const token = localStorage.getItem("sellerToken");
       const res = await fetch(`${API_URL}/api/products/${id}`, {
@@ -49,7 +62,6 @@ export default function Products() {
 
       if (res.ok) {
         showSuccess("Product deleted successfully");
-        // Remove from local state only after backend confirms success
         setProducts(products.filter((p) => p._id !== id));
       } else {
         const data = await res.json();

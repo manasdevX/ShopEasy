@@ -5,13 +5,13 @@ import { Toaster } from "react-hot-toast";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
-import UpdatePassword from "./pages/UpdatePassword"
-import UpdateEmail from "./pages/UpdateEmail"
+import UpdatePassword from "./pages/UpdatePassword";
+import UpdateEmail from "./pages/UpdateEmail";
 import Account from "./pages/Account";
 import ForgotPassword from "./pages/ForgotPassword";
 import SearchResults from "./pages/SearchResults";
 import ProductDetails from "./pages/ProductDetails";
-import Cart from "./pages/Cart"; // ✅ Added Cart Import
+import Cart from "./pages/Cart";
 import Payment from "./pages/Payment";
 import OrderSummary from "./pages/OrderSummary";
 import Reviews from "./pages/Reviews";
@@ -21,11 +21,11 @@ import Help from "./pages/Help";
 
 // --- SELLER PAGES ---
 import SellerLanding from "./pages/Seller/Landing";
-import SellerSignup from "./pages/Seller/Signup"; // Step 1
+import SellerSignup from "./pages/Seller/Signup";
 import SellerLogin from "./pages/Seller/Login";
 import SellerForgotPassword from "./pages/Seller/ForgotPassword";
-import SellerRegister from "./pages/Seller/Register"; // Step 2 (Business)
-import BankDetails from "./pages/Seller/BankDetails"; // Step 3 (Bank & Create)
+import SellerRegister from "./pages/Seller/Register";
+import BankDetails from "./pages/Seller/BankDetails";
 import Dashboard from "./pages/Seller/Dashboard";
 import Products from "./pages/Seller/Products";
 import AddProduct from "./pages/Seller/AddProduct";
@@ -37,17 +37,26 @@ import Settings from "./pages/Seller/Settings";
 export default function App() {
   return (
     <>
+      {/* 🟢 Improved Toaster for Socket.io Alerts */}
       <Toaster
-        position="bottom-right"
+        position="bottom-right" 
         gutter={8}
         toastOptions={{
-          duration: 3000,
+          // Default duration
+          duration: 4000,
           className: "font-sans text-sm",
           style: {
             padding: "14px 16px",
             fontWeight: 600,
             borderRadius: "12px",
             boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)",
+          },
+          // Custom duration for success (like New Order)
+          success: {
+            duration: 6000,
+            theme: {
+              primary: "#22c55e",
+            },
           },
         }}
       />
@@ -62,14 +71,11 @@ export default function App() {
         <Route path="/account" element={<Account />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
 
-        {/* Search & Discovery */}
         <Route path="/search" element={<SearchResults />} />
         <Route path="/product/:id" element={<ProductDetails />} />
         <Route path="/payment" element={<Payment />} />
         <Route path="/product/:id/reviews" element={<Reviews />} />
         <Route path="/OrderSummary" element={<OrderSummary />} />
-
-        {/* ✅ Production Cart Route */}
         <Route path="/cart" element={<Cart />} />
 
         {/* --- Seller Journey Routes --- */}
@@ -77,13 +83,9 @@ export default function App() {
         <Route path="/Seller/Dashboard" element={<Dashboard />} />
         <Route path="/Seller/Notifications" element={<Notifications />} />
         <Route path="/Seller/Settings" element={<Settings />} />
-
-        {/* Product Management */}
         <Route path="/Seller/products" element={<Products />} />
         <Route path="/Seller/orders" element={<SellerOrders />} />
         <Route path="/Seller/add-product" element={<AddProduct />} />
-
-        {/* ✅ Corrected route with :id parameter */}
         <Route path="/Seller/edit-product/:id" element={<EditProduct />} />
 
         {/* Seller Auth Flow */}
@@ -92,15 +94,12 @@ export default function App() {
           path="/Seller/forgot-password"
           element={<SellerForgotPassword />}
         />
-
-        {/* Registration Steps (Deferred Flow) */}
         <Route path="/Seller/signup" element={<SellerSignup />} />
         <Route path="/Seller/register" element={<SellerRegister />} />
         <Route path="/Seller/bank-details" element={<BankDetails />} />
-
-        {/* Fallback for safety */}
         <Route path="/Seller/setup" element={<SellerRegister />} />
 
+        {/* General */}
         <Route path="/Terms" element={<Terms />} />
         <Route path="/Privacy" element={<Privacy />} />
         <Route path="/Help" element={<Help />} />

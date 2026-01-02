@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import SellerNavbar from "../../components/Seller/SellerNavbar";
 import SellerFooter from "../../components/Seller/SellerFooter";
 import { showSuccess, showError } from "../../utils/toast";
+import { useSocket } from "../../context/SocketContext"; // ✅ Added Socket Hook
 import {
   BarChart3,
   ShoppingBag,
@@ -21,34 +22,43 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const socket = useSocket(); // ✅ Initialize Socket
   const [loading, setLoading] = useState(true);
-
   const [lowStockItems, setLowStockItems] = useState([]);
 
-  const fetchLowStock = async () => {
-  try {
-    const token = localStorage.getItem("sellerToken");
-    
-    // CHANGE THIS LINE: Added the extra '/' to match your product.route.js
-    const res = await fetch(`${API_URL}/api/products/seller/all`, { 
-      headers: { 
-        Authorization: `Bearer ${token}` 
-      },
-    });
-    
-    const result = await res.json();
-
-    if (res.ok) {
-      // Filter the entire inventory for items < 5
-      const low = result.filter((p) => p.stock < 5).sort((a , b) => a.stock - b.stock);
-      setLowStockItems(low);
-    } else {
-      console.error("Failed to fetch low stock:", result.message);
+  // --- SOCKET.IO REAL-TIME LOGIC ---
+  useEffect(() => {
+    const seller = JSON.parse(localStorage.getItem("user"));
+    if (socket && seller?._id) {
+      // Join the private room for this seller to receive real-time alerts
+      socket.emit("join_seller_room", seller._id);
+      console.log("📡 Joined real-time notification room");
     }
-  } catch (error) {
-    console.error("Error fetching full inventory:", error);
-  }
-};
+  }, [socket]);
+
+  const fetchLowStock = async () => {
+    try {
+      const token = localStorage.getItem("sellerToken");
+      const res = await fetch(`${API_URL}/api/products/seller/all`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const result = await res.json();
+
+      if (res.ok) {
+        const low = result
+          .filter((p) => p.stock < 5)
+          .sort((a, b) => a.stock - b.stock);
+        setLowStockItems(low);
+      } else {
+        console.error("Failed to fetch low stock:", result.message);
+      }
+    } catch (error) {
+      console.error("Error fetching full inventory:", error);
+    }
+  };
 
   useEffect(() => {
     fetchLowStock();
@@ -62,7 +72,6 @@ export default function Dashboard() {
     trends: { revenue: "0%", revenueIsUp: true, products: "Active" },
   });
 
-  // --- FETCH DATA FROM API ---
   const fetchDashboardData = async () => {
     try {
       const token = localStorage.getItem("sellerToken");
@@ -100,7 +109,6 @@ export default function Dashboard() {
     fetchDashboardData();
   }, [navigate]);
 
-  // --- HELPER: Format Currency ---
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat("en-IN", {
       style: "currency",
@@ -109,21 +117,6 @@ export default function Dashboard() {
     }).format(amount);
   };
 
-  // --- HELPER: Get Next Friday (For Payout Date) ---
-  const getNextPayoutDate = () => {
-    const today = new Date();
-    const dayOfWeek = today.getDay();
-    const daysUntilFriday = (5 - dayOfWeek + 7) % 7 || 7;
-    const nextFriday = new Date(today);
-    nextFriday.setDate(today.getDate() + daysUntilFriday);
-    return nextFriday.toLocaleDateString("en-US", {
-      weekday: "long",
-      day: "numeric",
-      month: "short",
-    });
-  };
-
-  // --- REAL BACKEND DELETE ---
   const handleRemoveProduct = async (id) => {
     try {
       const token = localStorage.getItem("sellerToken");
@@ -136,7 +129,8 @@ export default function Dashboard() {
 
       if (res.ok) {
         showSuccess(`Product deleted successfully`);
-        fetchDashboardData(); // Refresh data
+        fetchDashboardData();
+        fetchLowStock();
       } else {
         const result = await res.json();
         showError(result.message || "Failed to delete product");
@@ -176,13 +170,9 @@ export default function Dashboard() {
 
   return (
     <div className="bg-white dark:bg-[#030712] min-h-screen transition-colors duration-500 font-sans flex flex-col">
-      {/* 1. Moved Search Logic to SellerNavbar so it persists across pages. 
-          Ensure your SellerNavbar component has the search input and API call logic if needed there. 
-      */}
       <SellerNavbar isLoggedIn={true} />
 
       <main className="flex-grow max-w-7xl w-full mx-auto px-6 py-12">
-        {/* HEADER - CLEANED UP */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
           <div>
             <h1 className="text-5xl font-black text-slate-900 dark:text-white tracking-tighter">
@@ -197,11 +187,8 @@ export default function Dashboard() {
               .
             </p>
           </div>
-
-          {/* REMOVED DUPLICATE SEARCH BAR HERE */}
         </div>
 
-        {/* STATS GRID */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
           {stats.map((stat, i) => (
             <div
@@ -227,7 +214,6 @@ export default function Dashboard() {
         </div>
 
         <div className="grid lg:grid-cols-3 gap-8">
-          {/* RECENT PRODUCTS TABLE */}
           <div className="lg:col-span-2 bg-white dark:bg-slate-900/20 rounded-[3rem] border border-slate-100 dark:border-slate-800 overflow-hidden shadow-sm">
             <div className="p-8 border-b border-slate-50 dark:border-slate-800 flex justify-between items-center bg-slate-50/30 dark:bg-transparent">
               <div>
@@ -293,7 +279,6 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* SIDEBAR WIDGETS */}
           <div className="space-y-6">
             <div className="bg-slate-900 dark:bg-slate-900/60 rounded-[2.5rem] p-8 text-white relative border border-slate-800 shadow-2xl">
               <div className="relative z-10">
@@ -313,7 +298,6 @@ export default function Dashboard() {
                   Critical Stock
                 </h3>
 
-                {/* Scrollable area for all low stock products */}
                 <div className="space-y-4 mb-8 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                   {lowStockItems.length > 0 ? (
                     lowStockItems.map((prod) => (
@@ -346,7 +330,6 @@ export default function Dashboard() {
                           </div>
                         </div>
 
-                        {/* Visual Health Bar */}
                         <div className="w-full bg-slate-800 h-1 mt-3 rounded-full overflow-hidden">
                           <div
                             className={`h-full transition-all duration-1000 ${
@@ -380,8 +363,6 @@ export default function Dashboard() {
                 </button>
               </div>
             </div>
-
-            {/* STORE STATUS BOX (Keep your existing one below) */}
           </div>
         </div>
       </main>
@@ -391,7 +372,6 @@ export default function Dashboard() {
   );
 }
 
-// Sub-Component for Product Rows
 function ProductRow({ id, name, stock, amount, onRemove, onEdit }) {
   return (
     <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group border-b border-slate-100 dark:border-slate-800">

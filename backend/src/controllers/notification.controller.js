@@ -12,7 +12,7 @@ export const getNotifications = async (req, res) => {
 
     // Apply Filters based on UI tabs
     if (filter === "unread") {
-      query.read = false; // ✅ MATCHED SCHEMA: 'read' instead of 'isRead'
+      query.read = false;
     } else if (filter === "orders") {
       query.type = "order";
     }
@@ -43,7 +43,7 @@ export const markAsRead = async (req, res) => {
       return res.status(401).json({ message: "Not authorized" });
     }
 
-    notification.read = true; // ✅ MATCHED SCHEMA
+    notification.read = true;
     await notification.save();
 
     res.status(200).json(notification);
@@ -58,7 +58,7 @@ export const markAsRead = async (req, res) => {
 export const markAllAsRead = async (req, res) => {
   try {
     await Notification.updateMany(
-      { recipient: req.seller._id, read: false }, // ✅ MATCHED SCHEMA
+      { recipient: req.seller._id, read: false },
       { $set: { read: true } }
     );
     res.status(200).json({ message: "All notifications marked as read" });
@@ -67,23 +67,35 @@ export const markAllAsRead = async (req, res) => {
   }
 };
 
-// --- INTERNAL HELPER (Use this in Order Controller) ---
+// --- INTERNAL HELPER (Updated with Socket.io) ---
+/**
+ * @param {Object} io - Pass req.io from the calling controller
+ */
 export const createNotification = async (
   recipientId,
   type,
   title,
   message,
-  relatedId = null
+  relatedId = null,
+  io = null // ✅ Added io parameter
 ) => {
   try {
-    await Notification.create({
+    const notification = await Notification.create({
       recipient: recipientId,
       type,
       title,
       message,
-      read: false, // ✅ MATCHED SCHEMA
+      read: false,
       relatedId,
     });
+
+    // ✅ ⚡ Real-time Socket Alert for the Notification Bell
+    if (io) {
+      io.to(recipientId.toString()).emit("new_notification", notification);
+      console.log(`📡 Socket emitted: new_notification to ${recipientId}`);
+    }
+
+    return notification;
   } catch (error) {
     console.error("Notification creation failed:", error);
   }

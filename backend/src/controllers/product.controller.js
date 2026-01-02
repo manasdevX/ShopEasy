@@ -36,7 +36,6 @@ const uploadToCloudinary = (buffer) => {
 const clearProductCache = async (productId = null, sellerId = null) => {
   try {
     // 1. Clear "All Products" search/filter caches (Pattern Match)
-    // We scan for keys starting with "products:" (lists) and delete them
     const keys = await redisClient.keys("products:*");
     if (keys.length > 0) {
       await redisClient.del(keys);
@@ -68,7 +67,6 @@ const clearProductCache = async (productId = null, sellerId = null) => {
 export const getAllProducts = async (req, res) => {
   try {
     // 1. Generate Unique Cache Key based on Query Params
-    // This ensures ?keyword=shoe is cached differently from ?keyword=shirt
     const cacheKey = `products:${JSON.stringify(req.query)}`;
 
     // 2. Check Redis
@@ -198,6 +196,7 @@ export const getSellerProducts = async (req, res) => {
     // 1. Check Redis
     const cachedSellerProducts = await redisClient.get(cacheKey);
     if (cachedSellerProducts) {
+      console.log("⚡ Serving Seller Products from Redis");
       return res.json(JSON.parse(cachedSellerProducts));
     }
 
@@ -275,7 +274,7 @@ export const createProduct = async (req, res) => {
       isBestSeller: isBestSeller === "true" || isBestSeller === true,
     });
 
-    // ✅ INVALIDATE CACHE (Clear lists so new product appears)
+    // ✅ INVALIDATE CACHE
     await clearProductCache(null, req.seller._id);
 
     res.status(201).json(product);
@@ -364,7 +363,7 @@ export const updateProduct = async (req, res) => {
 
     const updatedProduct = await product.save();
 
-    // ✅ INVALIDATE CACHE (Clear specific product & lists)
+    // ✅ INVALIDATE CACHE
     await clearProductCache(product._id, req.seller._id);
 
     res.json(updatedProduct);
@@ -442,7 +441,7 @@ export const createProductReview = async (req, res) => {
 
       await product.save();
 
-      // ✅ INVALIDATE CACHE (Clear product detail cache to show new review)
+      // ✅ INVALIDATE CACHE
       await clearProductCache(product._id);
 
       res.status(201).json({ message: "Review added" });

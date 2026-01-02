@@ -2,6 +2,25 @@ import Order from "../models/Order.js";
 import Product from "../models/Product.js";
 import { createNotification } from "./notification.controller.js";
 import sendEmail from "../utils/emailHelper.js";
+import redisClient from "../config/redis.js"; // <--- IMPORT REDIS
+
+/**
+ * Helper: Clear Order Caches
+ * Clears the user's order list cache and the specific order detail cache.
+ */
+const clearOrderCache = async (userId, orderId = null) => {
+  try {
+    if (userId) {
+      await redisClient.del(`orders:user:${userId}`);
+    }
+    if (orderId) {
+      await redisClient.del(`order:detail:${orderId}`);
+    }
+    console.log(`🧹 Order Cache Cleared for User: ${userId}`);
+  } catch (error) {
+    console.error("Cache Clear Error:", error);
+  }
+};
 
 // @desc    Create new order (Direct COD or General)
 // @route   POST /api/orders
@@ -36,7 +55,7 @@ export const addOrderItems = async (req, res) => {
 
     // 2. Map Items & CHECK STOCK
     let calculatedItemsPrice = 0;
-    const itemsToUpdate = []; // Queue for stock deduction
+    const itemsToUpdate = [];
 
     const mappedOrderItems = orderItems.map((item) => {
       const productId = item.product || item._id;
@@ -47,7 +66,6 @@ export const addOrderItems = async (req, res) => {
         throw new Error(`Product not found: ${productId}`);
       }
 
-      // 🛑 STOCK CHECK: Prevent Overselling
       if (realProduct.stock < orderQty) {
         throw new Error(
           `Not enough stock for ${realProduct.name}. Only ${realProduct.stock} left.`
@@ -57,7 +75,6 @@ export const addOrderItems = async (req, res) => {
       const itemTotal = realProduct.price * orderQty;
       calculatedItemsPrice += itemTotal;
 
-      // Add to queue for later update
       itemsToUpdate.push({ product: realProduct, qty: orderQty });
 
       return {
@@ -78,7 +95,7 @@ export const addOrderItems = async (req, res) => {
 
     // 4. Create Order
     const order = new Order({
-      user: req.user._id, // Links order to user
+      user: req.user._id,
       orderItems: mappedOrderItems,
       shippingAddress: {
         address: shippingAddress.address,
@@ -99,70 +116,59 @@ export const addOrderItems = async (req, res) => {
 
     const createdOrder = await order.save();
 
-    // 5. ✅ DEDUCT STOCK FROM DB
+    // 5. ✅ DEDUCT STOCK
     for (const item of itemsToUpdate) {
       item.product.stock -= item.qty;
       await item.product.save();
     }
 
-    // 6. ✅ SEND DETAILED ORDER CONFIRMATION EMAIL
+    // ✅ INVALIDATE REDIS CACHE (Clear user's order list)
+    await clearOrderCache(req.user._id);
+
+    // 6. ✅ SEND ORDER CONFIRMATION EMAIL
     try {
-      // A. Generate HTML for Order Items
       const orderItemsHTML = mappedOrderItems
         .map(
           (item) => `
           <tr>
             <td style="padding: 10px; border-bottom: 1px solid #eee;">
-              <img src="${item.image}" alt="${item.name}" width="50" style="border-radius: 5px; display: block;">
+              <img src="${item.image}" alt="${
+            item.name
+          }" width="50" style="border-radius: 5px; display: block;">
             </td>
             <td style="padding: 10px; border-bottom: 1px solid #eee; font-size: 14px;">
               ${item.name} <br>
-              <span style="font-size: 12px; color: #777;">Qty: ${item.qty}</span>
+              <span style="font-size: 12px; color: #777;">Qty: ${
+                item.qty
+              }</span>
             </td>
             <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: right; font-weight: bold;">
               ₹${(item.price * item.qty).toLocaleString()}
             </td>
-          </tr>
-        `
+          </tr>`
         )
         .join("");
 
-      // B. Construct Full Email Template
       const emailMessage = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden;">
-          
           <div style="background-color: #2563eb; padding: 20px; text-align: center;">
             <h1 style="color: #ffffff; margin: 0; font-size: 24px;">Order Confirmed!</h1>
           </div>
-
           <div style="padding: 20px;">
             <p>Hi <strong>${req.user.name}</strong>,</p>
             <p>Thank you for shopping with us! We have received your order.</p>
-
             <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin: 20px 0;">
-              <p style="margin: 5px 0;"><strong>Order ID:</strong> ${createdOrder._id}</p>
+              <p style="margin: 5px 0;"><strong>Order ID:</strong> ${
+                createdOrder._id
+              }</p>
               <p style="margin: 5px 0;"><strong>Payment Method:</strong> ${paymentMethod}</p>
               <p style="margin: 5px 0; font-size: 18px; color: #2563eb;"><strong>Total: ₹${totalPrice.toLocaleString()}</strong></p>
             </div>
-
-            <h3 style="border-bottom: 2px solid #eee; padding-bottom: 10px; margin-top: 30px;">Order Details</h3>
             <table style="width: 100%; border-collapse: collapse; text-align: left;">
               ${orderItemsHTML}
             </table>
-
-            <div style="text-align: center; margin-top: 30px; margin-bottom: 20px;">
-              <a href="${process.env.FRONTEND_URL}/account?tab=orders" 
-                 style="background-color: #2563eb; color: white; padding: 12px 25px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">
-                 View Order History
-              </a>
-            </div>
-            
-            <p style="font-size: 12px; color: #999; text-align: center; margin-top: 20px;">
-              If you have any questions, reply to this email.
-            </p>
           </div>
-        </div>
-      `;
+        </div>`;
 
       await sendEmail({
         email: req.user.email,
@@ -170,8 +176,7 @@ export const addOrderItems = async (req, res) => {
         message: emailMessage,
       });
     } catch (emailError) {
-      console.error("Failed to send order confirmation email:", emailError);
-      // We do not crash the request if email fails
+      console.error("Email failed:", emailError);
     }
 
     // 7. Notify Sellers (DB & Socket)
@@ -181,7 +186,6 @@ export const addOrderItems = async (req, res) => {
 
     for (const sellerId of sellersToNotify) {
       if (sellerId) {
-        // A. Database Notification
         await createNotification(
           sellerId,
           "order",
@@ -193,7 +197,7 @@ export const addOrderItems = async (req, res) => {
           createdOrder._id
         );
 
-        // B. ⚡ Real-time Socket Alert
+        // ⚡ Real-time Socket Alert
         if (req.io) {
           req.io.to(sellerId).emit("order_alert", {
             message: `New Order #${createdOrder._id
@@ -218,6 +222,14 @@ export const addOrderItems = async (req, res) => {
 // @access  Private (User/Seller)
 export const getOrderById = async (req, res) => {
   try {
+    const cacheKey = `order:detail:${req.params.id}`;
+
+    // 1. Check Redis
+    const cachedOrder = await redisClient.get(cacheKey);
+    if (cachedOrder) {
+      return res.json(JSON.parse(cachedOrder));
+    }
+
     const order = await Order.findById(req.params.id)
       .populate("user", "name email")
       .populate({
@@ -226,6 +238,8 @@ export const getOrderById = async (req, res) => {
       });
 
     if (order) {
+      // 2. Save to Redis (TTL: 1 hour)
+      await redisClient.setEx(cacheKey, 3600, JSON.stringify(order));
       res.json(order);
     } else {
       res.status(404).json({ message: "Order not found" });
@@ -240,9 +254,22 @@ export const getOrderById = async (req, res) => {
 // @access  Private (Customer)
 export const getMyOrders = async (req, res) => {
   try {
-    const orders = await Order.find({ user: req.user._id }).sort({
-      createdAt: -1,
-    });
+    const userId = req.user._id;
+    const cacheKey = `orders:user:${userId}`;
+
+    // 1. Check Redis
+    const cachedOrders = await redisClient.get(cacheKey);
+    if (cachedOrders) {
+      console.log("⚡ Serving My Orders from Redis");
+      return res.json(JSON.parse(cachedOrders));
+    }
+
+    // 2. Fetch from DB
+    const orders = await Order.find({ user: userId }).sort({ createdAt: -1 });
+
+    // 3. Save to Redis
+    await redisClient.setEx(cacheKey, 3600, JSON.stringify(orders));
+
     res.json(orders);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -250,36 +277,30 @@ export const getMyOrders = async (req, res) => {
 };
 
 // @desc    Cancel Order (Customer) - Restores Stock & Refunds
-// @route   PUT /api/orders/:id/cancel
-// @access  Private (Customer)
 export const cancelOrder = async (req, res) => {
   try {
     const order = await Order.findById(req.params.id);
 
-    if (!order) {
-      return res.status(404).json({ message: "Order not found" });
-    }
+    if (!order) return res.status(404).json({ message: "Order not found" });
 
     if (
       order.status !== "Processing" &&
       order.status !== "Pending" &&
       order.status !== "Shipped"
     ) {
-      return res.status(400).json({
-        message: "Cannot cancel order at this stage (Already Delivered)",
-      });
+      return res
+        .status(400)
+        .json({ message: "Cannot cancel order at this stage" });
     }
 
     order.status = "Cancelled";
     order.orderItems.forEach((item) => (item.itemStatus = "Cancelled"));
 
-    // 💰 REFUND LOGIC (For Cancelled Orders)
     if (order.paymentMethod !== "COD" && order.isPaid) {
       order.isRefunded = true;
       order.refundedAt = Date.now();
     }
 
-    // ✅ RESTORE STOCK
     for (const item of order.orderItems) {
       const product = await Product.findById(item.product);
       if (product) {
@@ -290,23 +311,20 @@ export const cancelOrder = async (req, res) => {
 
     await order.save();
 
-    // ✅ Notify Sellers
+    // ✅ INVALIDATE REDIS CACHE
+    await clearOrderCache(order.user, order._id);
+
     const sellersToNotify = [
       ...new Set(order.orderItems.map((item) => item.seller.toString())),
     ];
-
     for (const sellerId of sellersToNotify) {
       await createNotification(
         sellerId,
         "alert",
         "Order Cancelled ❌",
-        `Order #${order._id
-          .toString()
-          .slice(-6)
-          .toUpperCase()} was cancelled by the customer.`,
+        `Order #${order._id.toString().slice(-6).toUpperCase()} cancelled.`,
         order._id
       );
-
       if (req.io) {
         req.io.to(sellerId).emit("order_alert", {
           message: `Order #${order._id
@@ -324,40 +342,31 @@ export const cancelOrder = async (req, res) => {
   }
 };
 
-// @desc    Request Return (Customer) - AUTO APPROVES, RESTORES STOCK & REFUNDS
-// @route   PUT /api/orders/:id/return
-// @access  Private (Customer)
+// @desc    Request Return (Customer) - AUTO APPROVES
 export const requestReturn = async (req, res) => {
   try {
     const order = await Order.findById(req.params.id);
 
-    if (!order) {
-      return res.status(404).json({ message: "Order not found" });
-    }
+    if (!order) return res.status(404).json({ message: "Order not found" });
 
-    if (order.status !== "Delivered") {
+    if (order.status !== "Delivered")
       return res
         .status(400)
-        .json({ message: "Order must be delivered to request return" });
-    }
+        .json({ message: "Order must be delivered to return" });
 
-    // 14-Day Return Window Validation
     const deliveredDate = new Date(order.updatedAt);
-    const currentDate = new Date();
-    const diffTime = Math.abs(currentDate - deliveredDate);
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const diffDays = Math.ceil(
+      Math.abs(new Date() - deliveredDate) / (1000 * 60 * 60 * 24)
+    );
 
-    if (diffDays > 14) {
+    if (diffDays > 14)
       return res
         .status(400)
-        .json({ message: "Return period (14 days) has expired." });
-    }
+        .json({ message: "Return period (14 days) expired." });
 
-    // ✅ AUTO-UPDATE STATUS: "Return Initiated" (Skip "Return Requested")
     order.status = "Return Initiated";
     order.orderItems.forEach((item) => (item.itemStatus = "Return Initiated"));
 
-    // ✅ 1. RESTORE STOCK IMMEDIATELY (Auto-Accepted)
     for (const item of order.orderItems) {
       const product = await Product.findById(item.product);
       if (product) {
@@ -366,8 +375,6 @@ export const requestReturn = async (req, res) => {
       }
     }
 
-    // ✅ 2. PROCESS REFUND IMMEDIATELY (Auto-Accepted)
-    // If the order was paid (Online or COD that was delivered), mark as Refunded
     if (order.isPaid && !order.isRefunded) {
       order.isRefunded = true;
       order.refundedAt = Date.now();
@@ -375,55 +382,45 @@ export const requestReturn = async (req, res) => {
 
     await order.save();
 
-    // ✅ 3. Notify Sellers (Informational Only)
+    // ✅ INVALIDATE REDIS CACHE
+    await clearOrderCache(order.user, order._id);
+
     const sellersToNotify = [
       ...new Set(order.orderItems.map((item) => item.seller.toString())),
     ];
-
     for (const sellerId of sellersToNotify) {
       await createNotification(
         sellerId,
         "alert",
         "Return Initiated ↩️",
-        `Order #${order._id
-          .toString()
-          .slice(-6)
-          .toUpperCase()} has been returned. Stock restored & Refund initiated automatically.`,
+        `Order #${order._id.toString().slice(-6).toUpperCase()} returned.`,
         order._id
       );
-
       if (req.io) {
         req.io.to(sellerId).emit("order_alert", {
-          message: `Return Auto-Approved for Order #${order._id
+          message: `Return for Order #${order._id
             .toString()
             .slice(-6)
-            .toUpperCase()}`,
+            .toUpperCase()} Auto-Approved`,
           type: "info",
         });
       }
     }
 
-    res.json({
-      message: "Return initiated and refund processed successfully.",
-    });
+    res.json({ message: "Return processed successfully." });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
 // @desc    Get orders for the logged-in Seller
-// @route   GET /api/orders/seller-orders?status=...&search=...
-// @access  Private (Seller)
 export const getSellerOrders = async (req, res) => {
   try {
     const { status, search } = req.query;
 
     const orders = await Order.find({ "orderItems.seller": req.seller._id })
       .populate("user", "name email")
-      .populate({
-        path: "orderItems.product",
-        select: "name thumbnail",
-      })
+      .populate({ path: "orderItems.product", select: "name thumbnail" })
       .sort({ createdAt: -1 });
 
     let sellerOrders = orders.map((order) => {
@@ -443,7 +440,6 @@ export const getSellerOrders = async (req, res) => {
       )
         derivedStatus = "Return Initiated";
       else if (itemStatuses.includes("Shipped")) derivedStatus = "Shipped";
-      else derivedStatus = "Processing";
 
       return {
         _id: order._id,
@@ -463,11 +459,9 @@ export const getSellerOrders = async (req, res) => {
       };
     });
 
-    if (status && status !== "All") {
+    if (status && status !== "All")
       sellerOrders = sellerOrders.filter((o) => o.status === status);
-    }
 
-    // Search Logic
     if (search) {
       const searchRegex = new RegExp(search, "i");
       sellerOrders = sellerOrders.filter(
@@ -484,55 +478,39 @@ export const getSellerOrders = async (req, res) => {
   }
 };
 
-// @desc    Update Order Item Status (Seller Only) - Shipping Only
-// @route   PUT /api/orders/:id/status
-// @access  Private (Seller)
+// @desc    Update Order Item Status (Seller Only)
 export const updateOrderStatus = async (req, res) => {
   try {
     const { status, productId } = req.body;
     const order = await Order.findById(req.params.id);
 
-    if (!order) {
-      return res.status(404).json({ message: "Order not found" });
-    }
+    if (!order) return res.status(404).json({ message: "Order not found" });
 
     let updatedCount = 0;
-
     order.orderItems.forEach((item) => {
       const itemSellerId = item.seller._id
         ? item.seller._id.toString()
         : item.seller.toString();
-
-      const isOwner = itemSellerId === req.seller._id.toString();
-      const isTarget = productId ? item.product.toString() === productId : true;
-
-      if (isOwner && isTarget) {
+      if (
+        itemSellerId === req.seller._id.toString() &&
+        (!productId || item.product.toString() === productId)
+      ) {
         item.itemStatus = status;
         updatedCount++;
-
-        if (status === "Delivered") {
-          item.deliveredAt = Date.now();
-        }
+        if (status === "Delivered") item.deliveredAt = Date.now();
       }
     });
 
-    if (updatedCount === 0) {
-      return res
-        .status(403)
-        .json({ message: "Item not found or unauthorized" });
-    }
+    if (updatedCount === 0)
+      return res.status(403).json({ message: "Unauthorized" });
 
-    // Check Global Order Status
     const allDelivered = order.orderItems.every(
       (i) => i.itemStatus === "Delivered"
     );
-
     if (allDelivered) {
       order.isDelivered = true;
       order.deliveredAt = Date.now();
       order.status = "Delivered";
-
-      // ✅ Auto-Update Payment for COD on Delivery
       if (order.paymentMethod === "COD") {
         order.isPaid = true;
         order.paidAt = Date.now();
@@ -542,6 +520,9 @@ export const updateOrderStatus = async (req, res) => {
     }
 
     await order.save();
+
+    // ✅ INVALIDATE REDIS CACHE
+    await clearOrderCache(order.user, order._id);
 
     await createNotification(
       req.seller._id,
@@ -554,10 +535,7 @@ export const updateOrderStatus = async (req, res) => {
       order._id
     );
 
-    res.json({
-      message: "Order status updated successfully",
-      status: status,
-    });
+    res.json({ message: "Order status updated successfully", status });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
