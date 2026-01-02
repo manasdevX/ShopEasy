@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Link, useNavigate, useLocation, useSearchParams } from "react-router-dom"; // ✅ Added useSearchParams
+import { Link, useNavigate, useLocation, useSearchParams } from "react-router-dom"; 
 import Navbar from "../components/Navbar";
 import { showSuccess, showError } from "../utils/toast";
 import Footer from "../components/Footer";
@@ -38,6 +38,7 @@ export default function Account() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   // ✅ 2. INITIALIZE STATE (Priority: URL > Location State > Default)
+  // This ensures that on refresh, we look at ?tab=... first
   const [activeTab, setActiveTab] = useState(
     searchParams.get("tab") || location.state?.activeTab || "profile"
   );
@@ -52,7 +53,7 @@ export default function Account() {
   const [isLocating, setIsLocating] = useState(false);
   const [ordersLoading, setOrdersLoading] = useState(false);
 
-  // New State for File Upload & Removal Fix
+  // File Upload State
   const [selectedFile, setSelectedFile] = useState(null);
   const [isAvatarRemoved, setIsAvatarRemoved] = useState(false);
 
@@ -92,11 +93,13 @@ export default function Account() {
   const [status, setStatus] = useState("loading");
 
   // ✅ 3. EFFECT: SYNC URL WHEN TAB CHANGES
+  // Whenever the user clicks a sidebar link, update the URL ?tab=value
   useEffect(() => {
-    setSearchParams({ tab: activeTab });
+    setSearchParams({ tab: activeTab }, { replace: true });
   }, [activeTab, setSearchParams]);
 
-  // ✅ 4. EFFECT: HANDLE EXTERNAL REDIRECTS (like from Order Success page)
+  // ✅ 4. EFFECT: HANDLE EXTERNAL REDIRECTS 
+  // Captures state passed from other pages (like Order Success)
   useEffect(() => {
     if (location.state?.activeTab) {
       setActiveTab(location.state.activeTab);
@@ -193,7 +196,6 @@ export default function Account() {
             wishlist: data.wishlist || [],
           };
 
-          // Merge with existing state to preserve orders if they loaded first
           setUser((prev) => ({ ...prev, ...userData }));
           setFormData((prev) => ({ ...prev, ...userData }));
         }
@@ -244,7 +246,6 @@ export default function Account() {
 
       if (res.ok) {
         showSuccess("Order cancelled successfully");
-        // Update local state immediately
         setUser((prev) => ({
           ...prev,
           orders: prev.orders.map((o) =>
@@ -273,7 +274,6 @@ export default function Account() {
 
       if (res.ok) {
         showSuccess("Return request submitted");
-        // Update local state immediately
         setUser((prev) => ({
           ...prev,
           orders: prev.orders.map((o) =>
@@ -320,7 +320,7 @@ export default function Account() {
   const handleDeactivate = async () => {
     if (!isConfirming) {
       setIsConfirming(true);
-      return; // Stop here and wait for the second click
+      return;
     }
 
     try {
