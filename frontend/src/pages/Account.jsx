@@ -1,5 +1,10 @@
 import { useState, useRef, useEffect } from "react";
-import { Link, useNavigate, useLocation, useSearchParams } from "react-router-dom"; 
+import {
+  Link,
+  useNavigate,
+  useLocation,
+  useSearchParams,
+} from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { showSuccess, showError } from "../utils/toast";
 import Footer from "../components/Footer";
@@ -33,7 +38,11 @@ export default function Account() {
   const fileInputRef = useRef(null);
   const location = useLocation();
   const navigate = useNavigate();
-  
+
+  // At the top with your other states
+  const [actionConfirm, setActionConfirm] = useState({ id: null, type: null });
+  // type can be 'cancel' or 'return'
+
   // ✅ 1. SETUP URL PARAMS
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -98,7 +107,7 @@ export default function Account() {
     setSearchParams({ tab: activeTab }, { replace: true });
   }, [activeTab, setSearchParams]);
 
-  // ✅ 4. EFFECT: HANDLE EXTERNAL REDIRECTS 
+  // ✅ 4. EFFECT: HANDLE EXTERNAL REDIRECTS
   // Captures state passed from other pages (like Order Success)
   useEffect(() => {
     if (location.state?.activeTab) {
@@ -125,12 +134,12 @@ export default function Account() {
         return "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-500 dark:border-blue-500/20";
       case "Cancelled":
         return "bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-500/10 dark:text-rose-500 dark:border-rose-500/20";
-      
+
       // ✅ UPDATED: Added "Return Initiated" here to use Purple styling
-      case "Return Initiated": 
+      case "Return Initiated":
       case "Returned":
         return "bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-500/10 dark:text-purple-500 dark:border-purple-500/20";
-      
+
       case "Return Requested":
         return "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-500/10 dark:text-orange-500 dark:border-orange-500/20";
       case "Processing":
@@ -237,8 +246,6 @@ export default function Account() {
 
   // ================= ORDER ACTION HANDLERS =================
   const handleCancelOrder = async (orderId) => {
-    if (!window.confirm("Are you sure you want to cancel this order?")) return;
-
     try {
       const token = localStorage.getItem("token");
       const res = await fetch(`${API_URL}/api/orders/${orderId}/cancel`, {
@@ -265,8 +272,6 @@ export default function Account() {
   };
 
   const handleReturnOrder = async (orderId) => {
-    if (!window.confirm("Are you sure you want to return this order?")) return;
-
     try {
       const token = localStorage.getItem("token");
       const res = await fetch(`${API_URL}/api/orders/${orderId}/return`, {
@@ -1045,39 +1050,62 @@ export default function Account() {
                               </div>
 
                               <div className="flex items-center gap-3">
-                                {/* CANCEL BUTTON */}
-                                {(order.status === "Processing" ||
-                                  order.status === "Pending" ||
-                                  order.status === "Shipped") && (
-                                  <button
-                                    onClick={() => handleCancelOrder(order._id)}
-                                    className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold rounded-xl transition-all border border-red-100 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400"
-                                  >
-                                    Cancel Order
-                                  </button>
-                                )}
+  {actionConfirm.id === order._id ? (
+    /* --- NEW CONFIRMATION STATE --- */
+    <div className="flex items-center gap-2 animate-in fade-in zoom-in duration-300">
+      <p className="text-[10px] font-black text-slate-500 uppercase mr-1">
+        Are you sure?
+      </p>
+      <button
+        onClick={() => {
+          if (actionConfirm.type === 'cancel') handleCancelOrder(order._id);
+          if (actionConfirm.type === 'return') handleReturnOrder(order._id);
+          setActionConfirm({ id: null, type: null });
+        }}
+        className="px-3 py-2 bg-green-600 text-white text-[10px] font-black uppercase rounded-xl hover:bg-green-700 transition-all shadow-sm shadow-green-500/20"
+      >
+        Confirm
+      </button>
+      <button
+        onClick={() => setActionConfirm({ id: null, type: null })}
+        className="px-3 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[10px] font-black uppercase rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
+      >
+        Cancel
+      </button>
+    </div>
+  ) : (
+    /* --- ORIGINAL BUTTONS STATE --- */
+    <>
+      {(order.status === "Processing" ||
+        order.status === "Pending" ||
+        order.status === "Shipped") && (
+        <button
+          onClick={() => setActionConfirm({ id: order._id, type: "cancel" })}
+          className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold rounded-xl transition-all border border-red-100 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400"
+        >
+          Cancel Order
+        </button>
+      )}
 
-                                {/* RETURN BUTTON */}
-                                {order.status === "Delivered" &&
-                                  isWithinReturnWindow && (
-                                    <button
-                                      onClick={() =>
-                                        handleReturnOrder(order._id)
-                                      }
-                                      className="px-4 py-2 bg-orange-50 hover:bg-orange-100 text-orange-600 text-xs font-bold rounded-xl transition-all border border-orange-100 dark:bg-orange-900/20 dark:border-orange-800 dark:text-orange-400"
-                                    >
-                                      Return Items
-                                    </button>
-                                  )}
+      {order.status === "Delivered" && isWithinReturnWindow && (
+        <button
+          onClick={() => setActionConfirm({ id: order._id, type: "return" })}
+          className="px-4 py-2 bg-orange-50 hover:bg-orange-100 text-orange-600 text-xs font-bold rounded-xl transition-all border border-orange-100 dark:bg-orange-900/20 dark:border-orange-800 dark:text-orange-400"
+        >
+          Return Items
+        </button>
+      )}
 
-                                <Link
-                                  to={`/OrderSummary`}
-                                  state={{ order }}
-                                  className="px-5 py-2 bg-slate-900 dark:bg-white dark:text-slate-900 text-white text-xs font-bold rounded-xl hover:opacity-90 transition-all active:scale-95 flex items-center gap-2"
-                                >
-                                  View Details
-                                </Link>
-                              </div>
+      <Link
+        to={`/OrderSummary`}
+        state={{ order }}
+        className="px-5 py-2 bg-slate-900 dark:bg-white dark:text-slate-900 text-white text-xs font-bold rounded-xl hover:opacity-90 transition-all active:scale-95 flex items-center gap-2"
+      >
+        View Details
+      </Link>
+    </>
+  )}
+</div>
                             </div>
                           </div>
                         );
