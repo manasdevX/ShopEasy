@@ -79,7 +79,7 @@ export default function OrderSummary() {
   const getDeliveryContent = () => {
     const status = order.status;
 
-    // 1. Return Initiated / Returned
+    // 1. Return Initiated / Returned (Auto-Approved)
     if (status === "Return Initiated" || status === "Returned") {
       return {
         label: "Return Status",
@@ -121,12 +121,14 @@ export default function OrderSummary() {
       };
     }
 
-    // 4. Cancelled (Smart Subtext)
+    // 4. Cancelled (Smart Logic for Payment Message)
     if (status === "Cancelled") {
-      let cancelSubtext = "No Payment Deducted"; // Default for COD or Unpaid
+      // Default message for COD or Unpaid orders
+      let cancelSubtext = "No Payment Deducted"; 
 
-      // If Online Payment AND Paid -> Show Refund Message
-      if (order.paymentMethod !== "COD" && order.isPaid) {
+      // If the order was Paid Online OR explicitly marked as refunded
+      // (This handles cases where user paid via Gateway and cancelled)
+      if (order.isRefunded || (order.paymentMethod !== "COD" && order.isPaid)) {
         cancelSubtext = "Refund Processed to Original Source";
       }
 
@@ -238,8 +240,8 @@ export default function OrderSummary() {
                   {order.isPaid ? "Paid" : "Pending (COD)"}
                 </span>
               </div>
-              {/* Refund Status */}
-              {order.isRefunded && (
+              {/* Refund Status Display */}
+              {(order.isRefunded || (order.status === "Cancelled" && order.paymentMethod !== "COD" && order.isPaid)) && (
                 <div className="flex justify-between text-sm animate-in fade-in slide-in-from-left-2">
                   <span className="text-slate-500">Refund Status</span>
                   <span className="text-purple-500 font-bold">Processed</span>
