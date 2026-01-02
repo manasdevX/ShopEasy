@@ -1,6 +1,7 @@
 import User from "../models/User.js"; // ✅ Fixed Casing (Capital U)
 import Seller from "../models/seller.js"; // ✅ Import Seller Model
 import Otp from "../models/Otp.js";
+import Session from "../models/Session.js"; // ✅ Added Session Model
 import generateToken from "../utils/generateToken.js";
 import crypto from "crypto";
 import axios from "axios";
@@ -19,8 +20,6 @@ export const sendEmailOtp = async (req, res) => {
     const normalizedEmail = email.toLowerCase();
 
     // --- SEPARATION LOGIC ---
-    // If checking for a SELLER, look in Seller DB.
-    // If checking for a USER, look in User DB.
     if (type === "seller") {
       const existingSeller = await Seller.findOne({ email: normalizedEmail });
       if (existingSeller) {
@@ -64,15 +63,13 @@ export const sendEmailOtp = async (req, res) => {
 ====================================================== */
 export const sendMobileOtp = async (req, res) => {
   try {
-    let { phone, type } = req.body; // 'type' can be 'seller' or 'user'
+    let { phone, type } = req.body;
 
     if (!phone)
       return res.status(400).json({ message: "Phone number required" });
 
-    // 1. Clean the input
     const cleaned = phone.replace(/\s+/g, "").replace(/-/g, "");
 
-    // 2. Determine Formats to Search
     let searchCriteria = [];
     let formattedPhone = cleaned;
 
@@ -90,7 +87,6 @@ export const sendMobileOtp = async (req, res) => {
       searchCriteria.push({ phone: cleaned });
     }
 
-    // 3. CHECK FOR EXISTING (Role Based)
     if (type === "seller") {
       const existingSeller = await Seller.findOne({ $or: searchCriteria });
       if (existingSeller) {
@@ -107,7 +103,6 @@ export const sendMobileOtp = async (req, res) => {
       }
     }
 
-    // 4. Generate & Save OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
     await Otp.findOneAndUpdate(
@@ -116,7 +111,6 @@ export const sendMobileOtp = async (req, res) => {
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
-    // 5. Send SMS
     try {
       if (process.env.TWILIO_SID) {
         await sendSMS({
@@ -171,7 +165,6 @@ export const checkOtp = async (req, res) => {
 
 /* ======================================================
    4. FINAL REGISTRATION (For CUSTOMERS/USERS)
-   (Seller registration is in sellerController.js)
 ====================================================== */
 export const registerVerifiedUser = async (req, res) => {
   try {
@@ -181,7 +174,6 @@ export const registerVerifiedUser = async (req, res) => {
       return res.status(400).json({ message: "All fields are required" });
     }
 
-    // 1. Clean Phone Format (Standardize to +91)
     phone = phone.replace(/\s+/g, "").replace(/-/g, "");
     if (!phone.startsWith("+")) {
       if (phone.length === 10) phone = "+91" + phone;
@@ -189,7 +181,6 @@ export const registerVerifiedUser = async (req, res) => {
         phone = "+" + phone;
     }
 
-    // 2. CHECK IF USER ALREADY EXISTS (Double Check)
     const existingUser = await User.findOne({
       $or: [{ email: email.toLowerCase() }, { phone: phone }],
     });
@@ -198,7 +189,6 @@ export const registerVerifiedUser = async (req, res) => {
       return res.status(400).json({ message: "User already registered" });
     }
 
-    // 3. Create User
     const newUser = await User.create({
       name,
       email,
@@ -209,7 +199,6 @@ export const registerVerifiedUser = async (req, res) => {
       isMobileVerified: true,
     });
 
-    // 4. Cleanup OTPs
     await Otp.deleteMany({ identifier: { $in: [email, phone] } });
 
     res.status(201).json({
@@ -232,7 +221,7 @@ export const registerVerifiedUser = async (req, res) => {
 };
 
 /* ======================================================
-   5. LOGIN USER (For CUSTOMERS/USERS)
+   5. LOGIN USER (Updated with Session Management)
 ====================================================== */
 export const loginUser = async (req, res) => {
   try {
@@ -244,7 +233,6 @@ export const loginUser = async (req, res) => {
         .json({ message: "Email/Phone and password required" });
     }
 
-    // Smart Phone Detection
     let searchCriteria = [{ email: email }];
     const isNumber = /^[0-9]+$/.test(email);
 
@@ -267,9 +255,28 @@ export const loginUser = async (req, res) => {
     if (!isMatch)
       return res.status(401).json({ message: "Invalid credentials" });
 
+    // --- NEW: SESSION MANAGEMENT LOGIC ---
+    const activeSessions = await Session.find({ userId: user._id });
+    if (activeSessions.length >= 2) {
+      return res
+        .status(403)
+        .json({ message: "Max sessions reached. Logout from another device." });
+    }
+
+    const token = generateToken(user._id);
+    await Session.create({ userId: user._id, token });
+
+    res.cookie("accessToken", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "Lax",
+      maxAge: 24 * 60 * 60 * 1000, // 1 Day
+    });
+    // -------------------------------------
+
     res.status(200).json({
       success: true,
-      token: generateToken(user._id),
+      token,
       user: {
         _id: user._id,
         name: user.name,
@@ -285,41 +292,52 @@ export const loginUser = async (req, res) => {
 };
 
 /* ======================================================
-   6. GOOGLE AUTH (For USERS & SELLERS)
+   6. GOOGLE AUTH (Updated with Session Management)
 ====================================================== */
 export const googleAuth = async (req, res) => {
   try {
-    const { token, role } = req.body; // <--- Extract Role
+    const { token, role } = req.body;
 
-    // Verify Token
     const googleRes = await axios.get(
       "https://www.googleapis.com/oauth2/v3/userinfo",
       { headers: { Authorization: `Bearer ${token}` } }
     );
 
-    const { sub: googleId, name, email, picture } = googleRes.data;
+    const { sub: googleId, name, email } = googleRes.data;
 
-    // === CRITICAL FIX: SELECT CORRECT MODEL ===
     let Model = User;
-    if (role === "seller") {
-      Model = Seller;
-    }
+    if (role === "seller") Model = Seller;
 
-    // Check DB
     let user = await Model.findOne({ email });
 
     if (user) {
-      // Login Existing User/Seller
-
-      // Optional: Link GoogleID if not linked
       if (!user.googleId) {
         user.googleId = googleId;
         await user.save();
       }
 
+      // --- NEW: SESSION MANAGEMENT LOGIC ---
+      const activeSessions = await Session.find({ userId: user._id });
+      if (activeSessions.length >= 2) {
+        return res
+          .status(403)
+          .json({ message: "Max sessions reached on other devices." });
+      }
+
+      const authToken = generateToken(user._id);
+      await Session.create({ userId: user._id, token: authToken });
+
+      res.cookie("accessToken", authToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "Lax",
+        maxAge: 24 * 60 * 60 * 1000,
+      });
+      // -------------------------------------
+
       return res.status(200).json({
         success: true,
-        token: generateToken(user._id),
+        token: authToken,
         user: {
           _id: user._id,
           name: user.name,
@@ -330,7 +348,6 @@ export const googleAuth = async (req, res) => {
         isNewUser: false,
       });
     } else {
-      // New User - Send back details for Signup Form
       return res.status(200).json({
         success: true,
         isNewUser: true,
@@ -455,5 +472,48 @@ export const resetPasswordWithOTP = async (req, res) => {
       .json({ success: true, message: "Password updated successfully" });
   } catch (error) {
     res.status(500).json({ message: "Server Error" });
+  }
+};
+
+/* ======================================================
+   8. LOGOUT USER (Cleans DB & Cookies)
+====================================================== */
+export const logoutUser = async (req, res) => {
+  try {
+    // 1. Get token from either cookie or headers
+    const token = req.cookies.accessToken || (req.headers.authorization && req.headers.authorization.split(" ")[1]);
+
+    if (token) {
+      // 2. Remove this specific session from MongoDB
+      await Session.findOneAndDelete({ token });
+    }
+
+    // 3. Clear the HttpOnly Cookie
+    res.clearCookie("accessToken", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "Lax",
+    });
+
+    res.status(200).json({ success: true, message: "Logged out successfully" });
+  } catch (error) {
+    console.error("LOGOUT ERROR 👉", error);
+    res.status(500).json({ message: "Server error during logout" });
+  }
+};
+
+/* ======================================================
+    9. GET ME (Verify Session & Get Profile)
+====================================================== */
+export const getMe = async (req, res) => {
+  try {
+    // The 'protect' middleware already attached the user to req.user
+    // and verified the session exists in the Session collection.
+    res.status(200).json({
+      success: true,
+      user: req.user,
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Server error" });
   }
 };

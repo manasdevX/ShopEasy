@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useSocket } from "../../context/SocketContext"; // ✅ Added Socket Hook
+import axios from "axios"; // ✅ Added Axios for professional logout
 import {
   Moon,
   Sun,
@@ -48,18 +49,15 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
   const [hasUnread, setHasUnread] = useState(false);
   const [isConnected, setIsConnected] = useState(false); // ✅ Socket status state
 
-  // --- SOCKET.IO REAL-TIME SYNC (Change 2 & 3) ---
+  // --- SOCKET.IO REAL-TIME SYNC ---
   useEffect(() => {
     if (!socket) return;
 
-    // Set initial connection state
     setIsConnected(socket.connected);
 
-    // Listen for connection changes
     socket.on("connect", () => setIsConnected(true));
     socket.on("disconnect", () => setIsConnected(false));
 
-    // Listen for new notifications to update the red badge instantly
     socket.on("new_notification", () => {
       setHasUnread(true);
       console.log("🔔 Navbar: New notification received, badge updated.");
@@ -93,6 +91,7 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
       if (!currentToken) return;
       try {
         const res = await fetch(`${API_URL}/api/notifications?filter=unread`, {
+          credentials: "include", // ✅ Added for cookie support
           headers: { Authorization: `Bearer ${currentToken}` },
         });
         const data = await res.json();
@@ -128,15 +127,28 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
     setIsDark(!isDark);
   };
 
-  // --- LOGOUT LOGIC ---
-  const handleLogout = () => {
-    localStorage.removeItem("sellerToken");
-    localStorage.removeItem("sellerUser");
-    localStorage.removeItem("seller_step1");
-    localStorage.removeItem("seller_step2");
-    setSeller(null);
-    setToken(null);
-    navigate("/Seller/Landing");
+  // --- LOGOUT LOGIC (Updated for professional session management) ---
+  const handleLogout = async () => {
+    try {
+      // ✅ Call backend to clear Session from DB and clear Cookie
+      await axios.post(
+        `${API_URL}/api/auth/logout`,
+        {},
+        { withCredentials: true }
+      );
+
+      localStorage.removeItem("sellerToken");
+      localStorage.removeItem("sellerUser");
+      localStorage.removeItem("seller_step1");
+      localStorage.removeItem("seller_step2");
+      setSeller(null);
+      setToken(null);
+      navigate("/Seller/Landing");
+    } catch (err) {
+      console.error("Logout failed", err);
+      localStorage.clear();
+      navigate("/Seller/Landing");
+    }
   };
 
   // --- SEARCH LOGIC ---
@@ -157,6 +169,7 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
           const res = await fetch(
             `${API_URL}/api/sellers/search?query=${searchQuery}`,
             {
+              credentials: "include", // ✅ Added for cookie support
               headers: {
                 "Content-Type": "application/json",
                 Authorization: `Bearer ${token}`,
@@ -375,7 +388,6 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
 
           {/* RIGHT: ACTIONS */}
           <div className="flex items-center justify-end gap-6 shrink-0">
-            {/* ✅ Live Status Indicator (Change 2) */}
             {isAuth && (
               <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-slate-50 dark:bg-slate-900 rounded-full border border-slate-100 dark:border-slate-800">
                 <div
