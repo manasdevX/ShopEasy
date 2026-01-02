@@ -7,7 +7,7 @@ import {
   updateOrderStatus,
   cancelOrder,
   requestReturn,
-  handleReturnRequest, // 👈 1. Import this function
+  // ❌ handleReturnRequest is REMOVED (Returns are now auto-approved)
 } from "../controllers/order.controller.js";
 import { protect, protectSeller } from "../middlewares/auth.middleware.js";
 
@@ -27,21 +27,18 @@ router.get("/myorders", protect, getMyOrders);
 router.put("/:id/cancel", protect, cancelOrder);
 
 // Matches: PUT /api/orders/:id/return
+// (Now handles Auto-Approval, Stock Refill & Refund logic)
 router.put("/:id/return", protect, requestReturn);
 
 /* =========================================
    SELLER ROUTES
-   Note: Specialized routes MUST come before /:id to prevent CastErrors
 ========================================= */
 
 // Matches: GET /api/orders/seller-orders
 router.get("/seller-orders", protectSeller, getSellerOrders);
 
-// ✅ 2. NEW ROUTE: Handle Returns (Approve/Reject)
-// Matches: PUT /api/orders/handle-return
-router.put("/handle-return", protectSeller, handleReturnRequest);
-
 // Matches: PUT /api/orders/:id/status
+// (For shipping updates: Processing -> Shipped -> Delivered)
 router.put("/:id/status", protectSeller, updateOrderStatus);
 
 /* =========================================
