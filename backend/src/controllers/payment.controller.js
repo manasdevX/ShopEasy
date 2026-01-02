@@ -19,6 +19,7 @@ export const createOrder = async (req, res) => {
   try {
     const { amount } = req.body;
 
+    // 1. Validation
     if (!amount || amount <= 0) {
       return res.status(400).json({
         success: false,
@@ -26,12 +27,14 @@ export const createOrder = async (req, res) => {
       });
     }
 
+    // 2. Options for Razorpay
     const options = {
-      amount: Math.round(amount * 100), // Convert RS to Paise
+      amount: Math.round(amount * 100), // ✅ CRITICAL: Convert ₹52 -> 5200 paise
       currency: "INR",
       receipt: `receipt_${Date.now()}`,
     };
 
+    // 3. Create Order via Razorpay API
     const order = await razorpay.orders.create(options);
 
     if (!order) {
@@ -41,10 +44,9 @@ export const createOrder = async (req, res) => {
       });
     }
 
-    res.status(200).json({
-      success: true,
-      order,
-    });
+    // 4. ✅ FIX: Send the order object directly so frontend can read .id and .amount
+    res.status(200).json(order);
+
   } catch (error) {
     console.error("Razorpay Order Error:", error);
     res.status(500).json({
@@ -89,7 +91,7 @@ export const verifyPayment = async (req, res) => {
       });
     }
 
-    // 2. Database Logic: Save the Order with correct field mapping
+    // 2. Database Logic: Save the Order
     const newOrder = new Order({
       user: req.user._id,
       orderItems: orderItems.map((item) => ({
@@ -98,20 +100,21 @@ export const verifyPayment = async (req, res) => {
         image: item.image,
         price: item.price,
         product: item._id,
-        // ✅ CRITICAL FIX: Ensure 'seller' is passed from frontend
-        seller: item.seller,
+        seller: item.seller, // ✅ Passed correctly from frontend
       })),
       shippingAddress: {
-        address: shippingAddress.street,
+        address: shippingAddress.address || shippingAddress.street, // Handle both formats
         city: shippingAddress.city,
-        postalCode: shippingAddress.pincode,
+        postalCode: shippingAddress.postalCode || shippingAddress.pincode,
         country: shippingAddress.country || "India",
+        phone: shippingAddress.phone,
       },
       paymentMethod: "Razorpay",
       paymentResult: {
         id: razorpay_payment_id,
         status: "Completed",
         update_time: new Date().toISOString(),
+        email_address: req.user.email,
       },
       itemsPrice,
       taxPrice,
