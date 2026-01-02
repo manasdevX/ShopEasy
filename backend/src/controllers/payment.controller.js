@@ -29,7 +29,7 @@ export const createOrder = async (req, res) => {
 
     // 2. Options for Razorpay
     const options = {
-      amount: Math.round(amount * 100), // Convert ₹52 -> 5200 paise
+      amount: Math.round(amount * 100), // Razorpay accepts smallest currency unit (paise)
       currency: "INR",
       receipt: `receipt_${Date.now()}`,
     };
@@ -44,8 +44,9 @@ export const createOrder = async (req, res) => {
       });
     }
 
-    // 4. Send the order object directly
+    // 4. Send the order object directly to frontend
     res.status(200).json(order);
+
   } catch (error) {
     console.error("Razorpay Order Error:", error);
     res.status(500).json({
@@ -75,7 +76,9 @@ export const verifyPayment = async (req, res) => {
     } = req.body;
 
     // 1. Signature Verification
+    // Create the expected signature using the order_id and payment_id returned by Razorpay
     const body = razorpay_order_id + "|" + razorpay_payment_id;
+
     const expectedSignature = crypto
       .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
       .update(body.toString())
@@ -91,18 +94,17 @@ export const verifyPayment = async (req, res) => {
     }
 
     // 2. Database Logic: Save the Order
+    // Since payment is verified, we now commit the order to the database
     const newOrder = new Order({
-      user: req.user._id,
+      user: req.user._id, // Assumes authMiddleware populates req.user
 
-      // ✅ CRITICAL FIX: Mapping keys correctly
-      // Frontend sends { qty: 1, product: "id" }
-      // We now check both item.qty OR item.quantity to be safe
+      // Safe mapping for Order Items to handle different frontend structures
       orderItems: orderItems.map((item) => ({
         name: item.name,
-        qty: item.qty || item.quantity, // <--- FIXED: Reads 'qty' correctly
+        qty: item.qty || item.quantity, // Handles both 'qty' and 'quantity' keys
         image: item.image,
         price: item.price,
-        product: item.product || item._id, // <--- FIXED: Reads 'product' correctly
+        product: item.product || item._id, // Handles both 'product' (id ref) and '_id' (object)
         seller: item.seller,
       })),
 
@@ -113,6 +115,7 @@ export const verifyPayment = async (req, res) => {
         country: shippingAddress.country || "India",
         phone: shippingAddress.phone,
       },
+
       paymentMethod: "Razorpay",
       paymentResult: {
         id: razorpay_payment_id,
@@ -120,24 +123,40 @@ export const verifyPayment = async (req, res) => {
         update_time: new Date().toISOString(),
         email_address: req.user.email,
       },
+
       itemsPrice,
       taxPrice,
       shippingPrice,
       totalPrice,
+      
+      // Explicitly mark as paid
       isPaid: true,
       paidAt: Date.now(),
-      status: "Processing",
+      status: "Processing", // Default status for paid orders
     });
 
     const savedOrder = await newOrder.save();
 
+    // 3. Return Success with the Saved Order
+    // Frontend uses 'savedOrder._id' to redirect to Order Summary
     res.status(201).json({
       success: true,
       message: "Order placed and payment verified successfully",
       order: savedOrder,
     });
+
   } catch (error) {
     console.error("Detailed Order Saving Error:", error);
+    
+    // Check for Mongoose validation errors
+    if (error.name === "ValidationError") {
+       return res.status(400).json({
+         success: false,
+         message: "Order Validation Failed",
+         error: error.message
+       });
+    }
+
     res.status(500).json({
       success: false,
       message: "Payment verified but failed to save order.",
