@@ -4,11 +4,8 @@ export default function useDarkSide() {
   // 1. Initialize theme: Priority is LocalStorage > System Preference > 'light'
   const [theme, setTheme] = useState(() => {
     const savedTheme = localStorage.getItem("theme");
-    if (savedTheme) return savedTheme;
-    
-    return window.matchMedia("(prefers-color-scheme: dark)").matches 
-      ? "dark" 
-      : "light";
+
+    return savedTheme ? savedTheme : "dark";
   });
 
   const colorTheme = theme === "dark" ? "light" : "dark";

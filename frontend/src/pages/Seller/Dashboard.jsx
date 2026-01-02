@@ -40,7 +40,7 @@ export default function Dashboard() {
 
     if (res.ok) {
       // Filter the entire inventory for items < 5
-      const low = result.filter((p) => p.stock < 5);
+      const low = result.filter((p) => p.stock < 5).sort((a , b) => a.stock - b.stock);
       setLowStockItems(low);
     } else {
       console.error("Failed to fetch low stock:", result.message);
