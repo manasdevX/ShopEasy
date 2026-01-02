@@ -1,7 +1,7 @@
-import User from "../models/User.js"; // ✅ Fixed Casing (Capital U)
-import Seller from "../models/seller.js"; // ✅ Import Seller Model
+import User from "../models/User.js";
+import Seller from "../models/seller.js";
 import Otp from "../models/Otp.js";
-import Session from "../models/Session.js"; // ✅ Added Session Model
+import Session from "../models/Session.js"; // ✅ Session Model
 import generateToken from "../utils/generateToken.js";
 import crypto from "crypto";
 import axios from "axios";
@@ -221,7 +221,7 @@ export const registerVerifiedUser = async (req, res) => {
 };
 
 /* ======================================================
-   5. LOGIN USER (Updated with Session Management)
+   5. LOGIN USER (Updated with Correct Session Schema)
 ====================================================== */
 export const loginUser = async (req, res) => {
   try {
@@ -255,8 +255,8 @@ export const loginUser = async (req, res) => {
     if (!isMatch)
       return res.status(401).json({ message: "Invalid credentials" });
 
-    // --- NEW: SESSION MANAGEMENT LOGIC ---
-    const activeSessions = await Session.find({ userId: user._id });
+    // --- CHECK SESSION LIMIT ---
+    const activeSessions = await Session.find({ user: user._id }); // Changed 'userId' to 'user' to match schema
     if (activeSessions.length >= 2) {
       return res
         .status(403)
@@ -264,7 +264,15 @@ export const loginUser = async (req, res) => {
     }
 
     const token = generateToken(user._id);
-    await Session.create({ userId: user._id, token });
+
+    // --- ✅ FIXED SESSION CREATION ---
+    await Session.create({
+      user: user._id,
+      refreshToken: token, // Using the JWT as the refresh token for DB storage
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 Days
+      ipAddress: req.ip || req.connection.remoteAddress,
+      userAgent: req.headers["user-agent"],
+    });
 
     res.cookie("accessToken", token, {
       httpOnly: true,
@@ -272,7 +280,6 @@ export const loginUser = async (req, res) => {
       sameSite: "Lax",
       maxAge: 24 * 60 * 60 * 1000, // 1 Day
     });
-    // -------------------------------------
 
     res.status(200).json({
       success: true,
@@ -292,7 +299,7 @@ export const loginUser = async (req, res) => {
 };
 
 /* ======================================================
-   6. GOOGLE AUTH (Updated with Session Management)
+   6. GOOGLE AUTH (Updated with Correct Session Schema)
 ====================================================== */
 export const googleAuth = async (req, res) => {
   try {
@@ -316,8 +323,8 @@ export const googleAuth = async (req, res) => {
         await user.save();
       }
 
-      // --- NEW: SESSION MANAGEMENT LOGIC ---
-      const activeSessions = await Session.find({ userId: user._id });
+      // --- CHECK SESSION LIMIT ---
+      const activeSessions = await Session.find({ user: user._id }); // Changed 'userId' to 'user'
       if (activeSessions.length >= 2) {
         return res
           .status(403)
@@ -325,7 +332,15 @@ export const googleAuth = async (req, res) => {
       }
 
       const authToken = generateToken(user._id);
-      await Session.create({ userId: user._id, token: authToken });
+
+      // --- ✅ FIXED SESSION CREATION ---
+      await Session.create({
+        user: user._id,
+        refreshToken: authToken,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 Days
+        ipAddress: req.ip || req.connection.remoteAddress,
+        userAgent: req.headers["user-agent"],
+      });
 
       res.cookie("accessToken", authToken, {
         httpOnly: true,
@@ -333,7 +348,6 @@ export const googleAuth = async (req, res) => {
         sameSite: "Lax",
         maxAge: 24 * 60 * 60 * 1000,
       });
-      // -------------------------------------
 
       return res.status(200).json({
         success: true,
@@ -481,11 +495,14 @@ export const resetPasswordWithOTP = async (req, res) => {
 export const logoutUser = async (req, res) => {
   try {
     // 1. Get token from either cookie or headers
-    const token = req.cookies.accessToken || (req.headers.authorization && req.headers.authorization.split(" ")[1]);
+    const token =
+      req.cookies.accessToken ||
+      (req.headers.authorization && req.headers.authorization.split(" ")[1]);
 
     if (token) {
       // 2. Remove this specific session from MongoDB
-      await Session.findOneAndDelete({ token });
+      // Note: We use 'refreshToken' field because that's where we saved the token in login/googleAuth
+      await Session.findOneAndDelete({ refreshToken: token });
     }
 
     // 3. Clear the HttpOnly Cookie
@@ -503,7 +520,7 @@ export const logoutUser = async (req, res) => {
 };
 
 /* ======================================================
-    9. GET ME (Verify Session & Get Profile)
+   9. GET ME (Verify Session & Get Profile)
 ====================================================== */
 export const getMe = async (req, res) => {
   try {
