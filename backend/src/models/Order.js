@@ -37,6 +37,7 @@ const orderSchema = new mongoose.Schema(
             "Delivered",
             "Cancelled",
             "Return Requested",
+            "Return Initiated", // ✅ Added Here
             "Returned",
           ],
         },
@@ -71,7 +72,7 @@ const orderSchema = new mongoose.Schema(
     isPaid: { type: Boolean, required: true, default: false },
     paidAt: { type: Date },
 
-    // ✅ NEW: Fields for tracking refunds
+    // ✅ Fields for tracking refunds
     isRefunded: {
       type: Boolean,
       default: false,
@@ -94,6 +95,7 @@ const orderSchema = new mongoose.Schema(
         "Delivered",
         "Cancelled",
         "Return Requested",
+        "Return Initiated", // ✅ Added Here
         "Returned",
       ],
     },
@@ -103,4 +105,4 @@ const orderSchema = new mongoose.Schema(
   }
 );
 
-export default mongoose.model("Order", orderSchema);
+export default mongoose.model;
