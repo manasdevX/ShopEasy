@@ -21,6 +21,18 @@ import { toast } from "react-hot-toast";
 import { showSuccess, showError } from "../utils/toast";
 
 const API_URL = import.meta.env.VITE_API_URL;
+const RAZORPAY_KEY_ID = import.meta.env.VITE_RAZORPAY_KEY_ID;
+
+// --- HELPER: Load Razorpay Script Dynamically ---
+const loadRazorpayScript = () => {
+  return new Promise((resolve) => {
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+};
 
 export default function CheckoutPage() {
   const location = useLocation();
@@ -162,11 +174,14 @@ export default function CheckoutPage() {
     }
   };
 
+  // ================= UPDATED PAYMENT HANDLER =================
   const handlePayment = async () => {
-    if (!selectedAddress)
-      return toast.error("Please select a shipping address");
-    setIsProcessing(true);
+    if (!selectedAddress) return toast.error("Please select a shipping address");
+    
+    setIsProcessing(true); // START SPINNER
+
     try {
+      // 1. CASH ON DELIVERY LOGIC
       if (paymentMode === "cod") {
         const res = await fetch(`${API_URL}/api/orders`, {
           method: "POST",
@@ -188,7 +203,6 @@ export default function CheckoutPage() {
               city: selectedAddress.city,
               postalCode: selectedAddress.pincode,
               country: selectedAddress.country,
-              // ✅ CRITICAL FIX: Send phone number to backend
               phone: selectedAddress.phone,
             },
             paymentMethod: "COD",
@@ -204,14 +218,126 @@ export default function CheckoutPage() {
           localStorage.removeItem("cart");
           window.dispatchEvent(new Event("cartUpdated"));
           navigate("/OrderSummary", { state: { order: data } });
-        } else showError(data.message);
+        } else {
+          showError(data.message || "Failed to place order");
+        }
+        setIsProcessing(false); // STOP SPINNER
+        return;
+      }
+
+      // 2. ONLINE PAYMENT (RAZORPAY) LOGIC
+      
+      // A. Load Script
+      const isScriptLoaded = await loadRazorpayScript();
+      if (!isScriptLoaded) {
+        showError("Razorpay SDK failed to load. Check your internet.");
         setIsProcessing(false);
         return;
       }
-      // Razorpay logic follows...
+
+      // B. Create Order on Backend
+      const res = await fetch(`${API_URL}/api/orders/razorpay`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          amount: totalPayable,
+        }),
+      });
+
+      const orderData = await res.json();
+      if (!res.ok) {
+        throw new Error(orderData.message || "Failed to create Razorpay order");
+      }
+
+      // C. Open Razorpay Modal
+      const options = {
+        key: RAZORPAY_KEY_ID, 
+        amount: orderData.amount, 
+        currency: "INR",
+        name: "ShopEasy",
+        description: "Payment for order",
+        order_id: orderData.id, 
+        handler: async function (response) {
+            // D. Verify Payment on Backend
+            try {
+                const verifyRes = await fetch(`${API_URL}/api/orders/razorpay/verify`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({
+                        razorpay_payment_id: response.razorpay_payment_id,
+                        razorpay_order_id: response.razorpay_order_id,
+                        razorpay_signature: response.razorpay_signature,
+                        // Pass order details to save the final order
+                        orderItems: items.map((i) => ({
+                          name: i.name,
+                          qty: i.quantity,
+                          image: i.image,
+                          price: i.price,
+                          product: i._id,
+                          seller: i.seller,
+                        })),
+                        shippingAddress: {
+                          address: selectedAddress.addressLine || selectedAddress.street,
+                          city: selectedAddress.city,
+                          postalCode: selectedAddress.pincode,
+                          country: selectedAddress.country,
+                          phone: selectedAddress.phone,
+                        },
+                        itemsPrice: subtotal,
+                        taxPrice: platformFee,
+                        shippingPrice: deliveryFee,
+                        totalPrice: totalPayable,
+                    })
+                });
+                
+                const verifyData = await verifyRes.json();
+                if(verifyRes.ok) {
+                    showSuccess("Payment Successful!");
+                    localStorage.removeItem("cart");
+                    window.dispatchEvent(new Event("cartUpdated"));
+                    navigate("/OrderSummary", { state: { order: verifyData } });
+                } else {
+                    showError("Payment Verification Failed");
+                }
+            } catch (err) {
+                showError("Payment Verification Error");
+            } finally {
+                setIsProcessing(false); // STOP SPINNER AFTER VERIFY
+            }
+        },
+        prefill: {
+            name: selectedAddress.fullName || newAddress.name,
+            contact: selectedAddress.phone || newAddress.phone,
+        },
+        theme: {
+            color: "#2563eb",
+        },
+        modal: {
+            // E. CRITICAL: Handle User Closing the Popup
+            ondismiss: function() {
+                setIsProcessing(false); 
+                toast("Payment Cancelled");
+            }
+        }
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', function (response){
+        showError(response.error.description);
+        setIsProcessing(false);
+      });
+      rzp.open();
+
     } catch (e) {
-      showError("Checkout failed");
-      setIsProcessing(false);
+      console.error(e);
+      showError(e.message || "Checkout failed");
+      setIsProcessing(false); // STOP SPINNER ON ERROR
     }
   };
 
