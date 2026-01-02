@@ -233,9 +233,6 @@ export const getSellerProfile = async (req, res) => {
     // 2. Fetch from DB
     const seller = await Seller.findById(req.seller._id);
     if (seller) {
-<<<<<<< Updated upstream
-      const responseData = {
-=======
       // Try to provide structured address components to the client without changing DB schema
       const addressParts = (seller.address || "").split(",").map((p) => p.trim());
       const addressObject = {
@@ -246,7 +243,6 @@ export const getSellerProfile = async (req, res) => {
       };
 
       res.json({
->>>>>>> Stashed changes
         _id: seller._id,
         name: seller.name,
         email: seller.email,
@@ -261,18 +257,12 @@ export const getSellerProfile = async (req, res) => {
         isActive: seller.isActive,
         isOnboardingComplete: seller.isOnboardingComplete,
         bankDetails: seller.bankDetails,
-<<<<<<< Updated upstream
-      };
+      });
 
       // 3. Save to Redis (TTL: 1 hour)
       await redisClient.setEx(cacheKey, 3600, JSON.stringify(responseData));
 
       res.json(responseData);
-=======
-        createdAt: seller.createdAt,
-        updatedAt: seller.updatedAt,
-      });
->>>>>>> Stashed changes
     } else {
       res.status(404).json({ message: "Seller not found" });
     }
