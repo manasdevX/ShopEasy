@@ -5,6 +5,8 @@ import {
   getSellerProfile,
   updateSellerProfile,
   addBankDetails,
+  updatePersonalProfile,
+  updateSellerAddress,
   getSellerDashboard,
   forgotPasswordSeller,
   resetPasswordSeller,
@@ -39,6 +41,12 @@ router.get("/profile", protectSeller, getSellerProfile);
 
 // ✅ Update Business Profile (Step 2 of Onboarding)
 router.put("/profile", protectSeller, updateSellerProfile);
+
+// ✅ Update Personal Info (Name / Phone)
+router.put("/profile/personal", protectSeller, updatePersonalProfile);
+
+// ✅ Update Address
+router.put("/profile/address", protectSeller, updateSellerAddress);
 
 // ✅ Add/Update Bank Details (Step 3 of Onboarding)
 router.put("/bank-details", protectSeller, addBankDetails);

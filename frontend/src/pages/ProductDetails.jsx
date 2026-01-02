@@ -502,7 +502,7 @@ export default function ProductDetails() {
                 {
                   icon: <Truck size={20} />,
                   title: "Free Shipping",
-                  desc: "Express delivery for all orders",
+                  desc: "For orders above ₹400",
                 },
                 {
                   icon: <RotateCcw size={20} />,

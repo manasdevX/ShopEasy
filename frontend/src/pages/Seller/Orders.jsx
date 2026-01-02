@@ -17,6 +17,8 @@ import {
 import Navbar from "../../components/Seller/SellerNavbar";
 import Footer from "../../components/Seller/SellerFooter";
 import { showSuccess, showError } from "../../utils/toast";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -132,6 +134,55 @@ export default function SellerOrders() {
     "Return Initiated",
   ];
 
+  const handleExportPDF = () => {
+  const doc = new jsPDF();
+  
+  // 1. ADD BRANDING
+  doc.setFontSize(22);
+  doc.setTextColor(249, 115, 22); // ShopEasy Orange
+  doc.text("ShopEasy", 14, 20);
+  
+  doc.setFontSize(10);
+  doc.setTextColor(100);
+  doc.text("Seller Central Fulfillment Report", 14, 27);
+  doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 33);
+
+  // 2. PREPARE DATA (Including Shipping Info)
+  const tableColumn = ["Order ID", "Customer & Contact", "Shipping Address", "Total"];
+  const tableRows = orders.map(order => [
+    `#${order._id.slice(-6).toUpperCase()}`,
+    `${order.user?.name}\nPh: ${order.shippingAddress?.phone || 'N/A'}`,
+    `${order.shippingAddress?.address}, ${order.shippingAddress?.city}`,
+    `INR ${order.sellerTotal?.toLocaleString()}`
+  ]);
+
+  // 3. GENERATE TABLE WITH STYLING
+  autoTable(doc, {
+    head: [tableColumn],
+    body: tableRows,
+    startY: 40,
+    theme: 'striped',
+    headStyles: { fillColor: [249, 115, 22], fontSize: 10 },
+    styles: { fontSize: 8, cellPadding: 4 },
+    columnStyles: {
+      2: { cellWidth: 60 }, // Give more width to the Address column
+    }
+  });
+
+  // 4. ADD TOTAL SUMMARY BOX
+  const finalY = doc.lastAutoTable.finalY + 15;
+  doc.setFillColor(245, 245, 245);
+  doc.rect(14, finalY, 182, 20, 'F'); // Gray background box
+  
+  doc.setFont(undefined, 'bold');
+  doc.setTextColor(0);
+  doc.text(`Total Orders: ${orders.length}`, 20, finalY + 12);
+  doc.text(`Total Tab Revenue: INR ${stats.revenue.toLocaleString()}`, 100, finalY + 12);
+
+  // 5. DOWNLOAD
+  doc.save(`ShopEasy_${activeTab}_Report.pdf`);
+};
+
   return (
     <div className="bg-white dark:bg-[#030712] min-h-screen transition-colors duration-500 font-sans">
       <Navbar isLoggedIn={true} />
@@ -147,8 +198,11 @@ export default function SellerOrders() {
               Monitor sales performance and shipping fulfillment.
             </p>
           </div>
-          <button className="flex items-center gap-2 bg-orange-500 text-white px-6 py-3 rounded-2xl font-black shadow-lg shadow-orange-500/20 hover:scale-105 transition-all">
-            <Download size={20} /> Export CSV
+          <button
+            onClick={handleExportPDF} // Added click handler
+            className="flex items-center gap-2 bg-orange-500 text-white px-6 py-3 rounded-2xl font-black shadow-lg shadow-orange-500/20 hover:scale-105 transition-all"
+          >
+            <Download size={20} /> Export PDF
           </button>
         </div>
 
@@ -364,7 +418,6 @@ export default function SellerOrders() {
 
                           {activeDropdown === order._id && (
                             <div className="absolute right-0 top-full mt-2 w-52 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-xl z-50 overflow-hidden py-1">
-                              
                               {/* 1. Mark Delivered (Only if Shipped) */}
                               {order.status === "Shipped" && (
                                 <button

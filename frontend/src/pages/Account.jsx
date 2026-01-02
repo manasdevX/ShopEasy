@@ -1065,7 +1065,7 @@ export default function Account() {
                                           type: null,
                                         });
                                       }}
-                                      className="px-3 py-2 bg-green-600 text-white text-[10px] font-black uppercase rounded-xl hover:bg-green-700 transition-all shadow-sm shadow-green-500/20"
+                                      className="px-3 py-2 bg-red-600 text-white text-[10px] font-black uppercase rounded-xl hover:bg-red-700 transition-all shadow-sm shadow-green-500/20"
                                     >
                                       Confirm
                                     </button>
