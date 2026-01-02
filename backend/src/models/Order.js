@@ -37,7 +37,7 @@ const orderSchema = new mongoose.Schema(
             "Delivered",
             "Cancelled",
             "Return Requested",
-            "Return Initiated", // ✅ Added Here
+            "Return Initiated", // ✅ Correctly Added
             "Returned",
           ],
         },
@@ -95,7 +95,7 @@ const orderSchema = new mongoose.Schema(
         "Delivered",
         "Cancelled",
         "Return Requested",
-        "Return Initiated", // ✅ Added Here
+        "Return Initiated", // ✅ Correctly Added
         "Returned",
       ],
     },
@@ -105,4 +105,5 @@ const orderSchema = new mongoose.Schema(
   }
 );
 
-export default mongoose.model;
+// ✅ FIXED EXPORT STATEMENT
+export default mongoose.model("Order", orderSchema);
