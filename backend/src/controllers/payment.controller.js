@@ -29,7 +29,7 @@ export const createOrder = async (req, res) => {
 
     // 2. Options for Razorpay
     const options = {
-      amount: Math.round(amount * 100), // ✅ CRITICAL: Convert ₹52 -> 5200 paise
+      amount: Math.round(amount * 100), // Convert ₹52 -> 5200 paise
       currency: "INR",
       receipt: `receipt_${Date.now()}`,
     };
@@ -44,9 +44,8 @@ export const createOrder = async (req, res) => {
       });
     }
 
-    // 4. ✅ FIX: Send the order object directly so frontend can read .id and .amount
+    // 4. Send the order object directly
     res.status(200).json(order);
-
   } catch (error) {
     console.error("Razorpay Order Error:", error);
     res.status(500).json({
@@ -94,16 +93,21 @@ export const verifyPayment = async (req, res) => {
     // 2. Database Logic: Save the Order
     const newOrder = new Order({
       user: req.user._id,
+
+      // ✅ CRITICAL FIX: Mapping keys correctly
+      // Frontend sends { qty: 1, product: "id" }
+      // We now check both item.qty OR item.quantity to be safe
       orderItems: orderItems.map((item) => ({
         name: item.name,
-        qty: item.quantity,
+        qty: item.qty || item.quantity, // <--- FIXED: Reads 'qty' correctly
         image: item.image,
         price: item.price,
-        product: item._id,
-        seller: item.seller, // ✅ Passed correctly from frontend
+        product: item.product || item._id, // <--- FIXED: Reads 'product' correctly
+        seller: item.seller,
       })),
+
       shippingAddress: {
-        address: shippingAddress.address || shippingAddress.street, // Handle both formats
+        address: shippingAddress.address || shippingAddress.street,
         city: shippingAddress.city,
         postalCode: shippingAddress.postalCode || shippingAddress.pincode,
         country: shippingAddress.country || "India",
