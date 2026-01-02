@@ -39,15 +39,13 @@ export default function Account() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // At the top with your other states
+  // State for Confirmation Buttons (Cancel/Return)
   const [actionConfirm, setActionConfirm] = useState({ id: null, type: null });
-  // type can be 'cancel' or 'return'
 
   // ✅ 1. SETUP URL PARAMS
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // ✅ 2. INITIALIZE STATE (Priority: URL > Location State > Default)
-  // This ensures that on refresh, we look at ?tab=... first
+  // ✅ 2. INITIALIZE STATE
   const [activeTab, setActiveTab] = useState(
     searchParams.get("tab") || location.state?.activeTab || "profile"
   );
@@ -102,13 +100,11 @@ export default function Account() {
   const [status, setStatus] = useState("loading");
 
   // ✅ 3. EFFECT: SYNC URL WHEN TAB CHANGES
-  // Whenever the user clicks a sidebar link, update the URL ?tab=value
   useEffect(() => {
     setSearchParams({ tab: activeTab }, { replace: true });
   }, [activeTab, setSearchParams]);
 
   // ✅ 4. EFFECT: HANDLE EXTERNAL REDIRECTS
-  // Captures state passed from other pages (like Order Success)
   useEffect(() => {
     if (location.state?.activeTab) {
       setActiveTab(location.state.activeTab);
@@ -135,13 +131,14 @@ export default function Account() {
       case "Cancelled":
         return "bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-500/10 dark:text-rose-500 dark:border-rose-500/20";
 
-      // ✅ UPDATED: Added "Return Initiated" here to use Purple styling
+      // ✅ FIXED: Both Return statuses use Purple
       case "Return Initiated":
       case "Returned":
         return "bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-500/10 dark:text-purple-500 dark:border-purple-500/20";
 
-      // case "Return Requested":
-      //   return "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-500/10 dark:text-orange-500 dark:border-orange-500/20";
+      case "Return Requested":
+        return "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-500/10 dark:text-orange-500 dark:border-orange-500/20";
+      
       case "Processing":
       default:
         return "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-500 dark:border-amber-500/20";
@@ -282,11 +279,12 @@ export default function Account() {
       const data = await res.json();
 
       if (res.ok) {
-        showSuccess("Return request submitted");
+        showSuccess("Return initiated successfully");
+        // ✅ CRITICAL FIX: Instantly set status to "Return Initiated" (Purple)
         setUser((prev) => ({
           ...prev,
           orders: prev.orders.map((o) =>
-            o._id === orderId ? { ...o, status: "Return Requested" } : o
+            o._id === orderId ? { ...o, status: "Return Initiated" } : o
           ),
         }));
       } else {
@@ -1050,62 +1048,83 @@ export default function Account() {
                               </div>
 
                               <div className="flex items-center gap-3">
-  {actionConfirm.id === order._id ? (
-    /* --- NEW CONFIRMATION STATE --- */
-    <div className="flex items-center gap-2 animate-in fade-in zoom-in duration-300">
-      <p className="text-[10px] font-black text-slate-500 uppercase mr-1">
-        Are you sure?
-      </p>
-      <button
-        onClick={() => {
-          if (actionConfirm.type === 'cancel') handleCancelOrder(order._id);
-          if (actionConfirm.type === 'return') handleReturnOrder(order._id);
-          setActionConfirm({ id: null, type: null });
-        }}
-        className="px-3 py-2 bg-green-600 text-white text-[10px] font-black uppercase rounded-xl hover:bg-green-700 transition-all shadow-sm shadow-green-500/20"
-      >
-        Confirm
-      </button>
-      <button
-        onClick={() => setActionConfirm({ id: null, type: null })}
-        className="px-3 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[10px] font-black uppercase rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
-      >
-        Cancel
-      </button>
-    </div>
-  ) : (
-    /* --- ORIGINAL BUTTONS STATE --- */
-    <>
-      {(order.status === "Processing" ||
-        order.status === "Pending" ||
-        order.status === "Shipped") && (
-        <button
-          onClick={() => setActionConfirm({ id: order._id, type: "cancel" })}
-          className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold rounded-xl transition-all border border-red-100 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400"
-        >
-          Cancel Order
-        </button>
-      )}
+                                {actionConfirm.id === order._id ? (
+                                  /* --- NEW CONFIRMATION STATE --- */
+                                  <div className="flex items-center gap-2 animate-in fade-in zoom-in duration-300">
+                                    <p className="text-[10px] font-black text-slate-500 uppercase mr-1">
+                                      Are you sure?
+                                    </p>
+                                    <button
+                                      onClick={() => {
+                                        if (actionConfirm.type === "cancel")
+                                          handleCancelOrder(order._id);
+                                        if (actionConfirm.type === "return")
+                                          handleReturnOrder(order._id);
+                                        setActionConfirm({
+                                          id: null,
+                                          type: null,
+                                        });
+                                      }}
+                                      className="px-3 py-2 bg-green-600 text-white text-[10px] font-black uppercase rounded-xl hover:bg-green-700 transition-all shadow-sm shadow-green-500/20"
+                                    >
+                                      Confirm
+                                    </button>
+                                    <button
+                                      onClick={() =>
+                                        setActionConfirm({
+                                          id: null,
+                                          type: null,
+                                        })
+                                      }
+                                      className="px-3 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[10px] font-black uppercase rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                ) : (
+                                  /* --- ORIGINAL BUTTONS STATE --- */
+                                  <>
+                                    {(order.status === "Processing" ||
+                                      order.status === "Pending" ||
+                                      order.status === "Shipped") && (
+                                      <button
+                                        onClick={() =>
+                                          setActionConfirm({
+                                            id: order._id,
+                                            type: "cancel",
+                                          })
+                                        }
+                                        className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold rounded-xl transition-all border border-red-100 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400"
+                                      >
+                                        Cancel Order
+                                      </button>
+                                    )}
 
-      {order.status === "Delivered" && isWithinReturnWindow && (
-        <button
-          onClick={() => setActionConfirm({ id: order._id, type: "return" })}
-          className="px-4 py-2 bg-orange-50 hover:bg-orange-100 text-orange-600 text-xs font-bold rounded-xl transition-all border border-orange-100 dark:bg-orange-900/20 dark:border-orange-800 dark:text-orange-400"
-        >
-          Return Items
-        </button>
-      )}
+                                    {order.status === "Delivered" &&
+                                      isWithinReturnWindow && (
+                                        <button
+                                          onClick={() =>
+                                            setActionConfirm({
+                                              id: order._id,
+                                              type: "return",
+                                            })
+                                          }
+                                          className="px-4 py-2 bg-orange-50 hover:bg-orange-100 text-orange-600 text-xs font-bold rounded-xl transition-all border border-orange-100 dark:bg-orange-900/20 dark:border-orange-800 dark:text-orange-400"
+                                        >
+                                          Return Items
+                                        </button>
+                                      )}
 
-      <Link
-        to={`/OrderSummary`}
-        state={{ order }}
-        className="px-5 py-2 bg-slate-900 dark:bg-white dark:text-slate-900 text-white text-xs font-bold rounded-xl hover:opacity-90 transition-all active:scale-95 flex items-center gap-2"
-      >
-        View Details
-      </Link>
-    </>
-  )}
-</div>
+                                    <Link
+                                      to={`/OrderSummary`}
+                                      state={{ order }}
+                                      className="px-5 py-2 bg-slate-900 dark:bg-white dark:text-slate-900 text-white text-xs font-bold rounded-xl hover:opacity-90 transition-all active:scale-95 flex items-center gap-2"
+                                    >
+                                      View Details
+                                    </Link>
+                                  </>
+                                )}
+                              </div>
                             </div>
                           </div>
                         );
