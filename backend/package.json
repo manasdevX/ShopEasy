@@ -26,7 +26,8 @@
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
     "streamifier": "^0.1.1",
-    "twilio": "^5.11.1"
+    "twilio": "^5.11.1",
+    "cookie-parser": "^1.4.7"
   },
   "devDependencies": {
     "nodemon": "^3.1.4"
