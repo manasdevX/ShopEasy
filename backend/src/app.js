@@ -1,6 +1,9 @@
 import express from "express";
 import cors from "cors";
 
+// --- REDIS INITIALIZATION ---
+import "./config/redis.js"; // ✅ CRITICAL: Initializes the Redis connection
+
 // --- ROUTES IMPORTS ---
 import productRoutes from "./routes/product.routes.js";
 import authRoutes from "./routes/auth.routes.js";
@@ -26,8 +29,6 @@ app.use(
 
 /**
  * Body Parsers
- * Increased limit to 50mb to handle base64 image strings
- * and large JSON payloads.
  */
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
@@ -51,7 +52,6 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/cart", cartRoutes);
 
 // Payment Integration (Razorpay)
-// ✅ This makes the URL: http://localhost:5000/api/payment/create-order
 app.use("/api/payment", paymentRoutes);
 app.use("/api/notifications", notificationRoutes);
 
@@ -79,17 +79,16 @@ app.use((req, res) => {
 
 /**
  * 🚨 GLOBAL ERROR HANDLER
- * Catches any errors thrown in controllers (e.g., throw new Error(...))
  */
 app.use((err, req, res, next) => {
-  console.error("🔥 Error Stack:", err.stack); // Log error stack for debugging
+  console.error("🔥 Error Stack:", err.stack);
 
   const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
 
   res.status(statusCode).json({
     success: false,
     message: err.message || "Internal Server Error",
-    stack: process.env.NODE_ENV === "production" ? null : err.stack, // Hide stack in production
+    stack: process.env.NODE_ENV === "production" ? null : err.stack,
   });
 });
 
