@@ -10,7 +10,6 @@ import {
   LocateFixed,
   ShoppingBag,
   Loader2,
-  Check,
   Plus,
   Home,
   Briefcase,
@@ -235,8 +234,8 @@ export default function CheckoutPage() {
         return;
       }
 
-      // B. Create Order on Backend
-      const res = await fetch(`${API_URL}/api/orders/razorpay`, {
+      // B. Create Order on Backend (UPDATED URL to match payment.routes.js)
+      const res = await fetch(`${API_URL}/api/payment/create-order`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -261,9 +260,9 @@ export default function CheckoutPage() {
         description: "Payment for order",
         order_id: orderData.id, 
         handler: async function (response) {
-            // D. Verify Payment on Backend
+            // D. Verify Payment on Backend (UPDATED URL to match payment.routes.js)
             try {
-                const verifyRes = await fetch(`${API_URL}/api/orders/razorpay/verify`, {
+                const verifyRes = await fetch(`${API_URL}/api/payment/verify-payment`, {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
