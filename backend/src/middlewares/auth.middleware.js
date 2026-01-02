@@ -1,13 +1,10 @@
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import Seller from "../models/seller.js";
-import Session from "../models/Session.js"; // ✅ Added Session Model
+import Session from "../models/Session.js"; // ✅ Matches export default
 
 /* ======================================================
    1. PROTECT (For Customers & Admins)
-      - Verifies token against 'User' collection
-      - Checks if session exists in DB
-      - Checks if user exists and is not blocked
 ====================================================== */
 export const protect = async (req, res, next) => {
   let token;
@@ -27,11 +24,14 @@ export const protect = async (req, res, next) => {
       // 1. Verify Token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      // 2. NEW: Check if this specific session exists in the DB ledger
+      // 2. NEW: Check if this session exists in DB
+      // 🔴 WAS: { userId: decoded.id, token }
+      // 🟢 FIX: Matches Session Model fields
       const sessionExists = await Session.findOne({
-        userId: decoded.id,
-        token,
+        user: decoded.id,       // Changed 'userId' -> 'user'
+        refreshToken: token,    // Changed 'token' -> 'refreshToken'
       });
+
       if (!sessionExists) {
         return res
           .status(401)
@@ -74,9 +74,6 @@ export const protect = async (req, res, next) => {
 
 /* ======================================================
    2. PROTECT SELLER (For Vendors Only)
-      - Verifies token against 'Seller' collection
-      - Checks if session exists in DB
-      - Checks if seller exists and is active
 ====================================================== */
 export const protectSeller = async (req, res, next) => {
   let token;
@@ -94,11 +91,14 @@ export const protectSeller = async (req, res, next) => {
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      // NEW: Check if this specific session exists in the DB ledger
+      // NEW: Check if this session exists in DB
+      // 🔴 WAS: { userId: decoded.id, token }
+      // 🟢 FIX: Matches Session Model fields
       const sessionExists = await Session.findOne({
-        userId: decoded.id,
-        token,
+        user: decoded.id,       // Changed 'userId' -> 'user'
+        refreshToken: token,    // Changed 'token' -> 'refreshToken'
       });
+
       if (!sessionExists) {
         return res
           .status(401)
@@ -143,7 +143,6 @@ export const protectSeller = async (req, res, next) => {
 
 /* ======================================================
    3. ADMIN (Role Check)
-      - Must be placed AFTER 'protect' middleware
 ====================================================== */
 export const admin = (req, res, next) => {
   if (req.user && (req.user.role === "admin" || req.user.isAdmin)) {
