@@ -5,7 +5,7 @@ import app from "./app.js";
 import connectDB from "./config/db.js";
 
 // --- 1. INITIALIZE REDIS ---
-// This ensures Redis connects as soon as the server starts
+// Importing this first ensures the client starts the connection attempt early
 import "./config/redis.js";
 
 dotenv.config();
@@ -28,27 +28,23 @@ const io = new Server(server, {
 });
 
 // 4. Attach 'io' to every request
-// This allows you to use `req.io.to(id).emit()` in your controllers
 app.set("socketio", io);
 
 // 5. Handle Real-Time Connections
 io.on("connection", (socket) => {
-  console.log("⚡ New Client Connected:", socket.id);
+  // Use console.info or console.warn for higher visibility in some log viewers
+  console.log(`✅ Socket Connected: ${socket.id}`);
 
-  // OPTION A: Automatic Room Join (Using userId passed in connection query)
   const userId = socket.handshake.query.userId;
   if (userId) {
     socket.join(userId);
     console.log(`📡 User ${userId} joined personal room via handshake`);
   }
 
-  // OPTION B: Manual Room Join (The event your frontend dashboard triggers)
   socket.on("join_seller_room", (sellerId) => {
     if (sellerId) {
       socket.join(sellerId);
-      console.log(
-        `👨‍💼 Seller ${sellerId} joined notification room: ${sellerId}`
-      );
+      console.log(`👨‍💼 Seller ${sellerId} joined notification room`);
     }
   });
 
@@ -58,8 +54,10 @@ io.on("connection", (socket) => {
 });
 
 // 6. Start the Server
-// ⚠️ We use server.listen instead of app.listen to support Socket.IO
+// Render sends the "Your service is live" message once the port is reachable
 server.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📡 Socket.IO initialized and Redis connection pending...`);
+  console.log("========================================");
+  console.log(`🚀 SERVER RUNNING ON PORT: ${PORT}`);
+  console.log(`📡 SOCKET.IO ENGINE: Initialized`);
+  console.log("========================================");
 });
