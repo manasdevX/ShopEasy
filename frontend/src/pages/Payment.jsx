@@ -72,7 +72,6 @@ export default function CheckoutPage() {
   );
   const totalDiscount = totalMRP - subtotal;
   const platformFee = items.length > 0 ? 3 : 0;
-  // Calculate delivery fee based on the threshold
   const deliveryThreshold = 400;
   const deliveryFee = totalMRP - totalDiscount >= deliveryThreshold ? 0 : 50;
 
@@ -117,7 +116,6 @@ export default function CheckoutPage() {
           const data = await res.json();
           if (data && data.address) {
             const addr = data.address;
-            // Capture full street details for better accuracy
             const fullStreet = [addr.road, addr.suburb, addr.neighbourhood]
               .filter(Boolean)
               .join(", ");
@@ -212,15 +210,20 @@ export default function CheckoutPage() {
           }),
         });
         const data = await res.json();
+        
         if (res.ok) {
           showSuccess("Order Placed!");
           localStorage.removeItem("cart");
           window.dispatchEvent(new Event("cartUpdated"));
-          navigate("/OrderSummary", { state: { order: data } });
+          
+          // ✅ FIX: Use URL Parameter for COD as well for consistency
+          // Check if data is the order object directly or wrapped in data.order
+          const orderId = data._id || data.order?._id; 
+          navigate(`/OrderSummary?orderId=${orderId}`);
         } else {
           showError(data.message || "Failed to place order");
         }
-        setIsProcessing(false); // STOP SPINNER
+        setIsProcessing(false); 
         return;
       }
 
@@ -234,7 +237,7 @@ export default function CheckoutPage() {
         return;
       }
 
-      // B. Create Order on Backend (UPDATED URL to match payment.routes.js)
+      // B. Create Order on Backend
       const res = await fetch(`${API_URL}/api/payment/create-order`, {
         method: "POST",
         headers: {
@@ -260,7 +263,7 @@ export default function CheckoutPage() {
         description: "Payment for order",
         order_id: orderData.id, 
         handler: async function (response) {
-            // D. Verify Payment on Backend (UPDATED URL to match payment.routes.js)
+            // D. Verify Payment on Backend
             try {
                 const verifyRes = await fetch(`${API_URL}/api/payment/verify-payment`, {
                     method: "POST",
@@ -296,18 +299,24 @@ export default function CheckoutPage() {
                 });
                 
                 const verifyData = await verifyRes.json();
-                if(verifyRes.ok) {
+                
+                if(verifyRes.ok && verifyData.success) {
                     showSuccess("Payment Successful!");
                     localStorage.removeItem("cart");
                     window.dispatchEvent(new Event("cartUpdated"));
-                    navigate("/OrderSummary", { state: { order: verifyData } });
+                    
+                    // ✅ CRITICAL FIX: Navigate using URL Parameter
+                    // verifyData.order contains the saved order object from your controller
+                    navigate(`/OrderSummary?orderId=${verifyData.order._id}`);
+                    
                 } else {
                     showError("Payment Verification Failed");
                 }
             } catch (err) {
+                console.error(err);
                 showError("Payment Verification Error");
             } finally {
-                setIsProcessing(false); // STOP SPINNER AFTER VERIFY
+                setIsProcessing(false);
             }
         },
         prefill: {
@@ -318,7 +327,6 @@ export default function CheckoutPage() {
             color: "#2563eb",
         },
         modal: {
-            // E. CRITICAL: Handle User Closing the Popup
             ondismiss: function() {
                 setIsProcessing(false); 
                 toast("Payment Cancelled");
@@ -336,7 +344,7 @@ export default function CheckoutPage() {
     } catch (e) {
       console.error(e);
       showError(e.message || "Checkout failed");
-      setIsProcessing(false); // STOP SPINNER ON ERROR
+      setIsProcessing(false);
     }
   };
 
