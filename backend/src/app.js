@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser"; // ✅ Added for reading HttpOnly cookies
 
 // --- REDIS INITIALIZATION ---
 import "./config/redis.js"; // ✅ CRITICAL: Initializes the Redis connection
@@ -23,17 +24,16 @@ app.use(
       "http://localhost:5173", // Localhost (Vite)
       "https://shop-easy-livid.vercel.app", // Production Client
     ],
-    credentials: true,
+    credentials: true, // ✅ Essential for allowing cookies to pass through CORS
   })
 );
 
+app.use(cookieParser()); // ✅ Initialize cookie-parser BEFORE routes
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
 // --- 🟢 SOCKET.IO MIDDLEWARE ---
-// This allows you to use req.io.to(id).emit() in controllers
 app.use((req, res, next) => {
-  // We grab the io instance attached to the app in server.listen
   req.io = req.app.get("socketio");
   next();
 });

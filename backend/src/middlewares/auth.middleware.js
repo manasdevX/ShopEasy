@@ -1,26 +1,46 @@
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import Seller from "../models/seller.js";
+import Session from "../models/Session.js"; // ✅ Added Session Model
 
 /* ======================================================
    1. PROTECT (For Customers & Admins)
       - Verifies token against 'User' collection
+      - Checks if session exists in DB
       - Checks if user exists and is not blocked
 ====================================================== */
 export const protect = async (req, res, next) => {
   let token;
 
+  // Check for token in Headers or Cookies
   if (
     req.headers.authorization &&
     req.headers.authorization.startsWith("Bearer")
   ) {
-    try {
-      token = req.headers.authorization.split(" ")[1];
+    token = req.headers.authorization.split(" ")[1];
+  } else if (req.cookies && req.cookies.accessToken) {
+    token = req.cookies.accessToken; // Support for HttpOnly cookies
+  }
 
-      // Verify Token
+  if (token) {
+    try {
+      // 1. Verify Token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      // Fetch User (Customers/Admins)
+      // 2. NEW: Check if this specific session exists in the DB ledger
+      const sessionExists = await Session.findOne({
+        userId: decoded.id,
+        token,
+      });
+      if (!sessionExists) {
+        return res
+          .status(401)
+          .json({
+            message: "Session expired or logged out from another device",
+          });
+      }
+
+      // 3. Fetch User (Customers/Admins)
       req.user = await User.findById(decoded.id).select("-password");
 
       if (!req.user) {
@@ -55,6 +75,7 @@ export const protect = async (req, res, next) => {
 /* ======================================================
    2. PROTECT SELLER (For Vendors Only)
       - Verifies token against 'Seller' collection
+      - Checks if session exists in DB
       - Checks if seller exists and is active
 ====================================================== */
 export const protectSeller = async (req, res, next) => {
@@ -64,13 +85,29 @@ export const protectSeller = async (req, res, next) => {
     req.headers.authorization &&
     req.headers.authorization.startsWith("Bearer")
   ) {
-    try {
-      token = req.headers.authorization.split(" ")[1];
+    token = req.headers.authorization.split(" ")[1];
+  } else if (req.cookies && req.cookies.accessToken) {
+    token = req.cookies.accessToken;
+  }
 
+  if (token) {
+    try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
+      // NEW: Check if this specific session exists in the DB ledger
+      const sessionExists = await Session.findOne({
+        userId: decoded.id,
+        token,
+      });
+      if (!sessionExists) {
+        return res
+          .status(401)
+          .json({
+            message: "Session expired or logged out from another device",
+          });
+      }
+
       // Fetch Seller
-      // We use 'req.seller' so it doesn't conflict with 'req.user'
       req.seller = await Seller.findById(decoded.id).select("-password");
 
       if (!req.seller) {
@@ -109,8 +146,7 @@ export const protectSeller = async (req, res, next) => {
       - Must be placed AFTER 'protect' middleware
 ====================================================== */
 export const admin = (req, res, next) => {
-  // Check against the role string, as "isAdmin" virtual might not be available in lean queries
-  if (req.user && (req.user.role === 'admin' || req.user.isAdmin)) {
+  if (req.user && (req.user.role === "admin" || req.user.isAdmin)) {
     next();
   } else {
     res.status(403).json({ message: "Not authorized as an admin" });

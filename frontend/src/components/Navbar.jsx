@@ -1,6 +1,7 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useState, useEffect, useRef } from "react"; // Added useRef
+import { useState, useEffect, useRef } from "react";
 import useDarkSide from "../hooks/useDarkSide";
+import axios from "axios"; // ✅ Added Axios for professional logout
 import {
   Moon,
   Sun,
@@ -10,7 +11,7 @@ import {
   ChevronDown,
   Search,
   LogOut,
-  Loader2, // Added Loader
+  Loader2,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -70,8 +71,6 @@ export default function Navbar() {
         const data = await res.json();
         if (res.ok) {
           const products = Array.isArray(data) ? data : data.products || [];
-
-          // Extract unique names to create "General Search Terms"
           const names = [...new Set(products.map((p) => p.name))];
           setSuggestions(names);
           setShowDropdown(true);
@@ -92,6 +91,7 @@ export default function Navbar() {
     if (currentToken) {
       try {
         const res = await fetch(`${API_URL}/api/cart`, {
+          credentials: "include", // ✅ Added for cookie support
           headers: { Authorization: `Bearer ${currentToken}` },
         });
         if (res.ok) {
@@ -139,11 +139,27 @@ export default function Navbar() {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.clear();
-    setCartCount(0);
-    setUser(null);
-    window.location.href = "/";
+  // ✅ UPDATED LOGOUT (Handles DB Session & Cookies)
+  const handleLogout = async () => {
+    try {
+      await axios.post(
+        `${API_URL}/api/auth/logout`,
+        {},
+        { withCredentials: true }
+      );
+
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      setCartCount(0);
+      setUser(null);
+
+      toast.success("Logged out successfully");
+      window.location.href = "/";
+    } catch (err) {
+      console.error("Logout failed", err);
+      localStorage.clear();
+      window.location.href = "/";
+    }
   };
 
   const handleCart = () => {
@@ -192,7 +208,7 @@ export default function Navbar() {
             </button>
           </div>
 
-          {/* RECOMMENDATIONS DROPDOWN (Amazon Style) */}
+          {/* RECOMMENDATIONS DROPDOWN */}
           {showDropdown && suggestions.length > 0 && (
             <div className="absolute top-full left-0 w-full mt-1 bg-white dark:bg-[#0f172a] rounded-b-2xl shadow-2xl border border-gray-100 dark:border-slate-800 overflow-hidden z-[999]">
               <div className="py-1">
@@ -202,19 +218,15 @@ export default function Navbar() {
                     onClick={() => {
                       setSearchTerm(suggestion);
                       setShowDropdown(false);
-                      // Navigate to the search results page with this term
                       navigate(`/search?q=${encodeURIComponent(suggestion)}`);
                     }}
                     className="w-full flex items-center gap-4 px-5 py-2.5 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors text-left group"
                   >
-                    {/* Magnifying Glass Icon for every option */}
                     <Search
                       size={16}
                       className="text-slate-400 group-hover:text-orange-500"
                     />
-
                     <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                      {/* Bold the part that matches the search term */}
                       <span className="font-normal text-slate-400">
                         {searchTerm.toLowerCase()}
                       </span>
