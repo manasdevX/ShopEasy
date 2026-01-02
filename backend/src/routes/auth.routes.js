@@ -12,7 +12,7 @@ import {
 } from "../controllers/auth.controller.js";
 
 import { getMe } from "../controllers/auth.controller.js";
-import { protect } from "../middleware/authMiddleware.js";
+import { protect } from "../middleware/auth.middleware.js";
 
 const router = express.Router();
 
