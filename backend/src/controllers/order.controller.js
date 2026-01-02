@@ -179,7 +179,7 @@ export const getMyOrders = async (req, res) => {
   }
 };
 
-// @desc    Cancel Order (Customer) - Restores Stock & Refunds
+// @desc    Cancel Order (Customer)
 // @route   PUT /api/orders/:id/cancel
 // @access  Private (Customer)
 export const cancelOrder = async (req, res) => {
@@ -190,6 +190,7 @@ export const cancelOrder = async (req, res) => {
       return res.status(404).json({ message: "Order not found" });
     }
 
+    // Allow cancellation for Shipped orders too if needed, or restrict to Pending/Processing
     if (
       order.status !== "Processing" &&
       order.status !== "Pending" &&
@@ -203,13 +204,13 @@ export const cancelOrder = async (req, res) => {
     order.status = "Cancelled";
     order.orderItems.forEach((item) => (item.itemStatus = "Cancelled"));
 
-    // 💰 REFUND LOGIC (For Cancelled Orders)
+    // 💰 REFUND LOGIC: If paid online, mark as refunded
     if (order.paymentMethod !== "COD" && order.isPaid) {
       order.isRefunded = true;
       order.refundedAt = Date.now();
     }
 
-    // ✅ RESTORE STOCK
+    // ✅ STOCK REFILLING LOGIC: Cancelled -> Return stock to DB
     for (const item of order.orderItems) {
       const product = await Product.findById(item.product);
       if (product) {
@@ -220,7 +221,7 @@ export const cancelOrder = async (req, res) => {
 
     await order.save();
 
-    // ✅ Notify Sellers
+    // ✅ Notify Sellers (DB & Socket)
     const sellersToNotify = [
       ...new Set(order.orderItems.map((item) => item.seller.toString())),
     ];
@@ -254,7 +255,7 @@ export const cancelOrder = async (req, res) => {
   }
 };
 
-// @desc    Request Return (Customer) - AUTO APPROVES & RESTORES STOCK
+// @desc    Request Return (Customer) -> AUTO APPROVE & REFILL STOCK
 // @route   PUT /api/orders/:id/return
 // @access  Private (Customer)
 export const requestReturn = async (req, res) => {
@@ -281,11 +282,12 @@ export const requestReturn = async (req, res) => {
        return res.status(400).json({ message: "Return period (14 days) has expired." });
     }
 
-    // ✅ AUTO-UPDATE STATUS TO "Return Initiated"
+    // ✅ AUTO-UPDATE STATUS: "Return Initiated"
+    // This bypasses the need for seller approval
     order.status = "Return Initiated";
     order.orderItems.forEach((item) => (item.itemStatus = "Return Initiated"));
 
-    // ✅ 1. RESTORE STOCK IMMEDIATELY (Auto-Accepted)
+    // ✅ STOCK REFILLING LOGIC: Returned -> Return stock to DB immediately
     for (const item of order.orderItems) {
       const product = await Product.findById(item.product);
       if (product) {
@@ -294,8 +296,9 @@ export const requestReturn = async (req, res) => {
       }
     }
 
-    // ✅ 2. PROCESS REFUND IMMEDIATELY (Auto-Accepted)
-    // If the order was paid (Online or COD that was delivered), mark as Refunded
+    // ✅ REFUND LOGIC: Mark as refunded immediately
+    // For COD: If Delivered, money was taken -> Refund needed.
+    // For Online: Money taken -> Refund needed.
     if (order.isPaid && !order.isRefunded) {
       order.isRefunded = true;
       order.refundedAt = Date.now();
@@ -303,7 +306,7 @@ export const requestReturn = async (req, res) => {
 
     await order.save();
 
-    // ✅ 3. Notify Sellers (Informational Only)
+    // ✅ Notify Sellers (Informational)
     const sellersToNotify = [
       ...new Set(order.orderItems.map((item) => item.seller.toString())),
     ];
@@ -316,7 +319,7 @@ export const requestReturn = async (req, res) => {
         `Order #${order._id
           .toString()
           .slice(-6)
-          .toUpperCase()} has been returned. Stock updated & Refund initiated.`,
+          .toUpperCase()} has been returned. Stock restored & Refund initiated.`,
         order._id
       );
 
@@ -365,9 +368,9 @@ export const getSellerOrders = async (req, res) => {
       else if (itemStatuses.every((s) => s === "Cancelled"))
         derivedStatus = "Cancelled";
       else if (itemStatuses.every((s) => s === "Returned" || s === "Return Initiated"))
-        derivedStatus = "Return Initiated"; // ✅ Mapped to new status
-      else if (itemStatuses.includes("Return Requested")) // Legacy check
-        derivedStatus = "Return Requested";
+        derivedStatus = "Return Initiated"; // ✅ Maps both statuses to new flow
+      else if (itemStatuses.includes("Return Requested")) 
+        derivedStatus = "Return Requested"; // Legacy fallback
       else if (itemStatuses.includes("Shipped")) derivedStatus = "Shipped";
       else derivedStatus = "Processing";
 
@@ -377,7 +380,7 @@ export const getSellerOrders = async (req, res) => {
         shippingAddress: order.shippingAddress,
         paymentMethod: order.paymentMethod,
         isPaid: order.isPaid,
-        isRefunded: order.isRefunded, // ✅ Added to view in frontend
+        isRefunded: order.isRefunded, // ✅ Added for frontend visibility
         createdAt: order.createdAt,
         sellerTotal: sellerItems.reduce(
           (acc, item) => acc + item.price * item.qty,
@@ -410,7 +413,7 @@ export const getSellerOrders = async (req, res) => {
   }
 };
 
-// @desc    Update Order Item Status (Seller Only) - Shipping Only
+// @desc    Update Order Item Status (Seller Only)
 // @route   PUT /api/orders/:id/status
 // @access  Private (Seller)
 export const updateOrderStatus = async (req, res) => {
