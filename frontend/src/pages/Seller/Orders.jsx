@@ -36,14 +36,23 @@ export default function SellerOrders() {
 
   // --- SOCKET.IO REAL-TIME LOGIC ---
   useEffect(() => {
-    const seller = JSON.parse(localStorage.getItem("user"));
+    // 🔴 FIX: Check 'sellerUser' first (matching your Navbar logic), then fallback to 'user'
+    let seller = null;
+    try {
+        seller = JSON.parse(localStorage.getItem("sellerUser") || localStorage.getItem("user"));
+    } catch (e) {
+        console.error("Parsing error", e);
+    }
+
     if (socket && seller?._id) {
+      console.log("🔌 Joining Seller Room:", seller._id); // [DEBUG] Verify ID
+      
       // Ensure seller is in their room to receive new order broadcasts
       socket.emit("join_seller_room", seller._id);
 
       // Listen for new orders to refresh the list automatically
       socket.on("order_alert", (data) => {
-        console.log("📦 New Order Broadcast Received");
+        console.log("📦 New Order Broadcast Received:", data); // [DEBUG] Verify Event
         fetchOrders(); // Refresh the list when a new order comes in
       });
     }
@@ -55,7 +64,9 @@ export default function SellerOrders() {
 
   // --- FETCH ORDERS ---
   const fetchOrders = async () => {
+    // Only set loading on initial fetch, not on background refreshes
     if (orders.length === 0) setLoading(true);
+    
     try {
       const token = localStorage.getItem("sellerToken");
       const res = await fetch(
@@ -69,7 +80,8 @@ export default function SellerOrders() {
       if (res.ok) {
         setOrders(data);
       } else {
-        showError(data.message || "Failed to fetch orders");
+        // Suppress error toast on background refreshes to avoid spam
+        console.error(data.message || "Failed to fetch orders");
       }
     } catch (error) {
       console.error("Failed to fetch orders", error);
