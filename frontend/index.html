@@ -1,34 +1,43 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
+  <head>
+    <meta
+      name="google-site-verification"
+      content="dG5GBOrjnBRE7ixRReY0YuvYNFY6YThlJG5gPJgnCkY"
+    />
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ShopEasy</title>
 
-<head>
-  <meta name="google-site-verification" content="dG5GBOrjnBRE7ixRReY0YuvYNFY6YThlJG5gPJgnCkY" />
-  <meta charset="UTF-8" />
-  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ShopEasy</title>
+    <script>
+      (function () {
+        try {
+          let theme = localStorage.getItem("theme");
 
-  <script>
-    (function () {
-      try {
-        const theme = localStorage.getItem('theme');
-        const supportDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches === true;
+          // 🔹 First-time visitor logic: If no theme is found, default to 'dark'
+          if (!theme) {
+            theme = "dark";
+            localStorage.setItem("theme", "dark");
+          }
 
-        if (theme === 'dark' || (!theme && supportDarkMode)) {
-          document.documentElement.classList.add('dark');
-        } else {
-          document.documentElement.classList.remove('dark');
+          if (theme === "dark") {
+            document.documentElement.classList.add("dark");
+          } else {
+            document.documentElement.classList.remove("dark");
+          }
+        } catch (e) {
+          // Fallback for private browsing/errors
+          document.documentElement.classList.add("dark");
         }
-      } catch (e) { }
-    })();
-  </script>
+      })();
+    </script>
 
-  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
-</head>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  </head>
 
-<body class="bg-white dark:bg-[#030712] transition-colors duration-300">
-  <div id="root"></div>
-  <script type="module" src="/src/main.jsx"></script>
-</body>
-
+  <body class="bg-white dark:bg-[#030712] transition-colors duration-300">
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
 </html>

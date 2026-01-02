@@ -1,28 +1,16 @@
-import { useState, useEffect } from "react";
-
 export default function useDarkSide() {
-  // 1. Initialize theme: Priority is LocalStorage > System Preference > 'light'
   const [theme, setTheme] = useState(() => {
-    const savedTheme = localStorage.getItem("theme");
-    if (savedTheme) return savedTheme;
-    
-    return window.matchMedia("(prefers-color-scheme: dark)").matches 
-      ? "dark" 
-      : "light";
+    return localStorage.getItem("theme") || "dark"; // Force Dark for first-timers
   });
-
-  const colorTheme = theme === "dark" ? "light" : "dark";
 
   useEffect(() => {
     const root = window.document.documentElement;
+    const oldTheme = theme === "dark" ? "light" : "dark";
 
-    // 2. Remove the old class and add the current one
-    root.classList.remove(colorTheme);
+    root.classList.remove(oldTheme);
     root.classList.add(theme);
-
-    // 3. Persist the choice in localStorage
     localStorage.setItem("theme", theme);
-  }, [theme, colorTheme]);
+  }, [theme]);
 
-  return [colorTheme, setTheme];
+  return [theme, setTheme]; // Standard return: [currentValue, setter]
 }

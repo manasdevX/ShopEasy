@@ -445,3 +445,21 @@ export const searchSellerData = async (req, res) => {
     res.status(500).json({ message: "Search failed", error: error.message });
   }
 };
+
+// @desc    Delete Seller Account
+// @route   DELETE /api/sellers/profile
+// @access  Private (Seller)
+export const deleteSellerAccount = async (req, res) => {
+  try {
+    const seller = await Seller.findById(req.seller._id);
+    if (!seller) return res.status(404).json({ message: "Seller not found" });
+
+    // Optional: Delete seller's products too? 
+    // await Product.deleteMany({ seller: req.seller._id });
+
+    await seller.deleteOne();
+    res.status(200).json({ success: true, message: "Account deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
