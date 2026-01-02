@@ -1,6 +1,7 @@
 import Order from "../models/Order.js";
 import Product from "../models/Product.js";
 import { createNotification } from "./notification.controller.js";
+import sendEmail from "../utils/sendEmail.js"; // <--- IMPORTED NODEMAILER
 
 // @desc    Create new order (Direct COD or General)
 // @route   POST /api/orders
@@ -104,7 +105,40 @@ export const addOrderItems = async (req, res) => {
       await item.product.save();
     }
 
-    // 6. Notify Sellers (DB & Socket)
+    // 6. ✅ SEND ORDER CONFIRMATION EMAIL (New Addition)
+    try {
+      const emailMessage = `
+        <div style="font-family: Arial, sans-serif; color: #333;">
+          <h1 style="color: #2563eb;">Order Confirmed!</h1>
+          <p>Hi ${req.user.name},</p>
+          <p>Thank you for your order. We have received your request.</p>
+          
+          <div style="background: #f4f4f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <p><strong>Order ID:</strong> ${createdOrder._id}</p>
+            <p><strong>Payment Method:</strong> ${paymentMethod}</p>
+            <p><strong>Total Amount:</strong> ₹${totalPrice.toLocaleString()}</p>
+          </div>
+
+          <p>You can track your order status on your dashboard.</p>
+          <br/>
+          <a href="${process.env.FRONTEND_URL}/order-summary?orderId=${createdOrder._id}" 
+             style="background: #2563eb; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+             View Order
+          </a>
+        </div>
+      `;
+
+      await sendEmail({
+        email: req.user.email,
+        subject: `Order Confirmation - ${createdOrder._id}`,
+        message: emailMessage,
+      });
+    } catch (emailError) {
+      console.error("Failed to send order confirmation email:", emailError);
+      // We do not crash the request if email fails
+    }
+
+    // 7. Notify Sellers (DB & Socket)
     const sellersToNotify = [
       ...new Set(mappedOrderItems.map((item) => item.seller.toString())),
     ];
@@ -373,7 +407,7 @@ export const getSellerOrders = async (req, res) => {
       else if (
         itemStatuses.every((s) => s === "Returned" || s === "Return Initiated")
       )
-        derivedStatus = "Return Initiated"; // ✅ Maps both to new status
+        derivedStatus = "Return Initiated";
       else if (itemStatuses.includes("Shipped")) derivedStatus = "Shipped";
       else derivedStatus = "Processing";
 
