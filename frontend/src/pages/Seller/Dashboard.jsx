@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import SellerNavbar from "../../components/Seller/SellerNavbar";
 import SellerFooter from "../../components/Seller/SellerFooter";
 import { showSuccess, showError } from "../../utils/toast";
-import { useSocket } from "../../context/SocketContext"; // ✅ Added Socket Hook
+import { useSocket } from "../../context/SocketContext"; // ✅ Socket Hook
 import {
   BarChart3,
   ShoppingBag,
@@ -26,44 +26,6 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [lowStockItems, setLowStockItems] = useState([]);
 
-  // --- SOCKET.IO REAL-TIME LOGIC ---
-  useEffect(() => {
-    const seller = JSON.parse(localStorage.getItem("user"));
-    if (socket && seller?._id) {
-      // Join the private room for this seller to receive real-time alerts
-      socket.emit("join_seller_room", seller._id);
-      console.log("📡 Joined real-time notification room");
-    }
-  }, [socket]);
-
-  const fetchLowStock = async () => {
-    try {
-      const token = localStorage.getItem("sellerToken");
-      const res = await fetch(`${API_URL}/api/products/seller/all`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const result = await res.json();
-
-      if (res.ok) {
-        const low = result
-          .filter((p) => p.stock < 5)
-          .sort((a, b) => a.stock - b.stock);
-        setLowStockItems(low);
-      } else {
-        console.error("Failed to fetch low stock:", result.message);
-      }
-    } catch (error) {
-      console.error("Error fetching full inventory:", error);
-    }
-  };
-
-  useEffect(() => {
-    fetchLowStock();
-  }, []);
-
   // Initial State
   const [data, setData] = useState({
     seller: { name: "", businessName: "My Store", rating: 0 },
@@ -72,31 +34,42 @@ export default function Dashboard() {
     trends: { revenue: "0%", revenueIsUp: true, products: "Active" },
   });
 
+  // --- 1. FETCH FUNCTIONS (Defined outside to be reused) ---
+  const fetchLowStock = async () => {
+    try {
+      const token = localStorage.getItem("sellerToken");
+      const res = await fetch(`${API_URL}/api/products/seller/all`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const result = await res.json();
+      if (res.ok) {
+        const low = result
+          .filter((p) => p.stock < 5)
+          .sort((a, b) => a.stock - b.stock);
+        setLowStockItems(low);
+      }
+    } catch (error) {
+      console.error("Error fetching inventory:", error);
+    }
+  };
+
   const fetchDashboardData = async () => {
     try {
       const token = localStorage.getItem("sellerToken");
-
       if (!token) {
         showError("Please login first");
         navigate("/Seller/login");
         return;
       }
-
       const res = await fetch(`${API_URL}/api/sellers/dashboard`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
-
       const result = await res.json();
-
       if (res.ok) {
         setData(result);
-      } else {
-        if (res.status === 401) {
-          localStorage.removeItem("sellerToken");
-          navigate("/Seller/login");
-        }
+      } else if (res.status === 401) {
+        localStorage.removeItem("sellerToken");
+        navigate("/Seller/login");
       }
     } catch (error) {
       console.error("Dashboard Fetch Error:", error);
@@ -105,10 +78,40 @@ export default function Dashboard() {
     }
   };
 
+  // --- 2. INITIAL LOAD ---
   useEffect(() => {
     fetchDashboardData();
+    fetchLowStock();
   }, [navigate]);
 
+  // --- 3. SOCKET.IO REAL-TIME LOGIC ---
+  useEffect(() => {
+    // 🔴 FIX: Check 'sellerUser' first (matching your Login logic)
+    let seller = null;
+    try {
+      seller = JSON.parse(localStorage.getItem("sellerUser") || localStorage.getItem("user"));
+    } catch (e) {
+      console.error("Parsing error", e);
+    }
+
+    if (socket && seller?._id) {
+      console.log("🔌 Dashboard Joining Room:", seller._id);
+      socket.emit("join_seller_room", seller._id);
+
+      // ⚡ LIVE UPDATE: Refresh stats when a new order arrives
+      socket.on("order_alert", () => {
+        console.log("💰 Dashboard: New Order! Refreshing Revenue Stats...");
+        fetchDashboardData(); // Update Revenue & Order Count
+        fetchLowStock();      // Update Stock Levels
+      });
+    }
+
+    return () => {
+      if (socket) socket.off("order_alert");
+    };
+  }, [socket]);
+
+  // --- HELPERS & HANDLERS ---
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat("en-IN", {
       style: "currency",
@@ -118,13 +121,12 @@ export default function Dashboard() {
   };
 
   const handleRemoveProduct = async (id) => {
+    if (!window.confirm("Are you sure you want to remove this product?")) return;
     try {
       const token = localStorage.getItem("sellerToken");
       const res = await fetch(`${API_URL}/api/products/${id}`, {
         method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       if (res.ok) {
@@ -140,7 +142,7 @@ export default function Dashboard() {
     }
   };
 
-  const stats = [
+  const statsList = [
     {
       title: "Total Revenue",
       value: loading ? "..." : formatCurrency(data.stats.totalRevenue),
@@ -189,8 +191,9 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* STATS GRID */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-          {stats.map((stat, i) => (
+          {statsList.map((stat, i) => (
             <div
               key={i}
               className="bg-slate-50 dark:bg-slate-900/40 p-8 rounded-[2.5rem] border border-transparent dark:border-slate-800 hover:border-orange-500/20 transition-all group"
@@ -213,7 +216,10 @@ export default function Dashboard() {
           ))}
         </div>
 
+        {/* MAIN CONTENT SPLIT */}
         <div className="grid lg:grid-cols-3 gap-8">
+          
+          {/* RECENT PRODUCTS TABLE */}
           <div className="lg:col-span-2 bg-white dark:bg-slate-900/20 rounded-[3rem] border border-slate-100 dark:border-slate-800 overflow-hidden shadow-sm">
             <div className="p-8 border-b border-slate-50 dark:border-slate-800 flex justify-between items-center bg-slate-50/30 dark:bg-transparent">
               <div>
@@ -242,22 +248,15 @@ export default function Dashboard() {
                 <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
                   {loading ? (
                     <tr>
-                      <td
-                        colSpan="4"
-                        className="px-8 py-10 text-center text-slate-500"
-                      >
+                      <td colSpan="4" className="px-8 py-10 text-center text-slate-500">
                         <div className="flex justify-center items-center gap-2">
-                          <Loader2 className="animate-spin" size={20} /> Loading
-                          inventory...
+                          <Loader2 className="animate-spin" size={20} /> Loading inventory...
                         </div>
                       </td>
                     </tr>
                   ) : data.recentProducts.length === 0 ? (
                     <tr>
-                      <td
-                        colSpan="4"
-                        className="px-8 py-10 text-center text-slate-500 font-medium"
-                      >
+                      <td colSpan="4" className="px-8 py-10 text-center text-slate-500 font-medium">
                         No products found. Start adding!
                       </td>
                     </tr>
@@ -279,6 +278,7 @@ export default function Dashboard() {
             </div>
           </div>
 
+          {/* LOW STOCK ALERT SIDEBAR */}
           <div className="space-y-6">
             <div className="bg-slate-900 dark:bg-slate-900/60 rounded-[2.5rem] p-8 text-white relative border border-slate-800 shadow-2xl">
               <div className="relative z-10">
@@ -303,9 +303,7 @@ export default function Dashboard() {
                     lowStockItems.map((prod) => (
                       <div
                         key={prod._id}
-                        onClick={() =>
-                          navigate(`/Seller/edit-product/${prod._id}`)
-                        }
+                        onClick={() => navigate(`/Seller/edit-product/${prod._id}`)}
                         className="group cursor-pointer p-3 rounded-2xl hover:bg-white/5 transition-all border border-transparent hover:border-slate-800"
                       >
                         <div className="flex justify-between items-center gap-4">
@@ -318,18 +316,15 @@ export default function Dashboard() {
                             </p>
                           </div>
                           <div className="shrink-0 text-right">
-                            <span
-                              className={`text-xs font-black px-2 py-1 rounded-lg ${
-                                prod.stock === 0
-                                  ? "bg-red-500 text-white"
-                                  : "bg-orange-500/20 text-orange-500 border border-orange-500/20"
-                              }`}
-                            >
+                            <span className={`text-xs font-black px-2 py-1 rounded-lg ${
+                              prod.stock === 0
+                                ? "bg-red-500 text-white"
+                                : "bg-orange-500/20 text-orange-500 border border-orange-500/20"
+                            }`}>
                               {prod.stock}
                             </span>
                           </div>
                         </div>
-
                         <div className="w-full bg-slate-800 h-1 mt-3 rounded-full overflow-hidden">
                           <div
                             className={`h-full transition-all duration-1000 ${

@@ -133,3 +133,20 @@ export default function App() {
     </>
   );
 }
+
+ReactDOM.createRoot(document.getElementById("root")).render(
+  <React.StrictMode>
+    <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID}>
+      <BrowserRouter>
+        <SocketProvider>
+          {" "}
+          {/* ✅ Wrap App to enable real-time alerts */}
+          <App />
+          <Toaster position="bottom-right" reverseOrder={false} />{" "}
+          {/* ✅ Essential for popups */}
+        </SocketProvider>
+      </BrowserRouter>
+    </GoogleOAuthProvider>
+  </React.StrictMode>
+);
+

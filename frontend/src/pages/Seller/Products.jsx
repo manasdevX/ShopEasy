@@ -17,7 +17,16 @@ export default function Products() {
 
   // --- SOCKET.IO REAL-TIME CONNECTION ---
   useEffect(() => {
-    const seller = JSON.parse(localStorage.getItem("user"));
+    // 🔴 FIX: Check 'sellerUser' first (matching your Login logic)
+    let seller = null;
+    try {
+      seller = JSON.parse(
+        localStorage.getItem("sellerUser") || localStorage.getItem("user")
+      );
+    } catch (e) {
+      console.error("Parsing error", e);
+    }
+
     if (socket && seller?._id) {
       // Ensure seller is in their notification room while browsing inventory
       socket.emit("join_seller_room", seller._id);
@@ -141,7 +150,9 @@ export default function Products() {
               >
                 <div className="flex items-center gap-6">
                   <img
-                    src={product.thumbnail || "https://via.placeholder.com/200"}
+                    src={
+                      product.thumbnail || "https://via.placeholder.com/200"
+                    }
                     className="w-20 h-20 rounded-2xl object-cover bg-slate-100 dark:bg-slate-800"
                     alt={product.name}
                   />
