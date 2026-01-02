@@ -190,19 +190,21 @@ export const cancelOrder = async (req, res) => {
       return res.status(404).json({ message: "Order not found" });
     }
 
-    // Only allow cancellation if status is Processing or Pending
-    if (order.status !== "Processing" && order.status !== "Pending") {
+    // ✅ UPDATED: Allow cancellation for Shipped orders too
+    if (
+      order.status !== "Processing" && 
+      order.status !== "Pending" && 
+      order.status !== "Shipped"
+    ) {
       return res
         .status(400)
-        .json({ message: "Cannot cancel order at this stage" });
+        .json({ message: "Cannot cancel order at this stage (Already Delivered)" });
     }
 
     order.status = "Cancelled";
     order.orderItems.forEach((item) => (item.itemStatus = "Cancelled"));
 
-    // 💰 REFUND LOGIC FOR CANCELLATION
-    // If paid online -> Mark refunded.
-    // If COD -> No refund needed (not paid yet).
+    // 💰 REFUND LOGIC
     if (order.paymentMethod !== "COD" && order.isPaid) {
       order.isRefunded = true;
       order.refundedAt = Date.now();
@@ -225,7 +227,6 @@ export const cancelOrder = async (req, res) => {
     ];
 
     for (const sellerId of sellersToNotify) {
-      // A. Database Notification
       await createNotification(
         sellerId,
         "alert",
@@ -237,7 +238,6 @@ export const cancelOrder = async (req, res) => {
         order._id
       );
 
-      // B. ⚡ Real-time Socket Alert
       if (req.io) {
         req.io.to(sellerId).emit("order_alert", {
           message: `Order #${order._id
@@ -272,18 +272,27 @@ export const requestReturn = async (req, res) => {
         .json({ message: "Order must be delivered to request return" });
     }
 
+    // ✅ NEW: 14-Day Return Window Validation
+    const deliveredDate = new Date(order.updatedAt);
+    const currentDate = new Date();
+    const diffTime = Math.abs(currentDate - deliveredDate);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+
+    if (diffDays > 14) {
+       return res.status(400).json({ message: "Return period (14 days) has expired." });
+    }
+
     order.status = "Return Requested";
     order.orderItems.forEach((item) => (item.itemStatus = "Return Requested"));
 
     await order.save();
 
-    // ✅ Notify Sellers (DB & Socket)
+    // ✅ Notify Sellers
     const sellersToNotify = [
       ...new Set(order.orderItems.map((item) => item.seller.toString())),
     ];
 
     for (const sellerId of sellersToNotify) {
-      // A. Database Notification
       await createNotification(
         sellerId,
         "alert",
@@ -295,7 +304,6 @@ export const requestReturn = async (req, res) => {
         order._id
       );
 
-      // B. ⚡ Real-time Socket Alert
       if (req.io) {
         req.io.to(sellerId).emit("order_alert", {
           message: `Return Requested for Order #${order._id
@@ -313,8 +321,8 @@ export const requestReturn = async (req, res) => {
   }
 };
 
-// @desc    Get orders for Seller
-// @route   GET /api/orders/seller-orders
+// @desc    Get orders for the logged-in Seller
+// @route   GET /api/orders/seller-orders?status=...&search=...
 // @access  Private (Seller)
 export const getSellerOrders = async (req, res) => {
   try {
@@ -343,7 +351,7 @@ export const getSellerOrders = async (req, res) => {
       else if (itemStatuses.every((s) => s === "Returned"))
         derivedStatus = "Returned";
       else if (itemStatuses.includes("Return Requested"))
-        derivedStatus = "Return Requested"; // Explicitly handle this
+        derivedStatus = "Return Requested";
       else if (itemStatuses.includes("Shipped")) derivedStatus = "Shipped";
       else derivedStatus = "Processing";
 
@@ -467,7 +475,6 @@ export const updateOrderStatus = async (req, res) => {
 // @desc    Handle Return Request (Approve/Reject)
 // @route   PUT /api/orders/handle-return
 // @access  Private (Seller)
-// ✅ NEW: Handles Refund Logic, Stock Restoration & Status
 export const handleReturnRequest = async (req, res) => {
   try {
     const { orderId, status } = req.body; // "Returned" (Approved) or "Delivered" (Rejected)
@@ -475,7 +482,7 @@ export const handleReturnRequest = async (req, res) => {
 
     if (!order) return res.status(404).json({ message: "Order not found" });
 
-    // Validate Status (Only act if Return is actually requested)
+    // Validate Status
     if (order.status !== "Return Requested") {
       return res
         .status(400)
@@ -486,7 +493,6 @@ export const handleReturnRequest = async (req, res) => {
 
     // 1. Update Items
     order.orderItems.forEach((item) => {
-      // Only update items belonging to this seller that are requested for return
       if (
         item.seller.toString() === req.seller._id.toString() &&
         item.itemStatus === "Return Requested"
@@ -508,13 +514,12 @@ export const handleReturnRequest = async (req, res) => {
     );
     if (allReturned) order.status = "Returned";
 
-    // If rejected (set back to Delivered), check if all are Delivered
     const allDelivered = order.orderItems.every(
       (i) => i.itemStatus === "Delivered"
     );
     if (allDelivered) order.status = "Delivered";
 
-    // 3. 💰 REFUND LOGIC & STOCK RESTORATION (If Approved)
+    // 3. 💰 REFUND LOGIC & STOCK RESTORATION
     if (status === "Returned") {
       // Restore Stock
       for (const item of order.orderItems) {
@@ -528,7 +533,6 @@ export const handleReturnRequest = async (req, res) => {
       }
 
       // Mark Refunded if Paid
-      // (COD orders are considered 'paid' once delivered, so they are eligible for refund on return)
       if (order.isPaid && !order.isRefunded) {
         order.isRefunded = true;
         order.refundedAt = Date.now();
@@ -537,7 +541,7 @@ export const handleReturnRequest = async (req, res) => {
 
     await order.save();
 
-    // 4. Notify Customer via Socket
+    // 4. Notify Customer
     if (req.io) {
       req.io.to(order.user.toString()).emit("order_alert", {
         message: `Your return for Order #${order._id
@@ -550,7 +554,7 @@ export const handleReturnRequest = async (req, res) => {
       });
     }
 
-    // 5. Notify Seller (Self) via Socket (Optional confirmation)
+    // 5. Notify Seller
     if (req.io) {
       req.io.to(req.seller._id.toString()).emit("order_alert", {
         message: `Return ${
