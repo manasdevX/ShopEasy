@@ -179,7 +179,7 @@ export const getMyOrders = async (req, res) => {
   }
 };
 
-// @desc    Cancel Order (Customer)
+// @desc    Cancel Order (Customer) - Restores Stock & Refunds
 // @route   PUT /api/orders/:id/cancel
 // @access  Private (Customer)
 export const cancelOrder = async (req, res) => {
@@ -190,7 +190,6 @@ export const cancelOrder = async (req, res) => {
       return res.status(404).json({ message: "Order not found" });
     }
 
-    // Allow cancellation for Shipped orders too if needed, or restrict to Pending/Processing
     if (
       order.status !== "Processing" &&
       order.status !== "Pending" &&
@@ -198,19 +197,21 @@ export const cancelOrder = async (req, res) => {
     ) {
       return res
         .status(400)
-        .json({ message: "Cannot cancel order at this stage (Already Delivered)" });
+        .json({
+          message: "Cannot cancel order at this stage (Already Delivered)",
+        });
     }
 
     order.status = "Cancelled";
     order.orderItems.forEach((item) => (item.itemStatus = "Cancelled"));
 
-    // 💰 REFUND LOGIC: If paid online, mark as refunded
+    // 💰 REFUND LOGIC (For Cancelled Orders)
     if (order.paymentMethod !== "COD" && order.isPaid) {
       order.isRefunded = true;
       order.refundedAt = Date.now();
     }
 
-    // ✅ STOCK REFILLING LOGIC: Cancelled -> Return stock to DB
+    // ✅ RESTORE STOCK
     for (const item of order.orderItems) {
       const product = await Product.findById(item.product);
       if (product) {
@@ -221,7 +222,7 @@ export const cancelOrder = async (req, res) => {
 
     await order.save();
 
-    // ✅ Notify Sellers (DB & Socket)
+    // ✅ Notify Sellers
     const sellersToNotify = [
       ...new Set(order.orderItems.map((item) => item.seller.toString())),
     ];
@@ -255,7 +256,7 @@ export const cancelOrder = async (req, res) => {
   }
 };
 
-// @desc    Request Return (Customer) -> AUTO APPROVE & REFILL STOCK
+// @desc    Request Return (Customer) - AUTO APPROVES, RESTORES STOCK & REFUNDS
 // @route   PUT /api/orders/:id/return
 // @access  Private (Customer)
 export const requestReturn = async (req, res) => {
@@ -276,18 +277,19 @@ export const requestReturn = async (req, res) => {
     const deliveredDate = new Date(order.updatedAt);
     const currentDate = new Date();
     const diffTime = Math.abs(currentDate - deliveredDate);
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
     if (diffDays > 14) {
-       return res.status(400).json({ message: "Return period (14 days) has expired." });
+      return res
+        .status(400)
+        .json({ message: "Return period (14 days) has expired." });
     }
 
-    // ✅ AUTO-UPDATE STATUS: "Return Initiated"
-    // This bypasses the need for seller approval
+    // ✅ AUTO-UPDATE STATUS: "Return Initiated" (Skip "Return Requested")
     order.status = "Return Initiated";
     order.orderItems.forEach((item) => (item.itemStatus = "Return Initiated"));
 
-    // ✅ STOCK REFILLING LOGIC: Returned -> Return stock to DB immediately
+    // ✅ 1. RESTORE STOCK IMMEDIATELY (Auto-Accepted)
     for (const item of order.orderItems) {
       const product = await Product.findById(item.product);
       if (product) {
@@ -296,9 +298,8 @@ export const requestReturn = async (req, res) => {
       }
     }
 
-    // ✅ REFUND LOGIC: Mark as refunded immediately
-    // For COD: If Delivered, money was taken -> Refund needed.
-    // For Online: Money taken -> Refund needed.
+    // ✅ 2. PROCESS REFUND IMMEDIATELY (Auto-Accepted)
+    // If the order was paid (Online or COD that was delivered), mark as Refunded
     if (order.isPaid && !order.isRefunded) {
       order.isRefunded = true;
       order.refundedAt = Date.now();
@@ -306,7 +307,7 @@ export const requestReturn = async (req, res) => {
 
     await order.save();
 
-    // ✅ Notify Sellers (Informational)
+    // ✅ 3. Notify Sellers (Informational Only)
     const sellersToNotify = [
       ...new Set(order.orderItems.map((item) => item.seller.toString())),
     ];
@@ -319,7 +320,7 @@ export const requestReturn = async (req, res) => {
         `Order #${order._id
           .toString()
           .slice(-6)
-          .toUpperCase()} has been returned. Stock restored & Refund initiated.`,
+          .toUpperCase()} has been returned. Stock restored & Refund initiated automatically.`,
         order._id
       );
 
@@ -334,7 +335,9 @@ export const requestReturn = async (req, res) => {
       }
     }
 
-    res.json({ message: "Return initiated and refund processed successfully." });
+    res.json({
+      message: "Return initiated and refund processed successfully.",
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -367,10 +370,10 @@ export const getSellerOrders = async (req, res) => {
         derivedStatus = "Delivered";
       else if (itemStatuses.every((s) => s === "Cancelled"))
         derivedStatus = "Cancelled";
-      else if (itemStatuses.every((s) => s === "Returned" || s === "Return Initiated"))
-        derivedStatus = "Return Initiated"; // ✅ Maps both statuses to new flow
-      else if (itemStatuses.includes("Return Requested")) 
-        derivedStatus = "Return Requested"; // Legacy fallback
+      else if (
+        itemStatuses.every((s) => s === "Returned" || s === "Return Initiated")
+      )
+        derivedStatus = "Return Initiated"; // ✅ Maps both to new status
       else if (itemStatuses.includes("Shipped")) derivedStatus = "Shipped";
       else derivedStatus = "Processing";
 
@@ -380,7 +383,7 @@ export const getSellerOrders = async (req, res) => {
         shippingAddress: order.shippingAddress,
         paymentMethod: order.paymentMethod,
         isPaid: order.isPaid,
-        isRefunded: order.isRefunded, // ✅ Added for frontend visibility
+        isRefunded: order.isRefunded,
         createdAt: order.createdAt,
         sellerTotal: sellerItems.reduce(
           (acc, item) => acc + item.price * item.qty,
@@ -413,7 +416,7 @@ export const getSellerOrders = async (req, res) => {
   }
 };
 
-// @desc    Update Order Item Status (Seller Only)
+// @desc    Update Order Item Status (Seller Only) - Shipping Only
 // @route   PUT /api/orders/:id/status
 // @access  Private (Seller)
 export const updateOrderStatus = async (req, res) => {
