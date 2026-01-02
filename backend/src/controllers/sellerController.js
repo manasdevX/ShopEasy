@@ -38,18 +38,13 @@ export const registerSeller = async (req, res) => {
   try {
     const { name, email, password, phone, googleId } = req.body;
 
-    // Basic validation for Step 1
     if (!name || !email || !password || !phone) {
-      return res
-        .status(400)
-        .json({ message: "Please fill all required fields" });
+      return res.status(400).json({ message: "Please fill all required fields" });
     }
 
     const sellerExists = await Seller.findOne({ email });
-    if (sellerExists)
-      return res.status(400).json({ message: "Seller email already exists" });
+    if (sellerExists) return res.status(400).json({ message: "Seller email already exists" });
 
-    // Create the partial seller profile
     const seller = await Seller.create({
       name,
       email,
@@ -81,19 +76,14 @@ export const registerSeller = async (req, res) => {
 export const loginSeller = async (req, res) => {
   try {
     const { email: identifier, password } = req.body;
-    if (!identifier || !password)
-      return res
-        .status(400)
-        .json({ message: "Please enter email/phone and password" });
+    if (!identifier || !password) return res.status(400).json({ message: "Please enter email/phone and password" });
 
     const seller = await Seller.findOne({
       $or: [{ email: identifier }, { phone: identifier }],
     }).select("+password");
 
     if (!seller || !(await seller.matchPassword(password))) {
-      return res
-        .status(401)
-        .json({ message: "Invalid email/phone or password" });
+      return res.status(401).json({ message: "Invalid email/phone or password" });
     }
 
     res.json({
@@ -111,58 +101,33 @@ export const loginSeller = async (req, res) => {
 };
 
 // @desc    Send Forgot Password OTP (Seller)
-// @route   POST /api/sellers/forgot-password
-// @access  Public
 export const forgotPasswordSeller = async (req, res) => {
   try {
     const { identifier } = req.body;
-    if (!identifier)
-      return res.status(400).json({ message: "Email or Phone is required" });
+    if (!identifier) return res.status(400).json({ message: "Email or Phone is required" });
 
-    const seller = await Seller.findOne({
-      $or: [{ email: identifier }, { phone: identifier }],
-    });
-
+    const seller = await Seller.findOne({ $or: [{ email: identifier }, { phone: identifier }] });
     if (!seller) return res.status(404).json({ message: "Seller not found" });
 
-    // Generate & Save OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    seller.resetPasswordToken = crypto
-      .createHash("sha256")
-      .update(otp)
-      .digest("hex");
+    seller.resetPasswordToken = crypto.createHash("sha256").update(otp).digest("hex");
     seller.resetPasswordExpire = Date.now() + 10 * 60 * 1000;
     await seller.save();
 
-    const isEmailInput = identifier.includes("@");
-
-    if (isEmailInput) {
-      // --- SEND EMAIL ---
+    if (identifier.includes("@")) {
       await sendEmail({
         email: seller.email,
         subject: "Password Reset Request",
         message: `Your ShopEasy Password Reset OTP is: ${otp}`,
       });
-      return res
-        .status(200)
-        .json({ success: true, message: "OTP sent to email" });
+      return res.status(200).json({ success: true, message: "OTP sent to email" });
     } else {
-      // --- SEND SMS (TWILIO) ---
       const accountSid = process.env.TWILIO_SID;
       const authToken = process.env.TWILIO_AUTH_TOKEN;
       const twilioPhone = process.env.TWILIO_PHONE_NUMBER;
 
-      if (!accountSid || !authToken || !twilioPhone) {
-        console.error("Twilio Config Missing: Check .env for TWILIO_SID");
-        throw new Error("Server SMS configuration error");
-      }
-
       const client = twilio(accountSid, authToken);
-
-      let phoneToSend = seller.phone;
-      if (!phoneToSend.startsWith("+")) {
-        phoneToSend = `+91${phoneToSend}`;
-      }
+      let phoneToSend = seller.phone.startsWith("+") ? seller.phone : `+91${seller.phone}`;
 
       await client.messages.create({
         body: `Your ShopEasy Password Reset OTP is: ${otp}`,
@@ -170,9 +135,7 @@ export const forgotPasswordSeller = async (req, res) => {
         to: phoneToSend,
       });
 
-      return res
-        .status(200)
-        .json({ success: true, message: "OTP sent to mobile" });
+      return res.status(200).json({ success: true, message: "OTP sent to mobile" });
     }
   } catch (error) {
     console.error("FORGOT PASS ERROR:", error);
@@ -181,8 +144,6 @@ export const forgotPasswordSeller = async (req, res) => {
 };
 
 // @desc    Reset Password with OTP (Seller)
-// @route   POST /api/sellers/reset-password
-// @access  Public
 export const resetPasswordSeller = async (req, res) => {
   try {
     const { identifier, otp, password } = req.body;
@@ -194,17 +155,14 @@ export const resetPasswordSeller = async (req, res) => {
       resetPasswordExpire: { $gt: Date.now() },
     });
 
-    if (!seller)
-      return res.status(400).json({ message: "Invalid or expired OTP" });
+    if (!seller) return res.status(400).json({ message: "Invalid or expired OTP" });
 
     seller.password = password;
     seller.resetPasswordToken = undefined;
     seller.resetPasswordExpire = undefined;
     await seller.save();
 
-    res
-      .status(200)
-      .json({ success: true, message: "Password updated successfully" });
+    res.status(200).json({ success: true, message: "Password updated successfully" });
   } catch (error) {
     res.status(500).json({ message: "Server Error" });
   }
@@ -226,17 +184,13 @@ export const getSellerProfile = async (req, res) => {
     const cachedProfile = await redisClient.get(cacheKey);
 
     if (cachedProfile) {
-      // console.log("⚡ Serving Seller Profile from Redis");
       return res.json(JSON.parse(cachedProfile));
     }
 
     // 2. Fetch from DB
     const seller = await Seller.findById(req.seller._id);
     if (seller) {
-<<<<<<< Updated upstream
-      const responseData = {
-=======
-      // Try to provide structured address components to the client without changing DB schema
+      // Logic from "Stashed changes" to provide structured address components
       const addressParts = (seller.address || "").split(",").map((p) => p.trim());
       const addressObject = {
         street: addressParts[0] || "",
@@ -245,8 +199,7 @@ export const getSellerProfile = async (req, res) => {
         zip: addressParts[3] || "",
       };
 
-      res.json({
->>>>>>> Stashed changes
+      const responseData = {
         _id: seller._id,
         name: seller.name,
         email: seller.email,
@@ -261,18 +214,14 @@ export const getSellerProfile = async (req, res) => {
         isActive: seller.isActive,
         isOnboardingComplete: seller.isOnboardingComplete,
         bankDetails: seller.bankDetails,
-<<<<<<< Updated upstream
+        createdAt: seller.createdAt,
+        updatedAt: seller.updatedAt,
       };
 
       // 3. Save to Redis (TTL: 1 hour)
       await redisClient.setEx(cacheKey, 3600, JSON.stringify(responseData));
 
       res.json(responseData);
-=======
-        createdAt: seller.createdAt,
-        updatedAt: seller.updatedAt,
-      });
->>>>>>> Stashed changes
     } else {
       res.status(404).json({ message: "Seller not found" });
     }
@@ -282,14 +231,11 @@ export const getSellerProfile = async (req, res) => {
 };
 
 // @desc    Update Seller Business Profile (Step 2)
-// @route   PUT /api/sellers/profile
-// @access  Private (Seller)
 export const updateSellerProfile = async (req, res) => {
   try {
     const seller = await Seller.findById(req.seller._id);
 
     if (seller) {
-      // Allow updating basic contact fields as well
       seller.name = req.body.name || seller.name;
       seller.phone = req.body.phone || seller.phone;
 
@@ -298,13 +244,7 @@ export const updateSellerProfile = async (req, res) => {
       seller.gstin = req.body.gstin || seller.gstin;
       seller.address = req.body.address || seller.address;
 
-      // If all business & bank details present, mark onboarding complete
-      if (
-        seller.businessName &&
-        seller.gstin &&
-        seller.bankDetails &&
-        seller.bankDetails.accountNumber
-      ) {
+      if (seller.businessName && seller.gstin && seller.bankDetails?.accountNumber) {
         seller.isOnboardingComplete = true;
       }
 
@@ -336,27 +276,14 @@ export const updateSellerProfile = async (req, res) => {
 };
 
 // @desc    Add/Update Bank Details (Step 3)
-// @route   PUT /api/sellers/bank
-// @access  Private (Seller)
 export const addBankDetails = async (req, res) => {
   try {
-    const { accountHolder, accountNumber, ifscCode, bankName, branchName } =
-      req.body;
-
-    if (!accountHolder || !accountNumber || !ifscCode)
-      return res.status(400).json({ message: "Provide all bank details" });
+    const { accountHolder, accountNumber, ifscCode, bankName, branchName } = req.body;
+    if (!accountHolder || !accountNumber || !ifscCode) return res.status(400).json({ message: "Provide all bank details" });
 
     const seller = await Seller.findById(req.seller._id);
     if (seller) {
-      seller.bankDetails = {
-        accountHolder,
-        accountNumber,
-        ifscCode,
-        bankName,
-        branchName,
-        isVerified: true,
-      };
-
+      seller.bankDetails = { accountHolder, accountNumber, ifscCode, bankName, branchName, isVerified: true };
       if (seller.businessName && seller.gstin) {
         seller.isOnboardingComplete = true;
       }
@@ -366,10 +293,7 @@ export const addBankDetails = async (req, res) => {
       // ✅ INVALIDATE CACHE
       await clearSellerCache(seller._id);
 
-      res.status(200).json({
-        message: "Bank details updated",
-        bankDetails: seller.bankDetails,
-      });
+      res.status(200).json({ message: "Bank details updated", bankDetails: seller.bankDetails });
     } else {
       res.status(404).json({ message: "Seller not found" });
     }
@@ -379,15 +303,9 @@ export const addBankDetails = async (req, res) => {
 };
 
 // @desc    Update Seller Personal Info (Name / Phone)
-// @route   PUT /api/sellers/profile/personal
-// @access  Private (Seller)
 export const updatePersonalProfile = async (req, res) => {
   try {
     const { name, phone } = req.body;
-    if (!name && !phone) {
-      return res.status(400).json({ message: "No fields to update" });
-    }
-
     const seller = await Seller.findById(req.seller._id);
     if (!seller) return res.status(404).json({ message: "Seller not found" });
 
@@ -396,26 +314,21 @@ export const updatePersonalProfile = async (req, res) => {
 
     await seller.save();
 
-    res.status(200).json({
-      message: "Personal info updated",
-      name: seller.name,
-      phone: seller.phone,
-    });
+    // ✅ INVALIDATE CACHE
+    await clearSellerCache(seller._id);
+
+    res.status(200).json({ message: "Personal info updated", name: seller.name, phone: seller.phone });
   } catch (error) {
-    console.error("UPDATE PERSONAL ERROR:", error.message);
     res.status(500).json({ message: error.message });
   }
 };
 
 // @desc    Update Seller Address
-// @route   PUT /api/sellers/profile/address
-// @access  Private (Seller)
 export const updateSellerAddress = async (req, res) => {
   try {
     let { address } = req.body;
     if (!address) return res.status(400).json({ message: "Address is required" });
 
-    // Accept either a string or an object with components
     if (typeof address === "object") {
       const { street = "", city = "", state = "", zip = "" } = address;
       address = `${street}${city ? ", " + city : ""}${state ? ", " + state : ""}${zip ? ", " + zip : ""}`;
@@ -427,25 +340,21 @@ export const updateSellerAddress = async (req, res) => {
     seller.address = address;
     await seller.save();
 
-    // Return both raw string and structured object for convenience
-    const parts = (address || "").split(",").map((p) => p.trim());
-    const addressObject = {
-      street: parts[0] || "",
-      city: parts[1] || "",
-      state: parts[2] || "",
-      zip: parts[3] || "",
-    };
+    // ✅ INVALIDATE CACHE
+    await clearSellerCache(seller._id);
 
-    res.status(200).json({ message: "Address updated", address: seller.address, addressObject });
+    const parts = (address || "").split(",").map((p) => p.trim());
+    res.status(200).json({ 
+        message: "Address updated", 
+        address: seller.address, 
+        addressObject: { street: parts[0] || "", city: parts[1] || "", state: parts[2] || "", zip: parts[3] || "" } 
+    });
   } catch (error) {
-    console.error("UPDATE ADDRESS ERROR:", error.message);
     res.status(500).json({ message: error.message });
   }
 };
 
 // @desc    Get Seller Dashboard Stats
-// @route   GET /api/sellers/dashboard
-// @access  Private (Seller)
 export const getSellerDashboard = async (req, res) => {
   try {
     const sellerId = req.seller._id;
@@ -454,71 +363,31 @@ export const getSellerDashboard = async (req, res) => {
     const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
 
     const allProducts = await Product.find({ seller: sellerId });
-    const productsThisMonth = allProducts.filter(
-      (p) => p.createdAt >= startOfThisMonth
-    ).length;
-    const productTrend =
-      productsThisMonth > 0 ? `+${productsThisMonth} New` : "No New";
+    const productsThisMonth = allProducts.filter((p) => p.createdAt >= startOfThisMonth).length;
 
     const orders = await Order.find({ "orderItems.seller": sellerId });
-    const thisMonthOrders = orders.filter(
-      (o) => o.createdAt >= startOfThisMonth
-    );
-    const lastMonthOrders = orders.filter(
-      (o) => o.createdAt >= startOfLastMonth && o.createdAt < startOfThisMonth
-    );
+    const thisMonthOrders = orders.filter((o) => o.createdAt >= startOfThisMonth);
+    const lastMonthOrders = orders.filter((o) => o.createdAt >= startOfLastMonth && o.createdAt < startOfThisMonth);
 
-    const totalRevenue = orders.reduce(
-      (acc, o) => acc + (o.totalPrice || 0),
-      0
-    );
-    const thisMonthRevenue = thisMonthOrders.reduce(
-      (acc, o) => acc + (o.totalPrice || 0),
-      0
-    );
-    const lastMonthRevenue = lastMonthOrders.reduce(
-      (acc, o) => acc + (o.totalPrice || 0),
-      0
-    );
+    const totalRevenue = orders.reduce((acc, o) => acc + (o.totalPrice || 0), 0);
+    const thisMonthRevenue = thisMonthOrders.reduce((acc, o) => acc + (o.totalPrice || 0), 0);
+    const lastMonthRevenue = lastMonthOrders.reduce((acc, o) => acc + (o.totalPrice || 0), 0);
 
-    let revenueGrowth =
-      lastMonthRevenue === 0
-        ? thisMonthRevenue > 0
-          ? 100
-          : 0
-        : ((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100;
+    let revenueGrowth = lastMonthRevenue === 0 ? (thisMonthRevenue > 0 ? 100 : 0) : ((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100;
 
     const ratingStats = await Product.aggregate([
       { $match: { seller: sellerId } },
       { $group: { _id: null, averageRating: { $avg: "$rating" } } },
     ]);
-    const storeRating =
-      ratingStats.length > 0 ? ratingStats[0].averageRating.toFixed(1) : 0;
+    const storeRating = ratingStats.length > 0 ? ratingStats[0].averageRating.toFixed(1) : 0;
 
     res.json({
-      seller: {
-        name: req.seller.name,
-        businessName: req.seller.businessName,
-        rating: storeRating,
-      },
-      stats: {
-        totalRevenue,
-        totalProducts: allProducts.length,
-        activeOrders: orders.filter(
-          (o) => o.status !== "Delivered" && o.status !== "Cancelled"
-        ).length,
-      },
-      trends: {
-        revenue: revenueGrowth.toFixed(1) + "%",
-        products: productTrend,
-        revenueIsUp: revenueGrowth >= 0,
-      },
-      recentProducts: await Product.find({ seller: sellerId })
-        .sort({ createdAt: -1 })
-        .limit(5),
+      seller: { name: req.seller.name, businessName: req.seller.businessName, rating: storeRating },
+      stats: { totalRevenue, totalProducts: allProducts.length, activeOrders: orders.filter((o) => o.status !== "Delivered" && o.status !== "Cancelled").length },
+      trends: { revenue: revenueGrowth.toFixed(1) + "%", products: productsThisMonth > 0 ? `+${productsThisMonth} New` : "No New", revenueIsUp: revenueGrowth >= 0 },
+      recentProducts: await Product.find({ seller: sellerId }).sort({ createdAt: -1 }).limit(5),
     });
   } catch (error) {
-    console.error("DASHBOARD ERROR:", error);
     res.status(500).json({ message: "Server Error" });
   }
 };
@@ -527,87 +396,36 @@ export const getSellerDashboard = async (req, res) => {
    SEARCH CONTROLLER
 ========================================= */
 
-// @desc    Search Products & Orders for Dashboard
-// @route   GET /api/sellers/search?query=...
-// @access  Private (Seller)
 export const searchSellerData = async (req, res) => {
   try {
     const { query } = req.query;
-    // Safely check for seller ID (supports different auth middlewares)
     const sellerId = req.seller?._id || req.user?._id;
+    if (!sellerId) return res.status(401).json({ message: "Unauthorized: Seller ID missing" });
+    if (!query) return res.status(400).json({ message: "Search query is required" });
 
-    if (!sellerId) {
-      return res
-        .status(401)
-        .json({ message: "Unauthorized: Seller ID missing" });
-    }
-
-    if (!query) {
-      return res.status(400).json({ message: "Search query is required" });
-    }
-
-    // Case-insensitive regex
     const searchRegex = new RegExp(query, "i");
-
-    // 1. Search Products (by Name or Category)
-    const products = await Product.find({
-      seller: sellerId,
-      $or: [
-        { name: searchRegex },
-        { category: searchRegex },
-        // { sku: searchRegex }, // Uncomment if you add SKU later
-      ],
-    })
-      .select("name category price thumbnail stock")
-      .limit(5);
-
-    // 2. Search Orders (by ID or Customer City)
-    // Checking strict ID length prevents CastError for partial IDs
     const isObjectId = query.length === 24 && /^[0-9a-fA-F]{24}$/.test(query);
 
-    const orders = await Order.find({
-      "orderItems.seller": sellerId,
-      $or: [
-        // If query looks like an ID, search _id, otherwise search address fields
-        ...(isObjectId ? [{ _id: query }] : []),
-        { "shippingAddress.city": searchRegex },
-        { "shippingAddress.address": searchRegex },
-      ],
-    })
-      .select("_id totalPrice status createdAt")
-      .limit(5);
+    const [products, orders] = await Promise.all([
+      Product.find({ seller: sellerId, $or: [{ name: searchRegex }, { category: searchRegex }] }).select("name category price thumbnail stock").limit(5),
+      Order.find({ "orderItems.seller": sellerId, $or: [...(isObjectId ? [{ _id: query }] : []), { "shippingAddress.city": searchRegex }, { "shippingAddress.address": searchRegex }] }).select("_id totalPrice status createdAt").limit(5)
+    ]);
 
-    res.status(200).json({
-      success: true,
-      results: {
-        products,
-        orders,
-      },
-    });
+    res.status(200).json({ success: true, results: { products, orders } });
   } catch (error) {
-    console.error("SEARCH ERROR:", error);
     res.status(500).json({ message: "Search failed", error: error.message });
   }
 };
 
 // @desc    Delete Seller Account
-// @route   DELETE /api/sellers/profile
-// @access  Private (Seller)
 export const deleteSellerAccount = async (req, res) => {
   try {
     const seller = await Seller.findById(req.seller._id);
     if (!seller) return res.status(404).json({ message: "Seller not found" });
 
-    // Optional: Delete seller's products too?
-    // await Product.deleteMany({ seller: req.seller._id });
-
-    // ✅ INVALIDATE CACHE before deleting
     await clearSellerCache(req.seller._id);
-
     await seller.deleteOne();
-    res
-      .status(200)
-      .json({ success: true, message: "Account deleted successfully" });
+    res.status(200).json({ success: true, message: "Account deleted successfully" });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
