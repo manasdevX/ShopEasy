@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate, useLocation, Link } from "react-router-dom";
+import { useNavigate, useLocation, Link, useSearchParams } from "react-router-dom";
 import {
   CheckCircle2,
   Package,
@@ -21,36 +21,54 @@ const API_URL = import.meta.env.VITE_API_URL;
 export default function OrderSummary() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
 
-  // 1. Initialize with passed state (if available)
-  const initialOrder = location.state?.order || location.state;
-  const [order, setOrder] = useState(initialOrder);
-  const [loading, setLoading] = useState(!initialOrder);
+  // 1. Logic: Determine Order ID (State vs URL)
+  // If coming from internal navigation, we might have state.
+  // If coming from Payment Gateway redirect, we rely on URL param.
+  const stateOrder = location.state?.order || location.state;
+  const urlOrderId = searchParams.get("orderId");
 
-  // 2. Fetch Fresh Data on Mount (Vital for Status Updates)
+  const [order, setOrder] = useState(stateOrder || null);
+  // Show loading only if we don't have the order data yet
+  const [loading, setLoading] = useState(!stateOrder);
+
+  // 2. Fetch Fresh Data (Vital for Payment Updates)
   useEffect(() => {
-    const fetchLatestOrder = async () => {
-      if (!initialOrder?._id) return;
-      
+    const fetchOrderData = async () => {
+      // Determine which ID to use
+      const targetId = urlOrderId || stateOrder?._id;
+
+      if (!targetId) {
+        setLoading(false);
+        return;
+      }
+
       try {
         const token = localStorage.getItem("token");
-        const res = await fetch(`${API_URL}/api/orders/${initialOrder._id}`, {
-          headers: { Authorization: `Bearer ${token}` },
+        const res = await fetch(`${API_URL}/api/orders/${targetId}`, {
+          headers: { 
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json"
+          },
         });
-        
+
         if (res.ok) {
           const freshData = await res.json();
-          setOrder(freshData); 
+          setOrder(freshData);
+        } else {
+          console.error("Failed to fetch order details");
         }
       } catch (error) {
-        console.error("Failed to refresh order:", error);
+        console.error("Error fetching order:", error);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchLatestOrder();
-  }, [initialOrder?._id]);
+    // Always fetch fresh data to ensure Payment Status is up to date
+    fetchOrderData();
+  }, [urlOrderId, stateOrder?._id]);
 
   if (loading) {
     return (
@@ -65,6 +83,7 @@ export default function OrderSummary() {
       <div className="min-h-screen bg-[#030712] text-white flex flex-col items-center justify-center font-sans">
         <ShoppingBag size={64} className="text-slate-700 mb-4" />
         <h2 className="text-2xl font-bold mb-4">No Order Found</h2>
+        <p className="text-slate-400 mb-6">We couldn't retrieve the order details.</p>
         <Link
           to="/"
           className="bg-blue-600 px-6 py-3 rounded-xl font-bold hover:bg-blue-500 transition-colors"
@@ -127,7 +146,6 @@ export default function OrderSummary() {
       let cancelSubtext = "No Payment Deducted"; 
 
       // If the order was Paid Online OR explicitly marked as refunded
-      // (This handles cases where user paid via Gateway and cancelled)
       if (order.isRefunded || (order.paymentMethod !== "COD" && order.isPaid)) {
         cancelSubtext = "Refund Processed to Original Source";
       }
