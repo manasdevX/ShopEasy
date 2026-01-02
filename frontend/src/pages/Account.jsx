@@ -106,7 +106,7 @@ export default function Account() {
     return `${API_URL}/${cleanPath}`;
   };
 
-  // ✅ NEW: Unified Status Colors (Matching Seller Dashboard & Screenshots)
+  // Status Colors
   const getStatusColor = (status) => {
     switch (status) {
       case "Delivered":
@@ -186,7 +186,6 @@ export default function Account() {
             wishlist: data.wishlist || [],
           };
 
-          // Merge with existing state to preserve orders if they loaded first
           setUser((prev) => ({ ...prev, ...userData }));
           setFormData((prev) => ({ ...prev, ...userData }));
         }
@@ -237,7 +236,6 @@ export default function Account() {
 
       if (res.ok) {
         showSuccess("Order cancelled successfully");
-        // Update local state immediately
         setUser((prev) => ({
           ...prev,
           orders: prev.orders.map((o) =>
@@ -266,7 +264,6 @@ export default function Account() {
 
       if (res.ok) {
         showSuccess("Return request submitted");
-        // Update local state immediately
         setUser((prev) => ({
           ...prev,
           orders: prev.orders.map((o) =>
@@ -313,7 +310,7 @@ export default function Account() {
   const handleDeactivate = async () => {
     if (!isConfirming) {
       setIsConfirming(true);
-      return; // Stop here and wait for the second click
+      return;
     }
 
     try {
@@ -888,7 +885,7 @@ export default function Account() {
               </div>
             )}
 
-            {/* 2. ORDER HISTORY TAB CORRECTED */}
+            {/* 2. ORDER HISTORY TAB */}
             {activeTab === "orders" && (
               <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500 min-h-[500px]">
                 <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/20">
@@ -941,7 +938,9 @@ export default function Account() {
                     <div className="space-y-6">
                       {user.orders.map((order) => {
                         // Logic for Return Window (14 Days)
-                        const deliveredDate = new Date(order.updatedAt);
+                        const deliveredDate = new Date(
+                          order.deliveredAt || order.updatedAt
+                        );
                         const currentDate = new Date();
                         const diffTime = Math.abs(currentDate - deliveredDate);
                         const diffDays = Math.ceil(
@@ -981,7 +980,6 @@ export default function Account() {
                                 </div>
                               </div>
                               <div
-                                // ✅ UPDATED: Using getStatusColor for unified styling
                                 className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter border ${getStatusColor(
                                   order.status
                                 )}`}
@@ -1033,11 +1031,10 @@ export default function Account() {
                               </div>
 
                               <div className="flex items-center gap-3">
-                                {/* --- CONDITIONAL ACTION BUTTONS --- */}
-
-                                {/* 1. CANCEL BUTTON: Shown if processing/pending */}
+                                {/* CANCEL BUTTON */}
                                 {(order.status === "Processing" ||
-                                  order.status === "Pending") && (
+                                  order.status === "Pending" ||
+                                  order.status === "Shipped") && (
                                   <button
                                     onClick={() => handleCancelOrder(order._id)}
                                     className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold rounded-xl transition-all border border-red-100 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400"
@@ -1046,7 +1043,7 @@ export default function Account() {
                                   </button>
                                 )}
 
-                                {/* 2. RETURN BUTTON: Shown if Delivered and within 14 days */}
+                                {/* RETURN BUTTON */}
                                 {order.status === "Delivered" &&
                                   isWithinReturnWindow && (
                                     <button
@@ -1077,7 +1074,7 @@ export default function Account() {
               </div>
             )}
 
-            {/* 3. WISHLIST TAB CORRECTED */}
+            {/* 3. WISHLIST TAB */}
             {activeTab === "wishlist" && (
               <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500 min-h-[500px]">
                 <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/20">
@@ -1396,9 +1393,7 @@ export default function Account() {
                                     </button>
                                   )}
                                   <button
-                                    onClick={() =>
-                                      handleDeleteAddress(addr._id)
-                                    }
+                                    onClick={() => handleDeleteAddress(addr._id)}
                                     className="w-full text-left px-4 py-2.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2 transition-colors"
                                   >
                                     <Trash2 size={12} /> Delete
