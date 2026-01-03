@@ -68,7 +68,9 @@ export default function Login() {
 
       // === SELLER-SPECIFIC KEYS ===
       localStorage.setItem("sellerToken", data.token);
-      localStorage.setItem("sellerUser", JSON.stringify(data));
+
+      // 🟢 CRITICAL FIX: Save 'data.user' so SocketContext gets the correct _id
+      localStorage.setItem("sellerUser", JSON.stringify(data.user));
 
       showSuccess("Login successful!");
       navigate("/Seller/Dashboard");
@@ -107,7 +109,7 @@ export default function Login() {
           } else {
             // Existing user flow: Save token and redirect
             localStorage.setItem("sellerToken", data.token);
-            // Ensure we save the user object correctly (some backends return it inside .user, others at root)
+            // Ensure we save the user object correctly
             localStorage.setItem(
               "sellerUser",
               JSON.stringify(data.user || data)

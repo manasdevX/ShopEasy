@@ -269,10 +269,10 @@ export default function SellerSignup() {
           } else {
             // Existing seller login -> Go directly to dashboard
             localStorage.setItem("sellerToken", data.token);
-            localStorage.setItem(
-              "sellerUser",
-              JSON.stringify(data.user || data)
-            );
+
+            // 🟢 CRITICAL FIX: Save 'data.user' so SocketContext gets the correct _id
+            localStorage.setItem("sellerUser", JSON.stringify(data.user));
+
             showSuccess("Welcome back!");
             navigate("/Seller/Dashboard");
           }
@@ -413,7 +413,7 @@ export default function SellerSignup() {
                         <Loader2 className="animate-spin" size={16} />
                       ) : mobileTimer > 0 ? (
                         <span className="text-orange-600 dark:text-orange-400 font-black">
-                          {emailTimer}s
+                          {mobileTimer}s
                         </span>
                       ) : isMobileSent ? (
                         "Resend"

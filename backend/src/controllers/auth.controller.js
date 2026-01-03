@@ -201,9 +201,21 @@ export const registerVerifiedUser = async (req, res) => {
 
     await Otp.deleteMany({ identifier: { $in: [email, phone] } });
 
+    // --- ✅ FIXED: Create Session for New User ---
+    const token = generateToken(newUser._id);
+
+    await Session.create({
+      user: newUser._id,
+      refreshToken: token,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 Days
+      ipAddress: req.ip || req.connection.remoteAddress,
+      userAgent: req.headers["user-agent"],
+    });
+    // ---------------------------------------------
+
     res.status(201).json({
       success: true,
-      token: generateToken(newUser._id),
+      token: token,
       user: {
         _id: newUser._id,
         name: newUser.name,
