@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate , useLocation } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import AuthFooter from "../components/AuthFooter";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
@@ -39,6 +39,7 @@ export default function Login() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
+        credentials: "include", // ✅ Good practice for consistent session handling
         body: JSON.stringify({ localItems }),
       });
 
@@ -64,6 +65,7 @@ export default function Login() {
       const res = await fetch(`${API_URL}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include", // ✅ CRITICAL: Required to accept the HttpOnly Cookie from Backend
         body: JSON.stringify({ email, password }),
       });
 
@@ -99,6 +101,7 @@ export default function Login() {
         const res = await fetch(`${API_URL}/api/auth/google`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: "include", // ✅ CRITICAL: Required to accept the HttpOnly Cookie from Backend
           body: JSON.stringify({
             token: tokenResponse.access_token,
           }),
