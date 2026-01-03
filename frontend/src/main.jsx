@@ -4,7 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import { SocketProvider } from "./context/SocketContext";
 import App from "./App";
-import "./index.css"; 
+import "./index.css";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
@@ -18,5 +18,3 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     </GoogleOAuthProvider>
   </React.StrictMode>
 );
-
-//trigger: restart deployment again
