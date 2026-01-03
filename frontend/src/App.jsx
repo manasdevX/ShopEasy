@@ -1,7 +1,7 @@
 import { Routes, Route } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
-import { useEffect } from "react"; // ✅ Added for session check
-import axios from "axios"; // ✅ Added for API calls
+import { useEffect } from "react";
+import axios from "axios";
 
 // --- USER PAGES ---
 import Home from "./pages/Home";
@@ -36,14 +36,16 @@ import SellerOrders from "./pages/Seller/Orders";
 import Notifications from "./pages/Seller/Notification";
 import Settings from "./pages/Seller/Settings";
 
-// ✅ Global Axios Config (Optional but recommended)
+// ✅ GLOBAL AXIOS CONFIGURATION
+// Critical for Cross-Site Cookies (Vercel <-> Render) to work
 axios.defaults.withCredentials = true;
 
 export default function App() {
-  // ✅ SESSION VERIFICATION LOGIC
+  // ✅ GLOBAL SESSION CHECK
+  // This runs once when the app loads to verify if the user is truly logged in
   useEffect(() => {
     const checkSession = async () => {
-      // Only check if we think we are logged in
+      // 1. Check if we *think* we are logged in (Local Storage)
       const user =
         localStorage.getItem("user") || localStorage.getItem("sellerUser");
 
@@ -51,13 +53,21 @@ export default function App() {
         try {
           const API_URL =
             import.meta.env.VITE_API_URL || "http://localhost:5000";
+
+          // 2. Ask Backend: "Is my session valid?"
+          // This sends the HTTP-Only cookie to the server
           await axios.get(`${API_URL}/api/auth/me`);
-          // If successful, do nothing (session is valid)
+
+          // If successful (200 OK), do nothing. Session is valid.
         } catch (error) {
-          // If backend says 401 (Unauthorized), the session is dead.
+          // 3. If Backend says 401 (Unauthorized), the session is dead/invalid.
           if (error.response?.status === 401) {
-            console.log("Session expired. Logging out...");
+            console.log("Session expired or invalid. Logging out...");
+
+            // Clear client state to match backend
             localStorage.clear();
+
+            // Redirect to login with a message
             window.location.href = "/login?message=session_expired";
           }
         }
@@ -69,12 +79,11 @@ export default function App() {
 
   return (
     <>
-      {/* 🟢 Improved Toaster for Socket.io Alerts */}
+      {/* 🟢 Global Toaster for Notifications */}
       <Toaster
         position="bottom-right"
         gutter={8}
         toastOptions={{
-          // Default duration
           duration: 4000,
           className: "font-sans text-sm",
           style: {
@@ -83,11 +92,16 @@ export default function App() {
             borderRadius: "12px",
             boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)",
           },
-          // Custom duration for success (like New Order)
           success: {
-            duration: 6000,
+            duration: 5000,
             theme: {
               primary: "#22c55e",
+            },
+          },
+          error: {
+            duration: 5000,
+            theme: {
+              primary: "#ef4444",
             },
           },
         }}

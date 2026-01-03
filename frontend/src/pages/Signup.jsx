@@ -64,6 +64,7 @@ export default function Signup() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
+        credentials: "include", // ✅ Good practice for consistent session handling
         body: JSON.stringify({ localItems }),
       });
 
@@ -244,6 +245,7 @@ export default function Signup() {
       const res = await fetch(`${API_URL}/api/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include", // ✅ CRITICAL: Accepts the HTTP-Only cookie from Register
         body: JSON.stringify({ ...formData, emailOtp, mobileOtp, googleId }),
       });
       const data = await res.json();
@@ -273,6 +275,7 @@ export default function Signup() {
         const res = await fetch(`${API_URL}/api/auth/google`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: "include", // ✅ CRITICAL: Accepts the HTTP-Only cookie from Google Auth
           body: JSON.stringify({ token: tokenResponse.access_token }),
         });
         const data = await res.json();
@@ -334,7 +337,7 @@ export default function Signup() {
               required
             />
 
-           {/* EMAIL INPUT */}
+            {/* EMAIL INPUT */}
             <div className="space-y-3">
               <div className="relative flex items-center">
                 <input
@@ -430,7 +433,10 @@ export default function Signup() {
                       className="text-xs font-bold text-orange-500 hover:text-orange-600 disabled:text-gray-400 uppercase tracking-wider px-2"
                     >
                       {verifyingMobile ? (
-                        <Loader2 className="text-orange-500 animate-spin" size={16} />
+                        <Loader2
+                          className="text-orange-500 animate-spin"
+                          size={16}
+                        />
                       ) : mobileTimer > 0 ? (
                         <span className="text-orange-600 dark:text-orange-400 font-black">
                           {mobileTimer}s
@@ -531,7 +537,11 @@ export default function Signup() {
 
           <p className="mt-8 text-center text-sm text-gray-500">
             Already have an account?{" "}
-            <Link to="/login" state={{ from: previousPath }} className="text-orange-500 font-bold">
+            <Link
+              to="/login"
+              state={{ from: previousPath }}
+              className="text-orange-500 font-bold"
+            >
               Login
             </Link>
           </p>
