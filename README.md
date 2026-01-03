@@ -1,137 +1,236 @@
-# 🛒 ShopEasy
 
-A high-performance MERN-stack e-commerce platform designed for seamless merchant onboarding and a secure, responsive shopping experience.  
-Built with a focus on real-time updates, secure payments, and cloud-based asset management.
+# 🛒 ShopEasy — Full-Stack E-Commerce Platform
 
-📖 **Table of Contents**
-- [About The Project](#about-the-project)
-- [✨ Features](#features)
-- [🛠️ Built With](#built-with)
-- [🚀 Getting Started](#getting-started)
-- [⚙️ Configuration](#configuration)
-- [💻 Usage](#usage)
-- [🤝 Our Team](#our-team)
-- [📷 Screenshots](#screenshots)
-
----
-
-## About The Project
-
-**ShopEasy** addresses the complexities of modern digital commerce by providing small-scale sellers with enterprise-grade tools. It features a streamlined "Seller Onboarding" wizard, real-time inventory tracking, and a robust customer storefront. The platform is engineered to be fully responsive, ensuring a premium experience on both mobile and desktop devices.
-
-
-
----
-
+ShopEasy is an enterprise-grade MERN-stack e-commerce ecosystem designed to bridge the gap between complex industrial marketplaces and small-scale independent merchants. The platform provides a dual-sided solution: a streamlined, high-conversion storefront for consumers and a robust, data-driven management suite for sellers.
 ## ✨ Features
 
-* **Seller Onboarding:** Multi-step verification for Business details and Bank setup.
-* **Real-time Engine:** Instant order notifications and stock alerts via **Socket.io** and **Redis**.
-* **Secure Payments:** Full **Razorpay** integration with server-side signature validation.
-* **Communications:** Automated Email (Brevo/Nodemailer) and SMS (Twilio) notifications for OTPs and order updates.
-* **Cloud Asset Management:** Automated image optimization and hosting via **Cloudinary**.
-* **Responsive Analytics:** Mobile-first dashboard for merchants to track wellness trends and sales.
+### 👤 User Features
 
----
+- Email & password authentication
 
-## 🛠️ Built With
+- Google OAuth login
 
-### Backend & Infrastructure
-* **Node.js & Express.js**: Core server-side architecture.
-* **MongoDB & Mongoose**: NoSQL database for flexible data modeling.
-* **Redis**: Used for high-speed data caching and message brokering.
-* **Socket.io**: Real-time bidirectional communication.
+- Email OTP verification
+
+- Cart management
+
+- Account & profile management
+
+- Dark / Light mode toggle
+
+
+### 🏪 Seller Features
+
+- Become a Seller flow
+
+- Seller registration page
+
+- Seller-specific navigation
+
+- Product listing 
+
+- Seller dashboard layout 
+## 🔐 Authentication & Security
+
+- JWT-based authentication
+
+- Password hashing using bcrypt
+
+- Protected routes (frontend & backend)
+
+- Role-based access control
+
+- Secure session handling
+## 🛠️ Tech Stack
 
 ### Frontend
-* **React.js**: Component-based UI for a fluid Single Page Application.
-* **Tailwind CSS**: Utility-first styling for complete responsiveness.
-* **Context API**: Native React state management for auth and cart logic.
-* **Lucide React**: Premium iconography for an intuitive user interface.
 
----
+- React (Vite) — Fast single-page application
 
+- Tailwind CSS — Utility-first styling with dark mode
+
+- React Router DOM — Client-side routing
+
+- Context API — Global state management
+
+- Lucide React — Icon system
+
+### Backend
+
+- Node.js — JavaScript runtime
+
+- Express.js — REST API framework
+
+- MongoDB — NoSQL database
+
+- Mongoose — ODM for schema modeling
+
+- bcryptjs — Password encryption
+
+- JWT — Secure authentication
+
+- Nodemailer — Email & OTP delivery
 ## 🚀 Getting Started
 
-Follow these steps to set up the project locally:
+### 1️⃣ Clone the Repository
 
-### 1. Clone the Repository
 ```bash
-git clone https://github.com/[Your-Username]/ShopEasy.git
+git clone [https://github.com/manasdevX/ShopEasy.git](https://github.com/manasdevX/ShopEasy.git)
 cd ShopEasy
-````
+```
 
+### 2️⃣ Backend Setup (Terminal - 1)
 
-### 2. Install Backend Dependencies
-Navigate to the server directory and install the necessary Node.js packages:
 ```bash
 cd backend
 npm install
-```
-
-### 3. Install Frontend Dependencies
-Navigate to the frontend directory and install the required React packages:
-```bash
-cd ../frontend
-npm install
-```
-
-### 4. Run the Application
-To see the project in action, you need to start both the backend and frontend servers. Open two separate terminals:
-
-**Terminal 1: Start the Backend Server**
-```bash
-cd backend
 npm run start
-npm run dev
 ```
 
-**Terminal 1: Start the Frontend Server**
+### 3️⃣ Frontend Setup (Terminal- 2)
+
 ```bash
-cd frontend
+cd backend
+npm install
 npm run dev
 ```
 
----
 
-## ⚙️ Configuration
 
-To run this project, you must set up your environment variables. Create a file named `.env` in the **backend** directory and paste the following content:
 
-```env
-# Server Configuration
+
+
+## ⚙️ Environment Variables
+
+```bash
+# ========================
+# SERVER CONFIG
+# ========================
 PORT=5000
 FRONTEND_URL=http://localhost:5173
 
-# Database
-MONGO_URI=your_mongodb_connection_string
+# ========================
+# DATABASE
+# ========================
+MONGO_URI=mongodb+srv://<username>:<password>@cluster0.mongodb.net/<database_name>
 
-# Authentication
-JWT_SECRET=your_random_jwt_secret_string
-GOOGLE_CLIENT_ID=your_google_client_id
+# ========================
+# AUTHENTICATION
+# ========================
+JWT_SECRET=your_jwt_secret_key_here
+GOOGLE_CLIENT_ID=your_google_oauth_client_id_here
 
-# Email Service (Brevo/Nodemailer)
-BREVO_API_KEY=your_brevo_api_key
-EMAIL_USER=your_email_address
-EMAIL_PASS=your_app_specific_password
-FROM_EMAIL=your_verified_sender_email
+# ========================
+# EMAIL (SMTP / BREVO)
+# ========================
+BREVO_API_KEY=your_brevo_api_key_here
+EMAIL_USER=your_email@example.com
+EMAIL_PASS=your_email_app_password_here
+FROM_EMAIL=no-reply@shopeasy.com
 FROM_NAME=ShopEasy
 
-# SMS Service (Twilio)
-TWILIO_SID=your_twilio_account_sid
-TWILIO_AUTH_TOKEN=your_twilio_auth_token
-TWILIO_PHONE_NUMBER=your_twilio_phone_number
+# ========================
+# OTP / SMS (TWILIO)
+# ========================
+TWILIO_SID=your_twilio_sid_here
+TWILIO_AUTH_TOKEN=your_twilio_auth_token_here
+TWILIO_PHONE_NUMBER=+1234567890
 
-# Cloud Storage (Cloudinary)
-CLOUDINARY_CLOUD_NAME=your_cloud_name
-CLOUDINARY_API_KEY=your_api_key
-CLOUDINARY_API_SECRET=your_api_secret
+# ========================
+# CLOUDINARY (IMAGES)
+# ========================
+CLOUDINARY_CLOUD_NAME=your_cloudinary_cloud_name
+CLOUDINARY_API_KEY=your_cloudinary_api_key
+CLOUDINARY_API_SECRET=your_cloudinary_api_secret
 
-# Payment Gateway (Razorpay)
+# ========================
+# PAYMENTS (RAZORPAY)
+# ========================
 RAZORPAY_KEY_ID=your_razorpay_key_id
 RAZORPAY_KEY_SECRET=your_razorpay_key_secret
 
-# Redis Configuration
-REDIS_HOST=your_redis_endpoint
+# ========================
+# CACHE (REDIS)
+# ========================
+REDIS_HOST=your_redis_host
 REDIS_PORT=your_redis_port
 REDIS_PASSWORD=your_redis_password
 ```
+
+
+
+## ⚙️ Usage
+
+Once the application is set up and running, ShopEasy provides a complete e-commerce workflow for customers, sellers, and administrators.
+
+### 👤 Customer Flow
+
+#### 1. Account Access
+
+- Users can sign up or log in using:
+
+  - Email & password
+
+  - Phone number with OTP
+
+  - Google OAuth
+
+- Authentication is secured via JWT tokens.
+
+#### 2. Browsing & Shopping
+
+- Browse products by categories from the navigation bar.
+
+- View detailed product pages with pricing, ratings, availability, and images.
+
+- Add products to the cart with quantity control.
+
+#### 3. Cart & Checkout
+
+- Review cart items and pricing in real time.
+
+- Proceed to secure checkout.
+
+- Complete payments using Razorpay with server-side verification.
+
+#### 4. Profile Management
+
+- Update personal details from the Account page.
+
+- View saved addresses and manage profile preferences.
+
+### 🛍️ Seller Flow
+
+#### 1. Seller Registration
+
+- Navigate to Become a Seller from the navigation bar.
+
+- Complete seller registration with:
+
+  - Business details
+
+  - Contact information
+
+  - Bank account details
+
+#### 2. Seller Dashboard
+
+- Access a dedicated seller panel after approval.
+
+- Add, edit, and manage product listings.
+
+- Upload product images via Cloudinary.
+
+#### 3. Product & Inventory Control
+
+- Update stock levels and pricing.
+
+- Monitor product availability and performance.
+
+- Manage listed products in real time.
+
+
+## 📸 Screenshots
+
+### 🏠 Home Page
+
