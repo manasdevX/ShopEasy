@@ -1,9 +1,10 @@
 import express from "express";
 import cors from "cors";
-import cookieParser from "cookie-parser"; // ✅ Added for reading HttpOnly cookies
+import cookieParser from "cookie-parser";
 
 // --- REDIS INITIALIZATION ---
-import "./config/redis.js"; // ✅ CRITICAL: Initializes the Redis connection
+// This ensures Redis connects as soon as the app starts
+import "./config/redis.js";
 
 // --- ROUTES IMPORTS ---
 import productRoutes from "./routes/product.routes.js";
@@ -17,22 +18,29 @@ import notificationRoutes from "./routes/notification.routes.js";
 
 const app = express();
 
+// 🟢 CRITICAL FOR RENDER DEPLOYMENT
+// Render puts your app behind a proxy. Without this, Express thinks
+// the connection is HTTP (not HTTPS) and blocks "Secure" cookies.
+app.set("trust proxy", 1);
+
 // --- MIDDLEWARE ---
 app.use(
   cors({
     origin: [
-      "http://localhost:5173", // Localhost (Vite)
-      "https://shop-easy-livid.vercel.app", // Production Client
+      "http://localhost:5173", // Local Development
+      "https://shop-easy-livid.vercel.app", // Vercel Production Client
     ],
-    credentials: true, // ✅ Essential for allowing cookies to pass through CORS
+    credentials: true, // ✅ Essential: Allows cookies to be sent/received
+    methods: ["GET", "POST", "PUT", "DELETE"],
   })
 );
 
-app.use(cookieParser()); // ✅ Initialize cookie-parser BEFORE routes
+app.use(cookieParser()); // ✅ Reads cookies from incoming requests
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
 // --- 🟢 SOCKET.IO MIDDLEWARE ---
+// Attaches the 'io' instance to every request so controllers can emit events
 app.use((req, res, next) => {
   req.io = req.app.get("socketio");
   next();
@@ -50,6 +58,7 @@ app.use("/api/notifications", notificationRoutes);
 
 /**
  * Health Check Route
+ * Useful for Render/Vercel to know your app is alive
  */
 app.get("/health", (req, res) => {
   res.status(200).json({

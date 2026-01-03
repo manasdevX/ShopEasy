@@ -201,7 +201,7 @@ export const registerVerifiedUser = async (req, res) => {
 
     await Otp.deleteMany({ identifier: { $in: [email, phone] } });
 
-    // --- ✅ FIXED: Create Session for New User ---
+    // --- ✅ Create Session for New User ---
     const token = generateToken(newUser._id);
 
     await Session.create({
@@ -211,7 +211,14 @@ export const registerVerifiedUser = async (req, res) => {
       ipAddress: req.ip || req.connection.remoteAddress,
       userAgent: req.headers["user-agent"],
     });
-    // ---------------------------------------------
+
+    // ✅ FIXED: Set Cookie on Register so user doesn't log out immediately
+    res.cookie("accessToken", token, {
+      httpOnly: true,
+      secure: true, // Required for SameSite: None
+      sameSite: "None", // Required for Cross-Site (Vercel -> Render)
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
 
     res.status(201).json({
       success: true,
@@ -286,11 +293,12 @@ export const loginUser = async (req, res) => {
       userAgent: req.headers["user-agent"],
     });
 
+    // ✅ FIXED: Cross-Site Cookie Settings
     res.cookie("accessToken", token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "Lax",
-      maxAge: 24 * 60 * 60 * 1000, // 1 Day
+      secure: true, // Required for SameSite: None
+      sameSite: "None", // Required for Cross-Site (Vercel -> Render)
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
     res.status(200).json({
@@ -354,11 +362,12 @@ export const googleAuth = async (req, res) => {
         userAgent: req.headers["user-agent"],
       });
 
+      // ✅ FIXED: Cross-Site Cookie Settings
       res.cookie("accessToken", authToken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "Lax",
-        maxAge: 24 * 60 * 60 * 1000,
+        secure: true, // Required for SameSite: None
+        sameSite: "None", // Required for Cross-Site (Vercel -> Render)
+        maxAge: 7 * 24 * 60 * 60 * 1000,
       });
 
       return res.status(200).json({
@@ -518,10 +527,11 @@ export const logoutUser = async (req, res) => {
     }
 
     // 3. Clear the HttpOnly Cookie
+    // ✅ FIXED: Must match the settings used during creation
     res.clearCookie("accessToken", {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "Lax",
+      secure: true, // Required to clear SameSite: None cookie
+      sameSite: "None", // Required to clear Cross-Site cookie
     });
 
     res.status(200).json({ success: true, message: "Logged out successfully" });

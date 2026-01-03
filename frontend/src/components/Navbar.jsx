@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
 import useDarkSide from "../hooks/useDarkSide";
-import axios from "axios"; // ✅ Added Axios for professional logout
+import axios from "axios"; // ✅ AXIOS for robust Logout
 import {
   Moon,
   Sun,
@@ -43,7 +43,7 @@ export default function Navbar() {
     }
   });
 
-  // ✅ CLICK OUTSIDE TO CLOSE
+  // ✅ CLICK OUTSIDE TO CLOSE DROPDOWN
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
@@ -54,7 +54,7 @@ export default function Navbar() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // ✅ UPDATED LIVE SEARCH LOGIC
+  // ✅ LIVE SEARCH LOGIC
   useEffect(() => {
     const fetchSuggestions = async () => {
       if (searchTerm.trim().length < 2) {
@@ -86,12 +86,13 @@ export default function Navbar() {
     return () => clearTimeout(timeoutId);
   }, [searchTerm]);
 
+  // ✅ FETCH CART COUNT
   const updateCartCount = async () => {
     const currentToken = localStorage.getItem("token");
     if (currentToken) {
       try {
         const res = await fetch(`${API_URL}/api/cart`, {
-          credentials: "include", // ✅ Added for cookie support
+          credentials: "include", // ✅ CRITICAL: Sends Cookies for verification
           headers: { Authorization: `Bearer ${currentToken}` },
         });
         if (res.ok) {
@@ -110,6 +111,7 @@ export default function Navbar() {
     }
   };
 
+  // ✅ SYNC HEADER STATE
   useEffect(() => {
     updateCartCount();
     const syncHeader = () => {
@@ -139,24 +141,29 @@ export default function Navbar() {
     }
   };
 
-  // ✅ UPDATED LOGOUT (Handles DB Session & Cookies)
+  // ✅ LOGOUT FUNCTION (The Bug Fix)
   const handleLogout = async () => {
     try {
+      // 1. Call Backend to remove Session from DB
       await axios.post(
         `${API_URL}/api/auth/logout`,
         {},
-        { withCredentials: true }
+        { withCredentials: true } // ✅ Essential: Sends the cookie so backend knows which session to delete
       );
 
+      // 2. Clear Local State
       localStorage.removeItem("token");
       localStorage.removeItem("user");
       setCartCount(0);
       setUser(null);
 
       toast.success("Logged out successfully");
+
+      // 3. Redirect
       window.location.href = "/";
     } catch (err) {
       console.error("Logout failed", err);
+      // Fallback: Force clear local state even if backend fails
       localStorage.clear();
       window.location.href = "/";
     }
