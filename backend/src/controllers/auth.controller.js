@@ -275,7 +275,7 @@ export const loginUser = async (req, res) => {
       return res.status(401).json({ message: "Invalid credentials" });
 
     // --- CHECK SESSION LIMIT ---
-    const activeSessions = await Session.find({ user: user._id }); // Changed 'userId' to 'user' to match schema
+    const activeSessions = await Session.find({ user: user._id });
     if (activeSessions.length >= 2) {
       return res
         .status(403)
@@ -296,8 +296,8 @@ export const loginUser = async (req, res) => {
     // ✅ FIXED: Cross-Site Cookie Settings
     res.cookie("accessToken", token, {
       httpOnly: true,
-      secure: true, // Required for SameSite: None
-      sameSite: "None", // Required for Cross-Site (Vercel -> Render)
+      secure: true,
+      sameSite: "None",
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
@@ -344,7 +344,7 @@ export const googleAuth = async (req, res) => {
       }
 
       // --- CHECK SESSION LIMIT ---
-      const activeSessions = await Session.find({ user: user._id }); // Changed 'userId' to 'user'
+      const activeSessions = await Session.find({ user: user._id });
       if (activeSessions.length >= 2) {
         return res
           .status(403)
@@ -365,10 +365,17 @@ export const googleAuth = async (req, res) => {
       // ✅ FIXED: Cross-Site Cookie Settings
       res.cookie("accessToken", authToken, {
         httpOnly: true,
-        secure: true, // Required for SameSite: None
-        sameSite: "None", // Required for Cross-Site (Vercel -> Render)
+        secure: true,
+        sameSite: "None",
         maxAge: 7 * 24 * 60 * 60 * 1000,
       });
+
+      // ✅ SELLER SPECIFIC: Explicitly link express-session if role is seller
+      if (role === "seller") {
+        req.session.sellerId = user._id;
+        req.session.role = "seller";
+        await new Promise((resolve) => req.session.save(resolve));
+      }
 
       return res.status(200).json({
         success: true,
@@ -511,7 +518,7 @@ export const resetPasswordWithOTP = async (req, res) => {
 };
 
 /* ======================================================
-   8. LOGOUT USER (Cleans DB & Cookies)
+   8. LOGOUT USER (Cleans DB & Cookies & Session)
 ====================================================== */
 export const logoutUser = async (req, res) => {
   try {
@@ -521,17 +528,19 @@ export const logoutUser = async (req, res) => {
       (req.headers.authorization && req.headers.authorization.split(" ")[1]);
 
     if (token) {
-      // 2. Remove this specific session from MongoDB
-      // Note: We use 'refreshToken' field because that's where we saved the token in login/googleAuth
       await Session.findOneAndDelete({ refreshToken: token });
     }
 
+    // 2. Clear Express Session if exists
+    if (req.session) {
+      req.session.destroy();
+    }
+
     // 3. Clear the HttpOnly Cookie
-    // ✅ FIXED: Must match the settings used during creation
     res.clearCookie("accessToken", {
       httpOnly: true,
-      secure: true, // Required to clear SameSite: None cookie
-      sameSite: "None", // Required to clear Cross-Site cookie
+      secure: true,
+      sameSite: "None",
     });
 
     res.status(200).json({ success: true, message: "Logged out successfully" });
@@ -546,11 +555,16 @@ export const logoutUser = async (req, res) => {
 ====================================================== */
 export const getMe = async (req, res) => {
   try {
-    // The 'protect' middleware already attached the user to req.user
-    // and verified the session exists in the Session collection.
+    // The 'protect' or 'protectSeller' middleware already attached the identity
+    const identity = req.user || req.seller;
+
+    if (!identity) {
+      return res.status(401).json({ message: "Not authorized" });
+    }
+
     res.status(200).json({
       success: true,
-      user: req.user,
+      user: identity,
     });
   } catch (error) {
     res.status(500).json({ message: "Server error" });

@@ -6,7 +6,7 @@ import { showSuccess, showError } from "../../utils/toast";
 import SellerFooter from "../../components/Seller/SellerFooter";
 import SellerNavbar from "../../components/Seller/SellerNavbar";
 
-const API_URL = import.meta.env.VITE_API_URL;
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export default function SellerSignup() {
   const navigate = useNavigate();
@@ -47,17 +47,13 @@ export default function SellerSignup() {
 
   // ================= AUTOFILL LOGIC =================
   useEffect(() => {
-    // 1. Check for existing "Step 1" data (Back button support)
     const savedData = JSON.parse(localStorage.getItem("seller_step1"));
     if (savedData) {
       setFormData((prev) => ({ ...prev, ...savedData }));
-      // If data was saved, we assume it was verified (or user has to re-verify for security - your choice)
-      // For UX, we usually force re-verification if critical fields change, but for "Back" button, we can autofill.
       if (savedData.email) setIsEmailVerified(true);
       if (savedData.phone) setIsMobileVerified(true);
     }
 
-    // 2. Handle Navigation State (Google Redirects)
     if (location.state) {
       const { name, email, googleId } = location.state;
       if (email && googleId && !hasShownToast.current) {
@@ -93,7 +89,6 @@ export default function SellerSignup() {
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
 
-    // Reset verification if core fields change
     if (e.target.name === "email" && !googleId) {
       setIsEmailVerified(false);
       setIsEmailSent(false);
@@ -110,22 +105,19 @@ export default function SellerSignup() {
     }
   };
 
-  // --- EMAIL FLOW ---
   const sendEmailOtp = async () => {
     if (!emailRegex.test(formData.email))
       return showError("Invalid email address");
-
     setVerifyingEmail(true);
     setEmailError("");
-
     try {
       const res = await fetch(`${API_URL}/api/auth/send-email-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include", // ✅ Fixed for session
         body: JSON.stringify({ email: formData.email, type: "seller" }),
       });
       const data = await res.json();
-
       if (res.ok) {
         setIsEmailSent(true);
         setEmailTimer(30);
@@ -146,6 +138,7 @@ export default function SellerSignup() {
       const res = await fetch(`${API_URL}/api/auth/check-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include", // ✅ Fixed
         body: JSON.stringify({ identifier: formData.email, otp: emailOtp }),
       });
       if (res.ok) {
@@ -159,24 +152,19 @@ export default function SellerSignup() {
     }
   };
 
-  // --- MOBILE FLOW ---
   const sendMobileOtp = async () => {
     if (!phoneRegex.test(formData.phone))
       return showError("Invalid phone number");
-    if (!formData.phone) return showError("Please enter phone first");
-    if (isMobileVerified) return showSuccess("Phone already verified!");
-
     setVerifyingMobile(true);
     setPhoneError("");
-
     try {
       const res = await fetch(`${API_URL}/api/auth/send-mobile-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include", // ✅ Fixed
         body: JSON.stringify({ phone: formData.phone, type: "seller" }),
       });
       const data = await res.json();
-
       if (res.ok) {
         setIsMobileSent(true);
         setMobileTimer(30);
@@ -197,6 +185,7 @@ export default function SellerSignup() {
       const res = await fetch(`${API_URL}/api/auth/check-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include", // ✅ Fixed
         body: JSON.stringify({ identifier: formData.phone, otp: mobileOtp }),
       });
       if (res.ok) {
@@ -210,11 +199,8 @@ export default function SellerSignup() {
     }
   };
 
-  // --- SUBMIT HANDLER (DEFERRED LOGIC) ---
   const handleSubmit = (e) => {
     e.preventDefault();
-
-    // 1. Password Verification
     const password = formData.password;
     const isValidPassword = (pass) =>
       /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/.test(
@@ -226,36 +212,30 @@ export default function SellerSignup() {
         "Password must be 8+ chars (Uppercase, Lowercase, Number, Special Char)"
       );
     }
-
-    // 2. OTP Verification Check
     if (!isEmailVerified)
       return showError("Please verify your email address first");
     if (!isMobileVerified)
       return showError("Please verify your phone number first");
 
-    // 3. ✅ SAVE TO LOCAL STORAGE (DEFERRED)
-    // We do NOT call the API here. We save data and move to Step 2.
     const step1Data = { ...formData, googleId };
     localStorage.setItem("seller_step1", JSON.stringify(step1Data));
-
     showSuccess("Step 1 Complete! Moving to Business Details...");
     navigate("/Seller/register");
   };
 
-  // --- GOOGLE LOGIN ---
   const googleLogin = useGoogleLogin({
     onSuccess: async (tokenResponse) => {
       try {
         const res = await fetch(`${API_URL}/api/auth/google`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: "include", // ✅ Fixed
           body: JSON.stringify({
             token: tokenResponse.access_token,
             role: "seller",
           }),
         });
         const data = await res.json();
-
         if (res.ok) {
           if (data.isNewUser) {
             setFormData((prev) => ({
@@ -267,12 +247,8 @@ export default function SellerSignup() {
             setIsEmailVerified(true);
             showSuccess("Email Verified!");
           } else {
-            // Existing seller login -> Go directly to dashboard
             localStorage.setItem("sellerToken", data.token);
-
-            // 🟢 CRITICAL FIX: Save 'data.user' so SocketContext gets the correct _id
             localStorage.setItem("sellerUser", JSON.stringify(data.user));
-
             showSuccess("Welcome back!");
             navigate("/Seller/Dashboard");
           }
@@ -314,7 +290,7 @@ export default function SellerSignup() {
               required
             />
 
-            {/* EMAIL INPUT */}
+            {/* EMAIL SECTION */}
             <div className="space-y-3">
               <div className="relative flex items-center">
                 <input
@@ -383,7 +359,7 @@ export default function SellerSignup() {
               )}
             </div>
 
-            {/* PHONE INPUT */}
+            {/* PHONE SECTION */}
             <div className="space-y-3">
               <div className="relative flex items-center">
                 <input
@@ -452,7 +428,6 @@ export default function SellerSignup() {
               )}
             </div>
 
-            {/* PASSWORD INPUT */}
             <div className="relative">
               <input
                 autoComplete="off"
@@ -476,7 +451,7 @@ export default function SellerSignup() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-orange-500 text-white py-3 rounded-lg hover:bg-orange-600 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed font-bold shadow-lg shadow-orange-500/20"
+              className="w-full bg-orange-500 text-white py-3 rounded-lg hover:bg-orange-600 transition-all active:scale-[0.98] disabled:opacity-50 font-bold shadow-lg shadow-orange-500/20"
             >
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
@@ -500,11 +475,9 @@ export default function SellerSignup() {
             type="button"
             onClick={() => googleLogin()}
             disabled={loading}
-            className={`w-full flex items-center justify-center gap-3 
-              bg-[#e8f0fe] dark:bg-slate-800 hover:bg-[#dfe9fd] dark:hover:bg-slate-700
-              text-[#1a73e8] dark:text-blue-400 font-medium 
-              py-3 rounded-lg transition hover:bg-opacity-80
-              ${loading ? "opacity-60 cursor-not-allowed" : ""}`}
+            className={`w-full flex items-center justify-center gap-3 bg-[#e8f0fe] dark:bg-slate-800 hover:bg-[#dfe9fd] dark:hover:bg-slate-700 text-[#1a73e8] dark:text-blue-400 font-medium py-3 rounded-lg transition hover:bg-opacity-80 ${
+              loading ? "opacity-60 cursor-not-allowed" : ""
+            }`}
           >
             <img
               src="https://developers.google.com/identity/images/g-logo.png"

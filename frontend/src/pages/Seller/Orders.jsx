@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Search,
   Eye,
@@ -13,11 +13,12 @@ import {
   Calendar,
   Download,
   Phone,
+  RefreshCw,
 } from "lucide-react";
 import Navbar from "../../components/Seller/SellerNavbar";
 import Footer from "../../components/Seller/SellerFooter";
 import { showSuccess, showError } from "../../utils/toast";
-import { useSocket } from "../../context/SocketContext"; // ✅ Added Socket Hook
+import { useSocket } from "../../context/SocketContext";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -26,78 +27,86 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 export default function SellerOrders() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
-  const socket = useSocket(); // ✅ Initialize Socket
+  const socket = useSocket();
 
   // State for Dropdown and Modal
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [selectedOrder, setSelectedOrder] = useState(null);
 
-  // --- SOCKET.IO REAL-TIME LOGIC ---
-  useEffect(() => {
-    // 🔴 FIX: Check 'sellerUser' first (matching your Navbar logic), then fallback to 'user'
-    let seller = null;
-    try {
-        seller = JSON.parse(localStorage.getItem("sellerUser") || localStorage.getItem("user"));
-    } catch (e) {
-        console.error("Parsing error", e);
-    }
+  // --- 1. FETCH ORDERS (With Session fix) ---
+  const fetchOrders = useCallback(
+    async (isSilent = false) => {
+      if (!isSilent) setLoading(true);
+      try {
+        const token = localStorage.getItem("sellerToken");
+        const res = await fetch(
+          `${API_URL}/api/orders/seller-orders?status=${activeTab}&search=${searchQuery}`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+            credentials: "include", // ✅ CRITICAL: Ensures the HttpOnly session cookie is sent back to the server
+          }
+        );
+        const data = await res.json();
 
-    if (socket && seller?._id) {
-      console.log("🔌 Joining Seller Room:", seller._id); // [DEBUG] Verify ID
-      
-      // Ensure seller is in their room to receive new order broadcasts
-      socket.emit("join_seller_room", seller._id);
-
-      // Listen for new orders to refresh the list automatically
-      socket.on("order_alert", (data) => {
-        console.log("📦 New Order Broadcast Received:", data); // [DEBUG] Verify Event
-        fetchOrders(); // Refresh the list when a new order comes in
-      });
-    }
-
-    return () => {
-      if (socket) socket.off("order_alert");
-    };
-  }, [socket]);
-
-  // --- FETCH ORDERS ---
-  const fetchOrders = async () => {
-    // Only set loading on initial fetch, not on background refreshes
-    if (orders.length === 0) setLoading(true);
-    
-    try {
-      const token = localStorage.getItem("sellerToken");
-      const res = await fetch(
-        `${API_URL}/api/orders/seller-orders?status=${activeTab}&search=${searchQuery}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
+        if (res.ok) {
+          setOrders(data);
+        } else if (res.status === 401) {
+          // session persistence handled by App.jsx/Navbar, but we log here for debugging
+          console.error("Session expired while fetching orders");
         }
-      );
-      const data = await res.json();
-
-      if (res.ok) {
-        setOrders(data);
-      } else {
-        // Suppress error toast on background refreshes to avoid spam
-        console.error(data.message || "Failed to fetch orders");
+      } catch (error) {
+        console.error("Failed to fetch orders", error);
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
       }
-    } catch (error) {
-      console.error("Failed to fetch orders", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+    [activeTab, searchQuery]
+  );
 
+  // --- 2. DEBOUNCED SEARCH & TAB SYNC ---
   useEffect(() => {
     const delayDebounce = setTimeout(() => {
       fetchOrders();
     }, 500);
     return () => clearTimeout(delayDebounce);
-  }, [activeTab, searchQuery]);
+  }, [fetchOrders]);
 
-  // Auto-refresh Modal when Order Data updates
+  // --- 3. SOCKET.IO REAL-TIME LOGIC ---
+  useEffect(() => {
+    let seller = null;
+    try {
+      const stored =
+        localStorage.getItem("sellerUser") || localStorage.getItem("user");
+      if (stored && stored !== "undefined") {
+        seller = JSON.parse(stored);
+      }
+    } catch (e) {
+      console.error("Parsing error", e);
+    }
+
+    if (socket && seller?._id) {
+      // Ensure seller is in their room to receive new order broadcasts
+      socket.emit("join_seller_room", seller._id);
+
+      // Listen for new orders to refresh the list automatically
+      const handleSocketOrderAlert = () => {
+        console.log("📦 New Order Received via Socket: Syncing list...");
+        fetchOrders(true); // Silent background refresh to keep UI updated
+      };
+
+      socket.on("order_alert", handleSocketOrderAlert);
+
+      return () => {
+        socket.off("order_alert", handleSocketOrderAlert);
+      };
+    }
+  }, [socket, fetchOrders]);
+
+  // Auto-refresh Modal content when Order Data updates in background
   useEffect(() => {
     if (selectedOrder) {
       const updatedOrder = orders.find((o) => o._id === selectedOrder._id);
@@ -105,9 +114,9 @@ export default function SellerOrders() {
         setSelectedOrder(updatedOrder);
       }
     }
-  }, [orders]);
+  }, [orders, selectedOrder]);
 
-  // --- GENERIC UPDATE STATUS (Only for Shipping) ---
+  // --- 4. UPDATE STATUS LOGIC ---
   const updateStatus = async (orderId, newStatus) => {
     try {
       const token = localStorage.getItem("sellerToken");
@@ -117,6 +126,7 @@ export default function SellerOrders() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
+        credentials: "include", // ✅ Fixed: Sends session cookie to authorize status change
         body: JSON.stringify({ status: newStatus }),
       });
 
@@ -124,13 +134,13 @@ export default function SellerOrders() {
 
       if (res.ok) {
         showSuccess(`Order marked as ${newStatus}`);
-        fetchOrders();
+        fetchOrders(true); // Silent update for the table
         setActiveDropdown(null);
       } else {
         showError(data.message || "Update failed");
       }
     } catch (error) {
-      showError("Server error");
+      showError("Server error. Status update failed.");
     }
   };
 
@@ -185,7 +195,9 @@ export default function SellerOrders() {
     ];
     const tableRows = orders.map((order) => [
       `#${order._id.slice(-6).toUpperCase()}`,
-      `${order.user?.name}\nPh: ${order.shippingAddress?.phone || "N/A"}`,
+      `${order.user?.name || "Customer"}\nPh: ${
+        order.shippingAddress?.phone || "N/A"
+      }`,
       `${order.shippingAddress?.address}, ${order.shippingAddress?.city}`,
       `INR ${order.sellerTotal?.toLocaleString()}`,
     ]);
@@ -200,17 +212,6 @@ export default function SellerOrders() {
       columnStyles: { 2: { cellWidth: 60 } },
     });
 
-    const finalY = doc.lastAutoTable.finalY + 15;
-    doc.setFillColor(245, 245, 245);
-    doc.rect(14, finalY, 182, 20, "F");
-    doc.setFont(undefined, "bold");
-    doc.setTextColor(0);
-    doc.text(`Total Orders: ${orders.length}`, 20, finalY + 12);
-    doc.text(
-      `Total Tab Revenue: INR ${stats.revenue.toLocaleString()}`,
-      100,
-      finalY + 12
-    );
     doc.save(`ShopEasy_${activeTab}_Report.pdf`);
   };
 
@@ -221,9 +222,23 @@ export default function SellerOrders() {
       <main className="max-w-7xl mx-auto px-6 py-12">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
           <div>
-            <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tighter">
-              Manage <span className="text-orange-500">Orders.</span>
-            </h1>
+            <div className="flex items-center gap-4">
+              <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tighter">
+                Manage <span className="text-orange-500">Orders.</span>
+              </h1>
+              <button
+                onClick={() => {
+                  setRefreshing(true);
+                  fetchOrders();
+                }}
+                className={`p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors ${
+                  refreshing ? "animate-spin text-orange-500" : "text-slate-400"
+                }`}
+                title="Refresh List"
+              >
+                <RefreshCw size={20} />
+              </button>
+            </div>
             <p className="text-slate-500 dark:text-slate-400 font-medium mt-1">
               Monitor sales performance and shipping fulfillment.
             </p>
@@ -236,6 +251,7 @@ export default function SellerOrders() {
           </button>
         </div>
 
+        {/* Stats Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
           {[
             {
@@ -278,6 +294,7 @@ export default function SellerOrders() {
           ))}
         </div>
 
+        {/* Search and Tabs */}
         <div className="bg-slate-50 dark:bg-slate-900/40 p-4 rounded-3xl mb-8 border border-transparent dark:border-slate-800 flex flex-col md:flex-row gap-4 items-center justify-between">
           <div className="relative w-full md:w-96">
             <Search
@@ -297,7 +314,7 @@ export default function SellerOrders() {
               <button
                 key={status}
                 onClick={() => setActiveTab(status)}
-                className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-all ${
+                className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${
                   activeTab === status
                     ? "bg-orange-500 text-white shadow-lg shadow-orange-500/20"
                     : "bg-white dark:bg-slate-950 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800"
@@ -370,11 +387,7 @@ export default function SellerOrders() {
                         </div>
                         <div>
                           <p className="font-bold text-slate-900 dark:text-white line-clamp-1 max-w-[150px] text-sm">
-                            {order.items[0]?.product?.name || (
-                              <span className="text-slate-400 italic">
-                                Unknown
-                              </span>
-                            )}
+                            {order.items[0]?.product?.name || "Product"}
                           </p>
                           {order.totalItems > 1 && (
                             <p className="text-[10px] text-slate-500 font-medium">
@@ -411,6 +424,7 @@ export default function SellerOrders() {
                         <button
                           onClick={() => setSelectedOrder(order)}
                           className="p-2.5 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-xl hover:bg-orange-500 hover:text-white transition-all"
+                          title="View Order"
                         >
                           <Eye size={18} />
                         </button>
@@ -418,6 +432,7 @@ export default function SellerOrders() {
                           <button
                             onClick={() => updateStatus(order._id, "Shipped")}
                             className="p-2.5 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-xl hover:bg-blue-500 hover:text-white transition-all"
+                            title="Mark as Shipped"
                           >
                             <Truck size={18} />
                           </button>
@@ -467,6 +482,7 @@ export default function SellerOrders() {
         </div>
       </main>
 
+      {/* --- MODAL (Preserved UI) --- */}
       {selectedOrder && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 w-full max-w-2xl rounded-[2rem] overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
@@ -494,7 +510,7 @@ export default function SellerOrders() {
                   </h3>
                   <div className="bg-slate-50 dark:bg-slate-800/50 p-5 rounded-2xl text-sm text-slate-600 dark:text-slate-300 leading-relaxed border border-slate-100 dark:border-slate-800">
                     <p className="font-bold text-slate-900 dark:text-white mb-1">
-                      {selectedOrder.user?.name}
+                      {selectedOrder.user?.name || "Guest"}
                     </p>
                     <p>{selectedOrder.shippingAddress.address}</p>
                     <p>
@@ -514,7 +530,7 @@ export default function SellerOrders() {
                   </h3>
                   <div className="bg-slate-50 dark:bg-slate-800/50 p-5 rounded-2xl text-sm flex justify-between items-center border border-slate-100 dark:border-slate-800">
                     <span className="text-slate-500">Method:</span>
-                    <span className="font-bold text-slate-900 dark:text-white">
+                    <span className="font-bold text-slate-900 dark:text-white uppercase">
                       {selectedOrder.paymentMethod}
                     </span>
                   </div>
@@ -522,18 +538,12 @@ export default function SellerOrders() {
                     <span className="text-slate-500">Status:</span>
                     <span
                       className={`font-bold ${
-                        selectedOrder.isRefunded
-                          ? "text-purple-500"
-                          : selectedOrder.isPaid
+                        selectedOrder.isPaid
                           ? "text-emerald-500"
                           : "text-orange-500"
                       }`}
                     >
-                      {selectedOrder.isRefunded
-                        ? "REFUNDED"
-                        : selectedOrder.isPaid
-                        ? "PAID"
-                        : "PENDING"}
+                      {selectedOrder.isPaid ? "PAID" : "PENDING"}
                     </span>
                   </div>
                 </div>
@@ -588,14 +598,6 @@ export default function SellerOrders() {
                   className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-sm transition-all shadow-lg shadow-blue-500/20"
                 >
                   Mark as Shipped
-                </button>
-              )}
-              {selectedOrder.status === "Shipped" && (
-                <button
-                  onClick={() => updateStatus(selectedOrder._id, "Delivered")}
-                  className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-sm transition-all shadow-lg shadow-emerald-500/20"
-                >
-                  Mark as Delivered
                 </button>
               )}
               <button

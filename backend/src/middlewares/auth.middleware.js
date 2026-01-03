@@ -24,20 +24,16 @@ export const protect = async (req, res, next) => {
       // 1. Verify Token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      // 2. NEW: Check if this session exists in DB
-      // 🔴 WAS: { userId: decoded.id, token }
-      // 🟢 FIX: Matches Session Model fields
+      // 2. Check if this session exists in DB
       const sessionExists = await Session.findOne({
-        user: decoded.id,       // Changed 'userId' -> 'user'
-        refreshToken: token,    // Changed 'token' -> 'refreshToken'
+        user: decoded.id, // Matches Session Model 'user' field
+        refreshToken: token, // Matches Session Model 'refreshToken' field
       });
 
       if (!sessionExists) {
-        return res
-          .status(401)
-          .json({
-            message: "Session expired or logged out from another device",
-          });
+        return res.status(401).json({
+          message: "Session expired or logged out from another device",
+        });
       }
 
       // 3. Fetch User (Customers/Admins)
@@ -73,11 +69,28 @@ export const protect = async (req, res, next) => {
 };
 
 /* ======================================================
-   2. PROTECT SELLER (For Vendors Only)
+   2. PROTECT SELLER (For Vendors Only) 
+   ✅ UPDATED WITH HYBRID AUTH TO FIX INSTANT REDIRECT
 ====================================================== */
 export const protectSeller = async (req, res, next) => {
   let token;
 
+  // 🟢 STEP A: CHECK FOR EXPRESS SESSION FIRST (Prevents Redirect Loop)
+  // This recognizes the session cookie created during login
+  if (req.session && req.session.sellerId) {
+    try {
+      req.seller = await Seller.findById(req.session.sellerId).select(
+        "-password"
+      );
+      if (req.seller && req.seller.isActive) {
+        return next(); // ✅ Session found and valid, proceed immediately
+      }
+    } catch (error) {
+      console.error("Session Auth Error:", error.message);
+    }
+  }
+
+  // 🔵 STEP B: FALLBACK TO JWT TOKEN (Headers or Cookies)
   if (
     req.headers.authorization &&
     req.headers.authorization.startsWith("Bearer")
@@ -91,23 +104,13 @@ export const protectSeller = async (req, res, next) => {
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      // NEW: Check if this session exists in DB
-      // 🔴 WAS: { userId: decoded.id, token }
-      // 🟢 FIX: Matches Session Model fields
+      // Verify Session in DB for Token-based access
       const sessionExists = await Session.findOne({
-        user: decoded.id,       // Changed 'userId' -> 'user'
-        refreshToken: token,    // Changed 'token' -> 'refreshToken'
+        user: decoded.id,
+        refreshToken: token,
       });
 
-      if (!sessionExists) {
-        return res
-          .status(401)
-          .json({
-            message: "Session expired or logged out from another device",
-          });
-      }
-
-      // Fetch Seller
+      // Fetch Seller data
       req.seller = await Seller.findById(decoded.id).select("-password");
 
       if (!req.seller) {
@@ -122,6 +125,12 @@ export const protectSeller = async (req, res, next) => {
           .json({ message: "Seller account is inactive or suspended." });
       }
 
+      // ✅ RE-SYNC SESSION: Link JWT to Express Session if missing
+      if (req.session && !req.session.sellerId) {
+        req.session.sellerId = req.seller._id;
+        req.session.role = "seller";
+      }
+
       next();
     } catch (error) {
       console.error("Seller Auth Error:", error.message);
@@ -134,10 +143,10 @@ export const protectSeller = async (req, res, next) => {
     }
   }
 
-  if (!token) {
+  if (!token && !req.session?.sellerId) {
     return res
       .status(401)
-      .json({ message: "Not authorized as seller, no token" });
+      .json({ message: "Not authorized as seller, no session or token found" });
   }
 };
 
