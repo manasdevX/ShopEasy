@@ -46,7 +46,7 @@ export default function BankDetails() {
     }
   }, [navigate]);
 
-  // IFSC Verification
+  // IFSC Verification Logic
   useEffect(() => {
     const verifyIFSC = async () => {
       if (bankData.ifscCode.length === 11) {
@@ -90,14 +90,14 @@ export default function BankDetails() {
     if (bankData.accountNumber.length < 9) {
       return showError("Enter a valid Account number.");
     }
-    if (ifscInfo.error || bankData.ifscCode.length !== 11) {
-      return showError("Please provide a valid 11-digit IFSC code.");
+    if (ifscInfo.error || bankData.ifscCode.length !== 11 || !ifscInfo.bank) {
+      return showError("Please provide a valid 11-digit verified IFSC code.");
     }
 
     setLoading(true);
 
     try {
-      // 2. RETRIEVE ALL DATA
+      // 2. RETRIEVE ALL SAVED DATA
       const step1 = JSON.parse(localStorage.getItem("seller_step1"));
       const step2 = JSON.parse(localStorage.getItem("seller_step2"));
 
@@ -106,19 +106,13 @@ export default function BankDetails() {
 
       // =========================================================
       // 3. API CALL 1: Create Account
-      // Note: Endpoint is plural 'sellers' based on app.js mount point
       // =========================================================
       const signupRes = await fetch(`${API_URL}/api/sellers/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include", // ✅ Ensures session cookie is accepted
         body: JSON.stringify(step1),
       });
-
-      // Defensive check for HTML 404/500 errors
-      const contentType = signupRes.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        throw new Error("Server Error: Endpoint not found or server crash.");
-      }
 
       const signupData = await signupRes.json();
       if (!signupRes.ok)
@@ -135,6 +129,7 @@ export default function BankDetails() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
+        credentials: "include", // ✅ Ensures existing session is recognized
         body: JSON.stringify(step2),
       });
 
@@ -157,12 +152,13 @@ export default function BankDetails() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
+        credentials: "include", // ✅ Final step session confirmation
         body: JSON.stringify(bankPayload),
       });
 
       if (!bankRes.ok) throw new Error("Failed to save bank details");
 
-      // 6. SUCCESS
+      // 6. SUCCESS CLEANUP
       localStorage.removeItem("seller_step1");
       localStorage.removeItem("seller_step2");
       localStorage.setItem("sellerToken", token);
@@ -202,6 +198,7 @@ export default function BankDetails() {
                 required
                 placeholder="Account Holder Name"
                 className={inputBase}
+                value={bankData.accountHolder}
                 onChange={(e) =>
                   setBankData({ ...bankData, accountHolder: e.target.value })
                 }
@@ -215,6 +212,7 @@ export default function BankDetails() {
                 required
                 placeholder="Account Number"
                 className={`${inputBase} pr-14`}
+                value={bankData.accountNumber}
                 onChange={(e) =>
                   setBankData({ ...bankData, accountNumber: e.target.value })
                 }
@@ -244,6 +242,7 @@ export default function BankDetails() {
                     ? "border-red-500"
                     : ""
                 }`}
+                value={confirmAccountNumber}
                 onChange={(e) => setConfirmAccountNumber(e.target.value)}
               />
               {confirmAccountNumber && (
@@ -266,6 +265,7 @@ export default function BankDetails() {
                   maxLength={11}
                   placeholder="IFSC Code"
                   className={`${inputBase} uppercase tracking-widest`}
+                  value={bankData.ifscCode}
                   onChange={(e) =>
                     setBankData({
                       ...bankData,
@@ -281,7 +281,7 @@ export default function BankDetails() {
                 )}
               </div>
               {ifscInfo.bank && (
-                <div className="mx-1 px-3 py-2 bg-green-500/10 rounded-lg border border-green-500/20">
+                <div className="mx-1 px-3 py-2 bg-green-500/10 rounded-lg border border-green-500/20 animate-in fade-in duration-300">
                   <p className="text-[10px] font-bold text-green-500 uppercase">
                     {ifscInfo.bank}
                   </p>
@@ -295,7 +295,8 @@ export default function BankDetails() {
             <div className="bg-slate-50 dark:bg-[#161f35]/50 border border-slate-100 dark:border-slate-800 rounded-lg p-4 flex gap-3">
               <ShieldCheck className="text-orange-500 shrink-0" size={18} />
               <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
-                We'll verify your account with a small ₹1 deposit.
+                We'll verify your account with a small ₹1 deposit to ensure the
+                details are correct.
               </p>
             </div>
 

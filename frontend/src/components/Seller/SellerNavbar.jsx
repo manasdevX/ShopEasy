@@ -91,7 +91,7 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
       if (!currentToken) return;
       try {
         const res = await fetch(`${API_URL}/api/notifications?filter=unread`, {
-          credentials: "include", // ✅ Added for cookie support
+          credentials: "include", // ✅ CRITICAL: Fix for session support
           headers: { Authorization: `Bearer ${currentToken}` },
         });
         const data = await res.json();
@@ -127,16 +127,16 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
     setIsDark(!isDark);
   };
 
-  // --- LOGOUT LOGIC (Updated for professional session management) ---
+  // --- LOGOUT LOGIC ---
   const handleLogout = async () => {
     try {
-      // ✅ Call backend to clear Session from DB and clear Cookie
-      await axios.post(
-        `${API_URL}/api/auth/logout`,
-        {},
-        { withCredentials: true }
-      );
+      // ✅ Call backend with credentials to clear Session from DB and clear Cookie
+      await fetch(`${API_URL}/api/auth/logout`, {
+        method: "POST",
+        credentials: "include", // ✅ Ensures the HttpOnly session cookie is sent to the server for deletion
+      });
 
+      // Clear local state
       localStorage.removeItem("sellerToken");
       localStorage.removeItem("sellerUser");
       localStorage.removeItem("seller_step1");
@@ -146,7 +146,9 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
       navigate("/Seller/Landing");
     } catch (err) {
       console.error("Logout failed", err);
-      localStorage.clear();
+      // Fallback cleanup
+      localStorage.removeItem("sellerToken");
+      localStorage.removeItem("sellerUser");
       navigate("/Seller/Landing");
     }
   };
@@ -169,7 +171,7 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
           const res = await fetch(
             `${API_URL}/api/sellers/search?query=${searchQuery}`,
             {
-              credentials: "include", // ✅ Added for cookie support
+              credentials: "include", // ✅ Added for session verification
               headers: {
                 "Content-Type": "application/json",
                 Authorization: `Bearer ${token}`,

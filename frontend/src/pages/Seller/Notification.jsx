@@ -35,13 +35,24 @@ export default function Notifications() {
 
       const res = await fetch(`${API_URL}/api/notifications?filter=${filter}`, {
         headers: { Authorization: `Bearer ${token}` },
+        credentials: "include", // ✅ Added for session persistence
       });
 
       const data = await res.json();
-      if (res.ok) setNotifications(data);
-      else showError("Failed to load notifications");
+
+      if (res.ok) {
+        setNotifications(data);
+      } else if (res.status === 401) {
+        // ✅ Handle session expiration and redirect to Seller portal specifically
+        localStorage.removeItem("sellerToken");
+        localStorage.removeItem("sellerUser");
+        navigate("/Seller/login?message=session_expired");
+      } else {
+        showError("Failed to load notifications");
+      }
     } catch (error) {
-      console.error(error);
+      console.error("Fetch Notifications Error:", error);
+      showError("Connection error");
     } finally {
       setLoading(false);
     }
@@ -62,6 +73,7 @@ export default function Notifications() {
       const res = await fetch(`${API_URL}/api/notifications/${id}/read`, {
         method: "PUT",
         headers: { Authorization: `Bearer ${token}` },
+        credentials: "include", // ✅ Added for session persistence
       });
 
       if (res.ok) {
@@ -70,7 +82,7 @@ export default function Notifications() {
           prev.map((n) => (n._id === id ? { ...n, isRead: true } : n))
         );
 
-        // 3. CRITICAL: Tell Navbar to refresh the red dot immediately
+        // 3. CRITICAL: Tell Navbar to refresh the unread badge immediately
         window.dispatchEvent(new Event("notification-updated"));
 
         showSuccess("Marked as read");
@@ -86,6 +98,7 @@ export default function Notifications() {
       const res = await fetch(`${API_URL}/api/notifications/read-all`, {
         method: "PUT",
         headers: { Authorization: `Bearer ${token}` },
+        credentials: "include", // ✅ Added for session persistence
       });
 
       if (res.ok) {
@@ -103,9 +116,7 @@ export default function Notifications() {
 
   const deleteNotification = async (id, e) => {
     if (e) e.stopPropagation();
-    // Assuming you implement a DELETE endpoint later, for now we just remove from UI
-    // If you have a backend route: await fetch(`${API_URL}/api/notifications/${id}`, { method: 'DELETE'... })
-
+    // Logic for UI removal - can be expanded to backend DELETE if API exists
     setNotifications((prev) => prev.filter((n) => n._id !== id));
     showSuccess("Notification removed");
   };
@@ -117,7 +128,7 @@ export default function Notifications() {
     }
 
     // 2. Navigate based on type
-    if (notification.type === "order" && notification.relatedId) {
+    if (notification.type === "order") {
       navigate("/Seller/orders");
     }
   };

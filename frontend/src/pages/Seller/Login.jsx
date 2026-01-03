@@ -25,7 +25,6 @@ export default function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    let isValid = true;
 
     // Validation Logic
     const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -49,14 +48,13 @@ export default function Login() {
       }
     }
 
-    if (!isValid) return;
-
     try {
       setLoading(true);
 
       const res = await fetch(`${API_URL}/api/sellers/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include", // ✅ Essential to accept shopeasy.sid session cookies
         body: JSON.stringify({ email: identifier, password }),
       });
 
@@ -66,14 +64,17 @@ export default function Login() {
         return;
       }
 
-      // === SELLER-SPECIFIC KEYS ===
+      // === AUTH PERSISTENCE ===
       localStorage.setItem("sellerToken", data.token);
-
-      // 🟢 CRITICAL FIX: Save 'data.user' so SocketContext gets the correct _id
       localStorage.setItem("sellerUser", JSON.stringify(data.user));
 
       showSuccess("Login successful!");
-      navigate("/Seller/Dashboard");
+
+      // ✅ FIX: Small delay ensures the cookie is written to the browser
+      // before Dashboard tries to fetch data, preventing immediate 401s.
+      setTimeout(() => {
+        navigate("/Seller/Dashboard");
+      }, 400);
     } catch (error) {
       console.error("Login Error:", error);
       showError("Server error. Please try again.");
@@ -88,7 +89,7 @@ export default function Login() {
         const res = await fetch(`${API_URL}/api/auth/google`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          // === CRITICAL FIX: Add role: "seller" ===
+          credentials: "include", // ✅ Essential for session cookies
           body: JSON.stringify({
             token: tokenResponse.access_token,
             role: "seller",
@@ -98,7 +99,6 @@ export default function Login() {
 
         if (res.ok) {
           if (data.isNewUser) {
-            // New user flow: Send to Signup page with pre-filled data
             navigate("/Seller/signup", {
               state: {
                 name: data.name,
@@ -107,16 +107,18 @@ export default function Login() {
               },
             });
           } else {
-            // Existing user flow: Save token and redirect
             localStorage.setItem("sellerToken", data.token);
-            // Ensure we save the user object correctly
             localStorage.setItem(
               "sellerUser",
               JSON.stringify(data.user || data)
             );
 
             showSuccess("Login successful!");
-            navigate("/Seller/Dashboard");
+
+            // ✅ Fix for session race condition
+            setTimeout(() => {
+              navigate("/Seller/Dashboard");
+            }, 400);
           }
         } else {
           showError(data.message || "Google Login Failed");

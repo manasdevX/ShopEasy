@@ -5,12 +5,17 @@ import { useNavigate } from "react-router-dom";
 import { Loader2, LocateFixed, ArrowRight, ArrowLeft } from "lucide-react";
 import { showError, showSuccess } from "../../utils/toast";
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
 export default function SellerRegister() {
   const navigate = useNavigate();
 
   // State for UI interactions
   const [isLocating, setIsLocating] = useState(false);
   const [loadingPincode, setLoadingPincode] = useState(false);
+
+  // State to hold Step 1 data safely to prevent null-pointer crashes
+  const [step1Data, setStep1Data] = useState({ email: "", phone: "" });
 
   // 1. FORM STATE (Business Details)
   const [form, setForm] = useState({
@@ -26,22 +31,37 @@ export default function SellerRegister() {
 
   // 2. SECURITY CHECK & PRE-FILL
   useEffect(() => {
-    // ✅ Check if Step 1 data exists in storage (Handle Refresh)
-    const step1 = localStorage.getItem("seller_step1");
-    if (!step1) {
+    const rawStep1 = localStorage.getItem("seller_step1");
+    if (!rawStep1) {
       showError("Please complete Step 1 first.");
       navigate("/Seller/signup");
       return;
     }
 
+    // ✅ Safe parsing of Step 1 data for the read-only inputs
+    try {
+      const parsedStep1 = JSON.parse(rawStep1);
+      setStep1Data({
+        email: parsedStep1.email || "",
+        phone: parsedStep1.phone || "",
+      });
+    } catch (e) {
+      console.error("Step 1 parsing error", e);
+    }
+
     // ✅ Load saved Step 2 data if available (Back Button Support)
-    const savedStep2 = JSON.parse(localStorage.getItem("seller_step2"));
-    if (savedStep2) {
-      setForm((prev) => ({ ...prev, ...savedStep2 }));
+    const rawStep2 = localStorage.getItem("seller_step2");
+    if (rawStep2) {
+      try {
+        const parsedStep2 = JSON.parse(rawStep2);
+        setForm((prev) => ({ ...prev, ...parsedStep2 }));
+      } catch (e) {
+        console.error("Step 2 parsing error", e);
+      }
     }
   }, [navigate]);
 
-  // Auto-lookup City/State
+  // Auto-lookup City/State when Pincode reaches 6 digits
   useEffect(() => {
     if (form.pincode.length === 6) {
       fetchLocation(form.pincode);
@@ -78,8 +98,16 @@ export default function SellerRegister() {
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    const { businessName, businessType, gstin, street, city, pincode, agree } =
-      form;
+    const {
+      businessName,
+      businessType,
+      gstin,
+      street,
+      city,
+      state,
+      pincode,
+      agree,
+    } = form;
 
     // VALIDATION
     if (
@@ -88,7 +116,8 @@ export default function SellerRegister() {
       !gstin ||
       !street ||
       !pincode ||
-      !city
+      !city ||
+      !state
     ) {
       return showError("Please fill all mandatory fields.");
     }
@@ -97,10 +126,10 @@ export default function SellerRegister() {
     const gstRegex =
       /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
     if (!gstRegex.test(gstin.toUpperCase())) {
-      return showError("Invalid GST Format.(e.g. : 22AAAAA0000A1Z5)");
+      return showError("Invalid GST Format. (e.g.: 22AAAAA0000A1Z5)");
     }
 
-    // --- ADDED PINCODE VALIDATION ---
+    // Pincode validation
     const pincodeRegex = /^[1-9][0-9]{5}$/;
     if (!pincodeRegex.test(pincode)) {
       return showError("Invalid Pincode.");
@@ -110,18 +139,16 @@ export default function SellerRegister() {
       return showError("You must agree to the Terms & Conditions.");
     }
 
-    // 🚀 ACTION: Save to LocalStorage ONLY (No API Call yet)
+    // 🚀 ACTION: Save to LocalStorage (The final API call happens in Step 3 / BankDetails)
     localStorage.setItem(
       "seller_step2",
       JSON.stringify({
         ...form,
-        gstin: gstin.toUpperCase(), // Ensure uppercase
+        gstin: gstin.toUpperCase(), // Ensure uppercase for backend consistency
       })
     );
 
     showSuccess("Business Details Saved!");
-
-    // Navigate to Final Step
     navigate("/Seller/bank-details");
   };
 
@@ -133,12 +160,7 @@ export default function SellerRegister() {
     }
 
     setIsLocating(true);
-
-    const options = {
-      enableHighAccuracy: true,
-      timeout: 10000,
-      maximumAge: 0,
-    };
+    const options = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 };
 
     navigator.geolocation.getCurrentPosition(
       async (position) => {
@@ -151,35 +173,13 @@ export default function SellerRegister() {
 
           if (data && data.address) {
             const addr = data.address;
-
-            const streetComponents = [
-              addr.house_number,
-              addr.building,
-              addr.apartment,
-              addr.residential,
-              addr.hamlet,
-              addr.village,
-              addr.road,
-              addr.street,
-              addr.suburb,
-              addr.neighbourhood,
-              addr.city_district,
-            ].filter((part) => part);
-
-            const uniqueStreetComponents = [...new Set(streetComponents)];
-            const fullStreet = uniqueStreetComponents.join(", ");
-
             const cityFallback =
-              addr.city ||
-              addr.town ||
-              addr.municipality ||
-              addr.county ||
-              addr.state_district ||
-              "";
+              addr.city || addr.town || addr.municipality || addr.county || "";
 
             setForm((prev) => ({
               ...prev,
-              street: fullStreet || addr.display_name.split(",")[0],
+              street:
+                addr.road || addr.suburb || addr.display_name.split(",")[0],
               city: cityFallback,
               state: addr.state || "",
               pincode: addr.postcode || "",
@@ -195,7 +195,7 @@ export default function SellerRegister() {
           setIsLocating(false);
         }
       },
-      (error) => {
+      () => {
         setIsLocating(false);
         showError("Location access denied. Please enable GPS.");
       },
@@ -226,17 +226,15 @@ export default function SellerRegister() {
           </header>
 
           <form onSubmit={handleSubmit} className="space-y-8">
-            {/* Section: Business Details */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Business Name */}
               <div className="md:col-span-2">
                 <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 ml-1">
                   Legal Business Name *
                 </label>
                 <input
                   type="text"
-                  autoComplete="off"
                   name="businessName"
+                  autoComplete="off"
                   value={form.businessName}
                   onChange={handleChange}
                   className={inputStyles}
@@ -244,41 +242,30 @@ export default function SellerRegister() {
                 />
               </div>
 
-              {/* READ ONLY: Email from Step 1 (Retrieved from LocalStorage) */}
               <div>
                 <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 ml-1">
                   Business Email (Verified)
                 </label>
                 <input
                   type="email"
-                  autoComplete="off"
-                  value={
-                    JSON.parse(localStorage.getItem("seller_step1") || "{}")
-                      .email || ""
-                  }
+                  value={step1Data.email}
                   readOnly
                   className={`${inputStyles} opacity-60 cursor-not-allowed bg-slate-100 dark:bg-slate-800`}
                 />
               </div>
 
-              {/* READ ONLY: Phone from Step 1 */}
               <div>
                 <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 ml-1">
                   Contact Number (Verified)
                 </label>
                 <input
                   type="tel"
-                  autoComplete="off"
-                  value={
-                    JSON.parse(localStorage.getItem("seller_step1") || "{}")
-                      .phone || ""
-                  }
+                  value={step1Data.phone}
                   readOnly
                   className={`${inputStyles} opacity-60 cursor-not-allowed bg-slate-100 dark:bg-slate-800`}
                 />
               </div>
 
-              {/* Business Type */}
               <div>
                 <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 ml-1">
                   Business Type *
@@ -297,7 +284,6 @@ export default function SellerRegister() {
                 </select>
               </div>
 
-              {/* GSTIN */}
               <div>
                 <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 ml-1">
                   GST Number *
@@ -315,7 +301,6 @@ export default function SellerRegister() {
               </div>
             </div>
 
-            {/* Section: Address */}
             <div className="pt-8 border-t border-slate-100 dark:border-slate-800">
               <h3 className="text-xl font-black mb-6 text-slate-900 dark:text-white tracking-tight">
                 Pickup Address
@@ -325,7 +310,7 @@ export default function SellerRegister() {
                 type="button"
                 onClick={handleUseCurrentLocation}
                 disabled={isLocating}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 font-bold text-sm mb-6 shadow-sm transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 font-bold text-sm mb-6 shadow-sm transition-all active:scale-95 disabled:opacity-70"
               >
                 {isLocating ? (
                   <Loader2 className="animate-spin" size={18} />
@@ -338,7 +323,6 @@ export default function SellerRegister() {
               </button>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Pincode */}
                 <div className="md:col-span-2">
                   <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 ml-1">
                     Pincode *{" "}
@@ -360,7 +344,6 @@ export default function SellerRegister() {
                   />
                 </div>
 
-                {/* Street */}
                 <div className="md:col-span-2">
                   <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 ml-1">
                     Street Address *
@@ -376,44 +359,36 @@ export default function SellerRegister() {
                   />
                 </div>
 
-                {/* City (Auto) */}
                 <div>
                   <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 ml-1">
                     City
                   </label>
                   <input
                     type="text"
-                    autoComplete="off"
-                    name="city"
                     value={form.city}
-                    className={`${inputStyles} bg-slate-50 dark:bg-slate-900/50 cursor-not-allowed`}
                     readOnly
+                    className={`${inputStyles} bg-slate-50 dark:bg-slate-900/50 cursor-not-allowed`}
                   />
                 </div>
 
-                {/* State (Auto) */}
                 <div>
                   <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 ml-1">
                     State
                   </label>
                   <input
                     type="text"
-                    autoComplete="off"
-                    name="state"
                     value={form.state}
-                    className={`${inputStyles} bg-slate-50 dark:bg-slate-900/50 cursor-not-allowed`}
                     readOnly
+                    className={`${inputStyles} bg-slate-50 dark:bg-slate-900/50 cursor-not-allowed`}
                   />
                 </div>
               </div>
             </div>
 
-            {/* Terms */}
             <div className="flex items-center gap-3 pt-4">
               <input
                 type="checkbox"
                 name="agree"
-                autoComplete="off"
                 id="agree"
                 checked={form.agree}
                 onChange={handleChange}
@@ -431,19 +406,18 @@ export default function SellerRegister() {
               </label>
             </div>
 
-            {/* Navigation Buttons */}
             <div className="flex gap-4 pt-2">
               <button
                 type="button"
                 onClick={() => navigate("/Seller/signup")}
-                className="w-1/3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold py-4 rounded-2xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-all flex justify-center items-center gap-2"
+                className="w-1/3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold py-4 rounded-2xl hover:bg-slate-200 transition-all flex justify-center items-center gap-2"
               >
                 <ArrowLeft size={20} /> Back
               </button>
 
               <button
                 type="submit"
-                className="w-2/3 bg-slate-900 dark:bg-orange-500 text-white font-black py-4 rounded-2xl hover:scale-[1.01] active:scale-95 transition-all shadow-xl shadow-orange-500/10 uppercase tracking-widest text-sm flex justify-center items-center gap-2"
+                className="w-2/3 bg-slate-900 dark:bg-orange-500 text-white font-black py-4 rounded-2xl hover:scale-[1.01] active:scale-95 transition-all shadow-xl uppercase tracking-widest text-sm flex justify-center items-center gap-2"
               >
                 Save & Continue <ArrowRight size={20} />
               </button>

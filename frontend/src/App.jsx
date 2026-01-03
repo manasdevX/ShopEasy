@@ -1,4 +1,4 @@
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, useLocation } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import { useEffect } from "react";
 import axios from "axios";
@@ -37,49 +37,58 @@ import Notifications from "./pages/Seller/Notification";
 import Settings from "./pages/Seller/Settings";
 
 // ✅ GLOBAL AXIOS CONFIGURATION
-// Critical for Cross-Site Cookies (Vercel <-> Render) to work
+// Essential for cross-origin session cookies (connect.sid) to be sent with every request.
 axios.defaults.withCredentials = true;
 
 export default function App() {
+  const location = useLocation();
+
   // ✅ GLOBAL SESSION CHECK
-  // This runs once when the app loads to verify if the user is truly logged in
+  // Verifies server-side session against local state on every route change.
   useEffect(() => {
     const checkSession = async () => {
-      // 1. Check if we *think* we are logged in (Local Storage)
-      const user =
-        localStorage.getItem("user") || localStorage.getItem("sellerUser");
+      const sellerUser = localStorage.getItem("sellerUser");
+      const normalUser = localStorage.getItem("user");
 
-      if (user) {
+      // Only check if local storage suggests an active session.
+      if (sellerUser || normalUser) {
         try {
           const API_URL =
             import.meta.env.VITE_API_URL || "http://localhost:5000";
 
-          // 2. Ask Backend: "Is my session valid?"
-          // This sends the HTTP-Only cookie to the server
+          // Validate session with backend; axios defaults handle the HttpOnly cookie.
           await axios.get(`${API_URL}/api/auth/me`);
-
-          // If successful (200 OK), do nothing. Session is valid.
         } catch (error) {
-          // 3. If Backend says 401 (Unauthorized), the session is dead/invalid.
+          // Handle Unauthorized status (401).
           if (error.response?.status === 401) {
-            console.log("Session expired or invalid. Logging out...");
+            console.warn(
+              "Session expired or invalid. Synchronizing client state..."
+            );
 
-            // Clear client state to match backend
+            // Determine if the user was browsing the Seller portal.
+            const isSellerPath = location.pathname.startsWith("/Seller");
+
+            // Wipe all local storage to clear stale tokens/user data.
             localStorage.clear();
 
-            // Redirect to login with a message
-            window.location.href = "/login?message=session_expired";
+            // ✅ REDIRECT BUG FIX:
+            // Force redirect to the correct portal's login page based on where the error occurred.
+            if (isSellerPath) {
+              window.location.href = "/Seller/login?message=session_expired";
+            } else {
+              window.location.href = "/login?message=session_expired";
+            }
           }
         }
       }
     };
 
     checkSession();
-  }, []);
+  }, [location.pathname]); // Re-validate session whenever the route changes.
 
   return (
     <>
-      {/* 🟢 Global Toaster for Notifications */}
+      {/* 🟢 Global Toast Notifications */}
       <Toaster
         position="bottom-right"
         gutter={8}
@@ -94,15 +103,11 @@ export default function App() {
           },
           success: {
             duration: 5000,
-            theme: {
-              primary: "#22c55e",
-            },
+            theme: { primary: "#22c55e" },
           },
           error: {
             duration: 5000,
-            theme: {
-              primary: "#ef4444",
-            },
+            theme: { primary: "#ef4444" },
           },
         }}
       />
@@ -116,7 +121,6 @@ export default function App() {
         <Route path="/update-email" element={<UpdateEmail />} />
         <Route path="/account" element={<Account />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
-
         <Route path="/search" element={<SearchResults />} />
         <Route path="/product/:id" element={<ProductDetails />} />
         <Route path="/payment" element={<Payment />} />
@@ -124,7 +128,7 @@ export default function App() {
         <Route path="/OrderSummary" element={<OrderSummary />} />
         <Route path="/cart" element={<Cart />} />
 
-        {/* --- Seller Journey Routes --- */}
+        {/* --- Seller Portal Routes --- */}
         <Route path="/Seller/Landing" element={<SellerLanding />} />
         <Route path="/Seller/Dashboard" element={<Dashboard />} />
         <Route path="/Seller/Notifications" element={<Notifications />} />
@@ -134,18 +138,18 @@ export default function App() {
         <Route path="/Seller/add-product" element={<AddProduct />} />
         <Route path="/Seller/edit-product/:id" element={<EditProduct />} />
 
-        {/* Seller Auth Flow */}
+        {/* Seller Registration & Auth Flow */}
         <Route path="/Seller/login" element={<SellerLogin />} />
+        <Route path="/Seller/signup" element={<SellerSignup />} />
         <Route
           path="/Seller/forgot-password"
           element={<SellerForgotPassword />}
         />
-        <Route path="/Seller/signup" element={<SellerSignup />} />
         <Route path="/Seller/register" element={<SellerRegister />} />
         <Route path="/Seller/bank-details" element={<BankDetails />} />
         <Route path="/Seller/setup" element={<SellerRegister />} />
 
-        {/* General */}
+        {/* --- General Utility Routes --- */}
         <Route path="/Terms" element={<Terms />} />
         <Route path="/Privacy" element={<Privacy />} />
         <Route path="/Help" element={<Help />} />

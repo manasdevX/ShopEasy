@@ -160,7 +160,7 @@ export default function Login() {
             <input
               type="text"
               autoComplete="off"
-              placeholder="Email or Phone"
+              placeholder="Email or Phone Number"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className={inputBase}

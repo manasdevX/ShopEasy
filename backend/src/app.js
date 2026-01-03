@@ -1,9 +1,8 @@
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
-
-// --- REDIS INITIALIZATION ---
-// This ensures Redis connects as soon as the app starts
+import session from "express-session";
+import MongoStore from "connect-mongo";
 import "./config/redis.js";
 
 // --- ROUTES IMPORTS ---
@@ -18,29 +17,64 @@ import notificationRoutes from "./routes/notification.routes.js";
 
 const app = express();
 
-// 🟢 CRITICAL FOR RENDER DEPLOYMENT
-// Render puts your app behind a proxy. Without this, Express thinks
-// the connection is HTTP (not HTTPS) and blocks "Secure" cookies.
+/**
+ * 🟢 CLOUD DEPLOYMENT CONFIGURATION
+ * Render and Vercel use reverse proxies. Trusting the proxy allows Express
+ * to read the 'X-Forwarded-Proto' header to determine if the connection is secure.
+ */
 app.set("trust proxy", 1);
 
 // --- MIDDLEWARE ---
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173", // Local Development
-      "https://shop-easy-livid.vercel.app", // Vercel Production Client
+    origin: ["http://localhost:5173", "https://shop-easy-livid.vercel.app"],
+    credentials: true, // Required to allow cookies to be sent/received
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "Cookie",
+      "X-Requested-With",
     ],
-    credentials: true, // ✅ Essential: Allows cookies to be sent/received
-    methods: ["GET", "POST", "PUT", "DELETE"],
   })
 );
 
-app.use(cookieParser()); // ✅ Reads cookies from incoming requests
+app.use(cookieParser());
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
+/**
+ * 🟢 UPDATED SESSION CONFIGURATION
+ * Optimized for cross-site cookie persistence.
+ */
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || "shopeasy_secret_77",
+    resave: false, // Don't save session if unmodified
+    saveUninitialized: false, // Don't create session until something is stored
+    proxy: true, // Essential for 'secure: true' cookies behind proxies
+    name: "shopeasy.sid",
+    store: MongoStore.create({
+      mongoUrl: process.env.MONGO_URI,
+      ttl: 14 * 24 * 60 * 60, // 14 days session life
+      autoRemove: "native",
+    }),
+    cookie: {
+      // Must be true in production to work with sameSite: 'none'
+      secure: process.env.NODE_ENV === "production",
+      httpOnly: true,
+      /**
+       * 'none' + secure: true is required for cross-domain cookies (Vercel to Render)
+       * 'lax' is best for localhost development.
+       */
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    },
+  })
+);
+
 // --- 🟢 SOCKET.IO MIDDLEWARE ---
-// Attaches the 'io' instance to every request so controllers can emit events
+// Attaches the 'io' instance to req so controllers can trigger real-time alerts
 app.use((req, res, next) => {
   req.io = req.app.get("socketio");
   next();
@@ -58,7 +92,6 @@ app.use("/api/notifications", notificationRoutes);
 
 /**
  * Health Check Route
- * Useful for Render/Vercel to know your app is alive
  */
 app.get("/health", (req, res) => {
   res.status(200).json({
@@ -74,7 +107,7 @@ app.get("/health", (req, res) => {
 app.use((req, res) => {
   res.status(404).json({
     success: false,
-    message: `Route ${req.originalUrl} not found on this server.`,
+    message: `Route ${req.originalUrl} not found.`,
     error: "NOT_FOUND",
   });
 });
@@ -83,7 +116,7 @@ app.use((req, res) => {
  * 🚨 GLOBAL ERROR HANDLER
  */
 app.use((err, req, res, next) => {
-  console.error("🔥 Error Stack:", err.stack);
+  console.error("🔥 Server Error:", err.message);
   const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
   res.status(statusCode).json({
     success: false,
