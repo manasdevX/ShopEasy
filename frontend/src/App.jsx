@@ -1,5 +1,7 @@
 import { Routes, Route } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
+import { useEffect } from "react"; // ✅ Added for session check
+import axios from "axios"; // ✅ Added for API calls
 
 // --- USER PAGES ---
 import Home from "./pages/Home";
@@ -34,12 +36,42 @@ import SellerOrders from "./pages/Seller/Orders";
 import Notifications from "./pages/Seller/Notification";
 import Settings from "./pages/Seller/Settings";
 
+// ✅ Global Axios Config (Optional but recommended)
+axios.defaults.withCredentials = true;
+
 export default function App() {
+  // ✅ SESSION VERIFICATION LOGIC
+  useEffect(() => {
+    const checkSession = async () => {
+      // Only check if we think we are logged in
+      const user =
+        localStorage.getItem("user") || localStorage.getItem("sellerUser");
+
+      if (user) {
+        try {
+          const API_URL =
+            import.meta.env.VITE_API_URL || "http://localhost:5000";
+          await axios.get(`${API_URL}/api/auth/me`);
+          // If successful, do nothing (session is valid)
+        } catch (error) {
+          // If backend says 401 (Unauthorized), the session is dead.
+          if (error.response?.status === 401) {
+            console.log("Session expired. Logging out...");
+            localStorage.clear();
+            window.location.href = "/login?message=session_expired";
+          }
+        }
+      }
+    };
+
+    checkSession();
+  }, []);
+
   return (
     <>
       {/* 🟢 Improved Toaster for Socket.io Alerts */}
       <Toaster
-        position="bottom-right" 
+        position="bottom-right"
         gutter={8}
         toastOptions={{
           // Default duration
