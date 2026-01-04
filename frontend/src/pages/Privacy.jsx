@@ -2,7 +2,6 @@ import React from "react";
 import { ShieldCheck, Eye, Lock, Globe, ArrowLeft, Bell } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "../components/PaymentHeader";
-import Footer from "../components/PaymentFooter";
 
 export default function Privacy() {
   const navigate = useNavigate();
@@ -67,8 +66,6 @@ export default function Privacy() {
 
         </div>
       </main>
-
-      <Footer />
     </div>
   );
 }

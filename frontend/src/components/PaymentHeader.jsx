@@ -1,11 +1,10 @@
 import React from 'react';
 import { ShieldCheck, Lock, Sparkles , ArrowLeft } from 'lucide-react';
-import { useNavigate , useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 const ShopEasyHeader = () => {
 
   const navigate = useNavigate();
-  const location = useLocation();
 
   return (
     <header className="bg-white dark:bg-[#030712] border-b border-gray-100 dark:border-gray-800 px-6 py-3 flex items-center gap-6">
@@ -35,7 +34,7 @@ const ShopEasyHeader = () => {
         </div>}
         {location.pathname != "/payment" && 
           <button
-              onClick={() => navigate("/")}
+              onClick={() => navigate(-1)}
               className="flex items-center gap-2 text-slate-400 hover:text-orange-500 font-bold text-[10px] uppercase tracking-[0.2em]"
             >
               <ArrowLeft size={14} /> 

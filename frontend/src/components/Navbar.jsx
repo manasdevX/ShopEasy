@@ -252,7 +252,7 @@ export default function Navbar() {
         <div className="flex items-center gap-6 text-gray-800 dark:text-gray-200 shrink-0">
           <button
             onClick={toggleTheme}
-            className="p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors"
+            className="p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors cursor-pointer"
           >
             {theme === "light" ? <Moon size={20} /> : <Sun size={20} />}
           </button>
@@ -321,7 +321,7 @@ export default function Navbar() {
 
           <Link
             to="/Seller/Landing"
-            className="hidden lg:flex px-5 py-2.5 rounded-2xl border-2 border-orange-500/20 text-orange-500 hover:bg-orange-500 hover:text-white font-black text-xs uppercase tracking-widest transition-all"
+            className="hidden lg:flex items-center whitespace-nowrap px-5 py-2.5 rounded-xl border-2 border-orange-500/10 text-orange-500 hover:bg-orange-500 hover:text-white font-bold text-xs uppercase tracking-widest transition-all"
           >
             <Store size={16} className="mr-2" /> Become a seller
           </Link>

@@ -220,6 +220,7 @@ export default function Account() {
 
   useEffect(() => {
     if (activeTab === "orders") {
+      window.scrollTo(0, 0);
       const fetchOrders = async () => {
         setOrdersLoading(true);
         try {
@@ -527,8 +528,6 @@ export default function Account() {
 
   const handleDeleteAddress = async (id) => {
     setOpenMenuId(null);
-    if (!window.confirm("Are you sure you want to delete this address?"))
-      return;
     try {
       const token = localStorage.getItem("token");
       const res = await fetch(`${API_URL}/api/user/address/${id}`, {

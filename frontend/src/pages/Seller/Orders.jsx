@@ -600,6 +600,14 @@ export default function SellerOrders() {
                   Mark as Shipped
                 </button>
               )}
+              {selectedOrder.status === "Shipped" && (
+                <button
+                  onClick={() => updateStatus(selectedOrder._id, "Delivered")}
+                  className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-sm transition-all shadow-lg shadow-blue-500/20"
+                >
+                  Mark as Delivered
+                </button>
+              )}
               <button
                 onClick={() => setSelectedOrder(null)}
                 className="px-6 py-3 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-white font-bold rounded-xl text-sm transition-all"

@@ -13,6 +13,7 @@ import {
   Plus,
   Home,
   Briefcase,
+  X,
 } from "lucide-react";
 import PaymentHeader from "../components/PaymentHeader";
 import PaymentFooter from "../components/PaymentFooter";
@@ -102,7 +103,7 @@ export default function CheckoutPage() {
   // ================= IMPROVED GEOLOCATION =================
   const handleUseCurrentLocation = () => {
     if (!navigator.geolocation) {
-      toast.error("Geolocation not supported");
+      showError("Geolocation not supported");
       return;
     }
     setIsLocating(true);
@@ -144,7 +145,7 @@ export default function CheckoutPage() {
 
   const handleSaveNewAddress = async () => {
     if (!newAddress.name || !newAddress.phone || !newAddress.street) {
-      toast.error("Please fill required fields");
+      showError("Please fill required fields");
       return;
     }
     setIsSavingAddress(true);
@@ -329,7 +330,7 @@ export default function CheckoutPage() {
         modal: {
             ondismiss: function() {
                 setIsProcessing(false); 
-                toast("Payment Cancelled");
+                showError("Payment Cancelled ❌");
             }
         }
       };
