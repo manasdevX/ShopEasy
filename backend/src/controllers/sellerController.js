@@ -69,6 +69,7 @@ export const registerSeller = async (req, res) => {
       password,
       phone,
       googleId,
+      isOnline: true, // 🟢 FORCE LIVE ON REGISTER
     });
 
     if (seller) {
@@ -115,6 +116,7 @@ export const registerSeller = async (req, res) => {
           name: seller.name,
           email: seller.email,
           role: seller.role,
+          isOnline: seller.isOnline, // ✅ Send status to frontend
           token: token,
         });
       });
@@ -144,6 +146,10 @@ export const loginSeller = async (req, res) => {
         .status(401)
         .json({ message: "Invalid email/phone or password" });
     }
+
+    // 🟢 FORCE ALWAYS LIVE ON LOGIN
+    seller.isOnline = true;
+    await seller.save(); // Save status to DB
 
     // 🟢 1. HARD BLOCK: Check if seller already has 2 active sessions
     try {
@@ -187,6 +193,7 @@ export const loginSeller = async (req, res) => {
         email: seller.email,
         businessName: seller.businessName,
         role: seller.role,
+        isOnline: seller.isOnline, // ✅ Send "true" to frontend
         token: token,
       });
     });
