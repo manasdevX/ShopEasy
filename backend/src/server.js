@@ -5,7 +5,7 @@ import app from "./app.js";
 import connectDB from "./config/db.js";
 
 // --- 1. INITIALIZE REDIS ---
-// Importing this early ensures the client starts the connection attempt
+// Importing this early ensures the client starts the connection attempt for profile caching
 import "./config/redis.js";
 
 dotenv.config();
@@ -18,75 +18,80 @@ const PORT = process.env.PORT || 5000;
 // 2. Create HTTP Server using the Express App
 const server = http.createServer(app);
 
-// 3. Initialize Socket.IO with CORS settings
+// 3. Initialize Socket.IO with matched CORS settings
 /**
- * ✅ MATCHED CORS CONFIGURATION
- * withCredentials: true must be set on both the Express app and Socket.IO
- * to ensure sessions are shared across the handshake.
+ * ✅ CRITICAL SYNC:
+ * credentials: true and matching origins are required so the 'shopeasy.sid'
+ * session cookie is correctly passed during the WebSocket handshake.
  */
 const io = new Server(server, {
   cors: {
-    origin: [
-      "http://localhost:5173", // Localhost
-      "https://shop-easy-livid.vercel.app", // Vercel Production
-    ],
+    origin: ["http://localhost:5173", "https://shop-easy-livid.vercel.app"],
     methods: ["GET", "POST", "PUT", "DELETE"],
-    credentials: true, // ✅ Required for session-based socket auth
+    credentials: true, // ✅ Allows sharing the session between HTTP and WebSockets
   },
-  // Adding transparency for production stability
-  transports: ["websocket", "polling"],
+  transports: ["websocket", "polling"], // Fallback to polling if WebSocket is blocked
   allowEIO3: true,
 });
 
 // 4. Attach 'io' to the Express app instance
-// This allows req.io to be accessed in controllers via req.app.get("socketio")
+// This allows req.io to be used in controllers to send real-time alerts
 app.set("socketio", io);
 
 // 5. Handle Real-Time Connections
 io.on("connection", (socket) => {
   /**
    * 📡 IDENTITY MANAGEMENT
-   * We use the userId passed from the frontend query to place the user/seller
-   * in a unique room. This allows us to send notifications to specific IDs.
+   * Pass userId via query: const socket = io(URL, { query: { userId: '123' } });
    */
   const userId = socket.handshake.query.userId;
 
   if (userId && userId !== "undefined") {
     socket.join(userId);
-    console.log(`📡 Client ${socket.id} joined room: ${userId}`);
+    console.log(`📡 Socket connected: ${socket.id} (User: ${userId})`);
   }
 
-  // ✅ SELLER SPECIFIC ROOM
-  // Used for real-time order alerts and dashboard refreshes
+  /**
+   * ✅ SELLER ROOM JOINING
+   * Specifically used by Dashboard.jsx to receive real-time order alerts.
+   */
   socket.on("join_seller_room", (sellerId) => {
     if (sellerId && sellerId !== "undefined") {
+      // Sellers join their own unique room for private broadcasts
       socket.join(sellerId);
-      console.log(`👨‍💼 Seller Room Active: ${sellerId}`);
+      console.log(`👨‍💼 Seller active in room: ${sellerId}`);
     }
   });
 
-  // Handle errors silently to prevent server crashes
+  // Handle errors silently to keep the server running
   socket.on("error", (err) => {
-    console.error(`❌ Socket Error for ${socket.id}:`, err.message);
+    console.error(`❌ Socket error for client ${socket.id}:`, err.message);
   });
 
   socket.on("disconnect", (reason) => {
-    // console.log(`🔌 Client Disconnected (${reason}): ${socket.id}`);
+    // console.log(`🔌 Client ${socket.id} disconnected: ${reason}`);
   });
 });
 
 // 6. Start the Server
 server.listen(PORT, () => {
+  const env = process.env.NODE_ENV || "development";
   console.log("==========================================");
   console.log(`🚀 SERVER RUNNING ON PORT: ${PORT}`);
-  console.log(`📡 SOCKET.IO ENGINE: Ready`);
-  console.log(`🌍 ENVIRONMENT: ${process.env.NODE_ENV || "development"}`);
-  console.log(`🔒 SESSION SECURITY: Cookie Sync Enabled`);
+  console.log(`📡 SOCKET.IO ENGINE: Initialized`);
+  console.log(`🌍 ENVIRONMENT: ${env.toUpperCase()}`);
+  console.log(`🔒 SESSION SECURITY: Cookie Sync Active`);
   console.log("==========================================");
 });
 
-// Handle unhandled promise rejections for server stability
+// 7. GLOBAL STABILITY HANDLERS
+// Prevents server from crashing on unhandled promise rejections
 process.on("unhandledRejection", (err) => {
   console.log(`🚨 Unhandled Rejection: ${err.message}`);
-  // server.close(() => process.exit(1)); // Optional: close server
+});
+
+process.on("uncaughtException", (err) => {
+  console.log(`🚨 Uncaught Exception: ${err.message}`);
+  // Graceful exit if needed
+  // process.exit(1);
 });

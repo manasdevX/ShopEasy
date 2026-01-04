@@ -18,7 +18,7 @@ export const sendEmailOtp = async (req, res) => {
 
     if (!email) return res.status(400).json({ message: "Email is required" });
 
-    const normalizedEmail = email.toLowerCase();
+    const normalizedEmail = email.toLowerCase().trim();
 
     if (type === "seller") {
       const existingSeller = await Seller.findOne({ email: normalizedEmail });
@@ -37,14 +37,14 @@ export const sendEmailOtp = async (req, res) => {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
     await Otp.findOneAndUpdate(
-      { identifier: email },
+      { identifier: normalizedEmail },
       { otp: otp, type: "email" },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
     const message = `Your ShopEasy verification code is: ${otp}\n\nThis code expires in 5 minutes.`;
     await sendEmail({
-      email: email,
+      email: normalizedEmail,
       subject: "Verify your Email",
       message: message,
     });
@@ -115,7 +115,11 @@ export const sendMobileOtp = async (req, res) => {
 export const checkOtp = async (req, res) => {
   try {
     let { identifier, otp } = req.body;
-    const validOtp = await Otp.findOne({ identifier, otp });
+    const normalizedIdentifier = identifier.trim().toLowerCase();
+    const validOtp = await Otp.findOne({
+      identifier: normalizedIdentifier,
+      otp,
+    });
     if (!validOtp)
       return res.status(400).json({ message: "Invalid or expired OTP" });
     res.status(200).json({ success: true, message: "Verified successfully" });
@@ -132,7 +136,7 @@ export const registerVerifiedUser = async (req, res) => {
     let { name, email, phone, password, googleId } = req.body;
     const newUser = await User.create({
       name,
-      email,
+      email: email.toLowerCase().trim(),
       phone,
       password,
       googleId: googleId || null,
@@ -142,12 +146,12 @@ export const registerVerifiedUser = async (req, res) => {
 
     const token = generateToken(newUser._id);
 
-    // Save to generic Session model
     await Session.create({
       user: newUser._id,
       refreshToken: token,
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       userAgent: req.headers["user-agent"],
+      ipAddress: req.ip,
     });
 
     res.cookie("accessToken", token, {
@@ -164,12 +168,30 @@ export const registerVerifiedUser = async (req, res) => {
 };
 
 /* ======================================================
-   5. LOGIN USER (Customer Portal)
+   5. LOGIN USER (Customer Portal) - FIXED MULTI-IDENTIFIER
 ====================================================== */
 export const loginUser = async (req, res) => {
   try {
-    let { email, password } = req.body;
-    const user = await User.findOne({ email }).select("+password");
+    let { email: identifier, password } = req.body;
+
+    if (!identifier || !password) {
+      return res
+        .status(400)
+        .json({ message: "Email/Phone and password required" });
+    }
+
+    const cleanIdentifier = identifier.trim().toLowerCase();
+
+    // 🔍 Search for User by Email OR raw phone OR prefixed phone
+    const user = await User.findOne({
+      $or: [
+        { email: cleanIdentifier },
+        { phone: identifier },
+        { phone: cleanIdentifier },
+        { phone: "+91" + identifier.replace(/\D/g, "") },
+      ],
+    }).select("+password");
+
     if (!user || !(await user.matchPassword(password))) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
@@ -182,6 +204,7 @@ export const loginUser = async (req, res) => {
       refreshToken: token,
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       userAgent: req.headers["user-agent"],
+      ipAddress: req.ip,
     });
 
     res.cookie("accessToken", token, {
@@ -191,8 +214,19 @@ export const loginUser = async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    res.status(200).json({ success: true, token, user });
+    res.status(200).json({
+      success: true,
+      token,
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+      },
+    });
   } catch (error) {
+    console.error("LOGIN ERROR 👉", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -211,19 +245,20 @@ export const googleAuth = async (req, res) => {
     );
 
     const { sub: googleId, name, email } = googleRes.data;
+    const normalizedEmail = email.toLowerCase().trim();
     let Model = role === "seller" ? Seller : User;
-    let user = await Model.findOne({ email });
+    let user = await Model.findOne({ email: normalizedEmail });
 
     if (user) {
       const authToken = generateToken(user._id);
 
-      // ✅ SELLER SESSION ISOLATION
       if (role === "seller") {
         await SellerSession.create({
           seller: user._id,
           refreshToken: authToken,
-          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 Days
+          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
           userAgent: req.headers["user-agent"],
+          ipAddress: req.ip,
         });
 
         if (req.session) {
@@ -232,12 +267,12 @@ export const googleAuth = async (req, res) => {
           await new Promise((resolve) => req.session.save(resolve));
         }
       } else {
-        // Customer Session
         await Session.create({
           user: user._id,
           refreshToken: authToken,
           expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
           userAgent: req.headers["user-agent"],
+          ipAddress: req.ip,
         });
       }
 
@@ -254,7 +289,13 @@ export const googleAuth = async (req, res) => {
     } else {
       return res
         .status(200)
-        .json({ success: true, isNewUser: true, name, email, googleId });
+        .json({
+          success: true,
+          isNewUser: true,
+          name,
+          email: normalizedEmail,
+          googleId,
+        });
     }
   } catch (error) {
     res.status(500).json({ message: "Google Auth Failed" });
@@ -267,7 +308,10 @@ export const googleAuth = async (req, res) => {
 export const sendForgotPasswordOTP = async (req, res) => {
   try {
     const { identifier } = req.body;
-    const user = await User.findOne({ email: identifier });
+    const normalizedId = identifier.trim().toLowerCase();
+    const user = await User.findOne({
+      $or: [{ email: normalizedId }, { phone: identifier }],
+    });
     if (!user) return res.status(404).json({ message: "User not found" });
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -276,7 +320,7 @@ export const sendForgotPasswordOTP = async (req, res) => {
       .update(otp)
       .digest("hex");
     user.resetPasswordExpire = Date.now() + 10 * 60 * 1000;
-    await user.save();
+    await user.save({ validateBeforeSave: false });
 
     await sendEmail({
       email: user.email,
@@ -293,8 +337,10 @@ export const resetPasswordWithOTP = async (req, res) => {
   try {
     const { identifier, otp, password } = req.body;
     const hashedOtp = crypto.createHash("sha256").update(otp).digest("hex");
+    const normalizedId = identifier.trim().toLowerCase();
+
     const user = await User.findOne({
-      email: identifier,
+      $or: [{ email: normalizedId }, { phone: identifier }],
       resetPasswordOtp: hashedOtp,
       resetPasswordExpire: { $gt: Date.now() },
     });
@@ -302,6 +348,7 @@ export const resetPasswordWithOTP = async (req, res) => {
     if (!user) return res.status(400).json({ message: "Invalid OTP" });
     user.password = password;
     user.resetPasswordOtp = undefined;
+    user.resetPasswordExpire = undefined;
     await user.save();
     res.status(200).json({ success: true, message: "Updated" });
   } catch (error) {
@@ -310,7 +357,7 @@ export const resetPasswordWithOTP = async (req, res) => {
 };
 
 /* ======================================================
-   8. LOGOUT (Clean up both generic and seller sessions)
+   8. LOGOUT (Clean up all session types)
 ====================================================== */
 export const logoutUser = async (req, res) => {
   try {
@@ -318,7 +365,6 @@ export const logoutUser = async (req, res) => {
       req.cookies.accessToken || req.headers.authorization?.split(" ")[1];
 
     if (token) {
-      // Clear from BOTH collections to be safe during logout
       await Promise.all([
         Session.findOneAndDelete({ refreshToken: token }),
         SellerSession.findOneAndDelete({ refreshToken: token }),
@@ -330,6 +376,11 @@ export const logoutUser = async (req, res) => {
     }
 
     res.clearCookie("accessToken", {
+      httpOnly: true,
+      secure: true,
+      sameSite: "None",
+    });
+    res.clearCookie("shopeasy.sid", {
       httpOnly: true,
       secure: true,
       sameSite: "None",
