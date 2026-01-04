@@ -16,6 +16,22 @@ const generateToken = (id) => {
 };
 
 /**
+ * 🟢 SESSION LIMITER HELPER
+ * Blocks login if the maximum number of concurrent sessions is reached.
+ */
+const checkSessionLimit = async (Model, queryKey, id, limit = 2) => {
+  const sessionCount = await Model.countDocuments({ [queryKey]: id });
+
+  if (sessionCount >= limit) {
+    const error = new Error(
+      `Maximum of ${limit} active sessions reached. Please logout from another device first.`
+    );
+    error.statusCode = 403; // Forbidden
+    throw error;
+  }
+};
+
+/**
  * Helper: Clear Seller Cache
  */
 const clearSellerCache = async (sellerId) => {
@@ -58,7 +74,16 @@ export const registerSeller = async (req, res) => {
     if (seller) {
       const token = generateToken(seller._id);
 
-      // ✅ 1. Create entry in SellerSession Collection
+      // 🟢 1. CHECK SESSION LIMIT
+      try {
+        await checkSessionLimit(SellerSession, "seller", seller._id, 2);
+      } catch (limitError) {
+        return res
+          .status(limitError.statusCode)
+          .json({ message: limitError.message });
+      }
+
+      // ✅ 2. Create entry in SellerSession Collection
       await SellerSession.create({
         seller: seller._id,
         refreshToken: token,
@@ -67,7 +92,7 @@ export const registerSeller = async (req, res) => {
         userAgent: req.headers["user-agent"],
       });
 
-      // ✅ 2. Link Express Session for persistence
+      // ✅ 3. Link Express Session for persistence
       req.session.sellerId = seller._id;
       req.session.role = "seller";
 
@@ -76,6 +101,15 @@ export const registerSeller = async (req, res) => {
           return res
             .status(500)
             .json({ message: "Session initialization failed" });
+
+        // 🟢 FIX: Set Cookie so logout can find the token
+        res.cookie("accessToken", token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+          maxAge: 30 * 24 * 60 * 60 * 1000, // 30 Days
+        });
+
         res.status(201).json({
           _id: seller._id,
           name: seller.name,
@@ -111,9 +145,18 @@ export const loginSeller = async (req, res) => {
         .json({ message: "Invalid email/phone or password" });
     }
 
+    // 🟢 1. HARD BLOCK: Check if seller already has 2 active sessions
+    try {
+      await checkSessionLimit(SellerSession, "seller", seller._id, 2);
+    } catch (limitError) {
+      return res
+        .status(limitError.statusCode)
+        .json({ message: limitError.message });
+    }
+
     const token = generateToken(seller._id);
 
-    // ✅ 1. Create entry in SellerSession Collection (Total isolation from User sessions)
+    // ✅ 2. Create entry in SellerSession Collection
     await SellerSession.create({
       seller: seller._id,
       refreshToken: token,
@@ -122,13 +165,22 @@ export const loginSeller = async (req, res) => {
       userAgent: req.headers["user-agent"],
     });
 
-    // ✅ 2. Link Express Session
+    // ✅ 3. Link Express Session
     req.session.sellerId = seller._id;
     req.session.role = "seller";
 
     req.session.save((err) => {
       if (err)
         return res.status(500).json({ message: "Internal Server Error" });
+
+      // 🟢 FIX: Set Cookie so logout can find the token
+      res.cookie("accessToken", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 Days
+      });
+
       res.json({
         _id: seller._id,
         name: seller.name,

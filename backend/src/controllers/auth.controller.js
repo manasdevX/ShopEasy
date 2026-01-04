@@ -9,49 +9,61 @@ import axios from "axios";
 import sendEmail from "../utils/emailHelper.js";
 import sendSMS from "../utils/sendSMS.js";
 
+/**
+ * 🟢 SESSION LIMITER HELPER
+ * Blocks login if the maximum number of concurrent sessions is reached.
+ * Returns a 403 Forbidden error to be handled by the frontend toast.
+ */
+const checkSessionLimit = async (Model, queryKey, id, limit = 2) => {
+  const sessionCount = await Model.countDocuments({ [queryKey]: id });
+
+  if (sessionCount >= limit) {
+    const error = new Error(
+      `Maximum of ${limit} active sessions reached. Please logout from another device first.`
+    );
+    error.statusCode = 403; // Forbidden
+    throw error;
+  }
+};
+
 /* ======================================================
    1. SEND EMAIL OTP (Role-Based Check)
 ====================================================== */
 export const sendEmailOtp = async (req, res) => {
   try {
     const { email, type } = req.body;
-
     if (!email) return res.status(400).json({ message: "Email is required" });
 
     const normalizedEmail = email.toLowerCase().trim();
 
     if (type === "seller") {
       const existingSeller = await Seller.findOne({ email: normalizedEmail });
-      if (existingSeller) {
+      if (existingSeller)
         return res
           .status(400)
           .json({ message: "Email already registered as Seller." });
-      }
     } else {
       const existingUser = await User.findOne({ email: normalizedEmail });
-      if (existingUser) {
+      if (existingUser)
         return res.status(400).json({ message: "Email already registered." });
-      }
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
     await Otp.findOneAndUpdate(
       { identifier: normalizedEmail },
-      { otp: otp, type: "email" },
+      { otp, type: "email" },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
-    const message = `Your ShopEasy verification code is: ${otp}\n\nThis code expires in 5 minutes.`;
     await sendEmail({
       email: normalizedEmail,
       subject: "Verify your Email",
-      message: message,
+      message: `Your ShopEasy verification code is: ${otp}\n\nThis code expires in 5 minutes.`,
     });
 
     res.status(200).json({ success: true, message: "OTP sent to email" });
   } catch (error) {
-    console.error("SEND EMAIL OTP ERROR 👉", error);
     res.status(500).json({ message: "Failed to send OTP" });
   }
 };
@@ -66,16 +78,8 @@ export const sendMobileOtp = async (req, res) => {
       return res.status(400).json({ message: "Phone number required" });
 
     const cleaned = phone.replace(/\s+/g, "").replace(/-/g, "");
-    let searchCriteria = [];
-    let formattedPhone = cleaned;
-
-    if (/^[0-9]+$/.test(cleaned)) {
-      searchCriteria.push({ phone: cleaned }, { phone: "+91" + cleaned });
-      if (cleaned.length === 10) formattedPhone = "+91" + cleaned;
-    } else {
-      searchCriteria.push({ phone: cleaned });
-      formattedPhone = cleaned;
-    }
+    let searchCriteria = [{ phone: cleaned }, { phone: "+91" + cleaned }];
+    let formattedPhone = cleaned.length === 10 ? "+91" + cleaned : cleaned;
 
     if (type === "seller") {
       const existingSeller = await Seller.findOne({ $or: searchCriteria });
@@ -146,6 +150,15 @@ export const registerVerifiedUser = async (req, res) => {
 
     const token = generateToken(newUser._id);
 
+    // 🔴 BLOCK Check during registration
+    try {
+      await checkSessionLimit(Session, "user", newUser._id, 2);
+    } catch (limitError) {
+      return res
+        .status(limitError.statusCode)
+        .json({ message: limitError.message });
+    }
+
     await Session.create({
       user: newUser._id,
       refreshToken: token,
@@ -168,21 +181,15 @@ export const registerVerifiedUser = async (req, res) => {
 };
 
 /* ======================================================
-   5. LOGIN USER (Customer Portal) - FIXED MULTI-IDENTIFIER
+   5. LOGIN USER (Customer Portal)
 ====================================================== */
 export const loginUser = async (req, res) => {
   try {
     let { email: identifier, password } = req.body;
-
-    if (!identifier || !password) {
-      return res
-        .status(400)
-        .json({ message: "Email/Phone and password required" });
-    }
+    if (!identifier || !password)
+      return res.status(400).json({ message: "Credentials required" });
 
     const cleanIdentifier = identifier.trim().toLowerCase();
-
-    // 🔍 Search for User by Email OR raw phone OR prefixed phone
     const user = await User.findOne({
       $or: [
         { email: cleanIdentifier },
@@ -196,9 +203,17 @@ export const loginUser = async (req, res) => {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
+    // 🔴 HARD BLOCK: Check if user already has 2 active sessions
+    try {
+      await checkSessionLimit(Session, "user", user._id, 2);
+    } catch (limitError) {
+      return res
+        .status(limitError.statusCode)
+        .json({ message: limitError.message });
+    }
+
     const token = generateToken(user._id);
 
-    // Save to generic Session model
     await Session.create({
       user: user._id,
       refreshToken: token,
@@ -214,19 +229,8 @@ export const loginUser = async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    res.status(200).json({
-      success: true,
-      token,
-      user: {
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        role: user.role,
-      },
-    });
+    res.status(200).json({ success: true, token, user });
   } catch (error) {
-    console.error("LOGIN ERROR 👉", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -251,6 +255,19 @@ export const googleAuth = async (req, res) => {
 
     if (user) {
       const authToken = generateToken(user._id);
+
+      // 🔴 HARD BLOCK: check limit before creating new Google session
+      try {
+        if (role === "seller") {
+          await checkSessionLimit(SellerSession, "seller", user._id, 2);
+        } else {
+          await checkSessionLimit(Session, "user", user._id, 2);
+        }
+      } catch (limitError) {
+        return res
+          .status(limitError.statusCode)
+          .json({ message: limitError.message });
+      }
 
       if (role === "seller") {
         await SellerSession.create({
@@ -287,15 +304,13 @@ export const googleAuth = async (req, res) => {
         .status(200)
         .json({ success: true, token: authToken, user, isNewUser: false });
     } else {
-      return res
-        .status(200)
-        .json({
-          success: true,
-          isNewUser: true,
-          name,
-          email: normalizedEmail,
-          googleId,
-        });
+      return res.status(200).json({
+        success: true,
+        isNewUser: true,
+        name,
+        email: normalizedEmail,
+        googleId,
+      });
     }
   } catch (error) {
     res.status(500).json({ message: "Google Auth Failed" });
@@ -357,13 +372,14 @@ export const resetPasswordWithOTP = async (req, res) => {
 };
 
 /* ======================================================
-   8. LOGOUT (Clean up all session types)
+   8. LOGOUT (Purges all session traces)
 ====================================================== */
 export const logoutUser = async (req, res) => {
   try {
     const token =
       req.cookies.accessToken || req.headers.authorization?.split(" ")[1];
 
+    // 1. Delete from custom models
     if (token) {
       await Promise.all([
         Session.findOneAndDelete({ refreshToken: token }),
@@ -371,10 +387,14 @@ export const logoutUser = async (req, res) => {
       ]);
     }
 
+    // 2. Destroy Express Session (shopeasy.sid)
     if (req.session) {
-      req.session.destroy();
+      req.session.destroy((err) => {
+        if (err) console.error("Session destruction error:", err);
+      });
     }
 
+    // 3. Clear Cookies
     res.clearCookie("accessToken", {
       httpOnly: true,
       secure: true,
@@ -385,6 +405,7 @@ export const logoutUser = async (req, res) => {
       secure: true,
       sameSite: "None",
     });
+
     res.status(200).json({ success: true, message: "Logged out" });
   } catch (error) {
     res.status(500).json({ message: "Logout error" });
@@ -392,7 +413,7 @@ export const logoutUser = async (req, res) => {
 };
 
 /* ======================================================
-   9. GET ME (Role-Agnostic Profile Fetch)
+   9. GET ME
 ====================================================== */
 export const getMe = async (req, res) => {
   try {
