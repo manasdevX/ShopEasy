@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import SellerNavbar from "../../components/Seller/SellerNavbar";
 import SellerFooter from "../../components/Seller/SellerFooter";
-import { showSuccess, showError } from "../../utils/toast";
+import { showSuccess, showError } from "../../utils/toast"; // ✅ Toast Import
 import { useSocket } from "../../context/SocketContext";
 import {
   BarChart3,
@@ -25,7 +25,12 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [lowStockItems, setLowStockItems] = useState([]);
 
-  // Initial State
+  // 🟢 Optimistic UI: Initialize as Live if seller exists
+  const [isLive, setIsLive] = useState(() => {
+    const stored = localStorage.getItem("sellerUser");
+    return stored ? true : false;
+  });
+
   const [data, setData] = useState({
     seller: { name: "", businessName: "My Store", rating: 0 },
     stats: { totalRevenue: 0, activeOrders: 0, totalProducts: 0 },
@@ -33,9 +38,6 @@ export default function Dashboard() {
     trends: { revenue: "0%", revenueIsUp: true, products: "Active" },
   });
 
-  /**
-   * Helper to clean up storage and redirect on session expiry
-   */
   const handleSessionExpired = useCallback(() => {
     localStorage.removeItem("sellerToken");
     localStorage.removeItem("sellerUser");
@@ -113,12 +115,11 @@ export default function Dashboard() {
       return;
     }
 
-    // Load data immediately
     fetchDashboardData();
     fetchLowStock();
   }, [fetchDashboardData, fetchLowStock, navigate]);
 
-  // --- 3. SOCKET.IO REAL-TIME LOGIC ---
+  // --- 3. SOCKET.IO REAL-TIME LOGIC (ROBUST) ---
   useEffect(() => {
     let seller = null;
     try {
@@ -130,20 +131,37 @@ export default function Dashboard() {
       console.error("Parsing error", e);
     }
 
-    if (socket && seller?._id) {
+    if (!seller?._id || !socket) return;
+
+    // 🟢 Join Room Logic
+    const joinRoom = () => {
+      // console.log("Joining Seller Room:", seller._id);
       socket.emit("join_seller_room", seller._id);
+      setIsLive(true);
+    };
 
-      const handleOrderAlert = () => {
-        fetchDashboardData();
-        fetchLowStock();
-      };
+    // 🟢 Order Alert Handler
+    const handleOrderAlert = () => {
+      showSuccess("🎉 New Order Received!"); // ✅ Notification
+      fetchDashboardData(); // ✅ Refresh Data
+      fetchLowStock(); // ✅ Refresh Stock
+    };
 
-      socket.on("order_alert", handleOrderAlert);
-
-      return () => {
-        socket.off("order_alert", handleOrderAlert);
-      };
+    // 🟢 Connection Logic
+    if (socket.connected) {
+      joinRoom();
+    } else {
+      socket.connect();
     }
+
+    // 🟢 Listeners
+    socket.on("connect", joinRoom);
+    socket.on("order_alert", handleOrderAlert);
+
+    return () => {
+      socket.off("connect", joinRoom);
+      socket.off("order_alert", handleOrderAlert);
+    };
   }, [socket, fetchDashboardData, fetchLowStock]);
 
   // --- HELPERS & HANDLERS ---
@@ -206,7 +224,8 @@ export default function Dashboard() {
     {
       title: "Store Rating",
       value: loading ? "..." : data.seller.rating || "N/A",
-      trend: "Live",
+      trend: isLive ? "Live" : "Offline",
+      trendUp: isLive,
       icon: CheckCircle2,
     },
   ];
@@ -254,12 +273,25 @@ export default function Dashboard() {
                 </div>
                 <span
                   className={`text-[10px] font-black px-2 py-1 rounded-lg flex items-center gap-1 ${
-                    stat.trendUp
-                      ? "text-emerald-500 bg-emerald-500/10"
-                      : "text-amber-500 bg-amber-500/10"
+                    stat.trendUp !== undefined
+                      ? stat.trendUp
+                        ? "text-emerald-500 bg-emerald-500/10"
+                        : "text-amber-500 bg-amber-500/10"
+                      : "text-slate-500 bg-slate-500/10"
                   }`}
                 >
-                  <ArrowUpRight size={12} /> {stat.trend}
+                  {stat.trend === "Live" || stat.trend === "Offline" ? (
+                    <span
+                      className={`w-2 h-2 rounded-full mr-1 ${
+                        stat.trendUp
+                          ? "bg-emerald-500 animate-pulse"
+                          : "bg-slate-400"
+                      }`}
+                    ></span>
+                  ) : (
+                    <ArrowUpRight size={12} />
+                  )}
+                  {stat.trend}
                 </span>
               </div>
               <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em]">
@@ -397,7 +429,7 @@ function ProductRow({ id, name, stock, amount, onRemove, onEdit }) {
         <p className="font-black text-slate-900 dark:text-white text-sm tracking-tight line-clamp-1 uppercase">
           {name}
         </p>
-        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+        <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest">
           ID: #{id.slice(-6)}
         </p>
       </td>

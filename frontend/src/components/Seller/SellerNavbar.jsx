@@ -43,14 +43,27 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
   const [isSearching, setIsSearching] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const [hasUnread, setHasUnread] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
+
+  /**
+   * 🟢 FIX: Start with TRUE (Optimistic UI)
+   * We initialize as 'true' so the UI shows "Live" immediately.
+   * If the socket is actually disconnected, useEffect will catch it and flip it to false,
+   * but this prevents the initial "Connecting..." flicker on navigation.
+   */
+  const [isSocketConnected, setIsSocketConnected] = useState(true);
 
   // --- SOCKET.IO SYNC ---
   useEffect(() => {
     if (!socket) return;
-    setIsConnected(socket.connected);
-    const onConnect = () => setIsConnected(true);
-    const onDisconnect = () => setIsConnected(false);
+
+    // Sync with actual socket state after mount
+    if (socket.connected !== isSocketConnected) {
+      setIsSocketConnected(socket.connected);
+    }
+
+    const onConnect = () => setIsSocketConnected(true);
+    const onDisconnect = () => setIsSocketConnected(false);
+
     const onNotify = () => {
       setHasUnread(true);
       window.dispatchEvent(new Event("notification-updated"));
@@ -65,7 +78,7 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
       socket.off("disconnect", onDisconnect);
       socket.off("new_notification", onNotify);
     };
-  }, [socket]);
+  }, [socket, isSocketConnected]);
 
   // --- AUTH & NOTIFICATION FETCH ---
   useEffect(() => {
@@ -148,6 +161,7 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
     return () => clearTimeout(delayDebounceFn);
   }, [searchQuery, token]);
 
+  // Click Outside
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (searchRef.current && !searchRef.current.contains(e.target))
@@ -171,6 +185,16 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
     "/Seller/bank-details",
   ];
   const isOnboarding = onboardingPaths.includes(location.pathname);
+
+  // 🟢 DISPLAY LOGIC
+  // Since we start as true, this will show "Live" immediately on mount.
+  const displayStatus = isAuth ? "Live" : "Offline";
+
+  const statusColor = isAuth
+    ? isSocketConnected
+      ? "bg-emerald-500 shadow-[0_0_8px_#10b981]" // Connected (Bright Green)
+      : "bg-emerald-500/50" // Connecting/Syncing (Dim Green - fallback)
+    : "bg-amber-500"; // Offline
 
   return (
     <nav className="sticky top-0 z-[100] bg-white dark:bg-[#030712] border-b border-slate-100 dark:border-slate-800 transition-all duration-300">
@@ -269,10 +293,14 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
           {/* 3. ACTIONS SECTION (Pushed to the right) */}
           <div className="shrink-0 flex items-center gap-3 sm:gap-4 ml-auto">
             {isAuth && (
-              <div className="hidden lg:flex items-center gap-2 px-3 py-1 bg-slate-50 dark:bg-slate-900 rounded-full border border-slate-100 dark:border-slate-800">
-                <div className={`w-2 h-2 rounded-full ${isConnected ? "bg-emerald-500 shadow-[0_0_8px_#10b981]" : "bg-rose-500"} animate-pulse`} />
+              <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-slate-50 dark:bg-slate-900 rounded-full border border-slate-100 dark:border-slate-800">
+                <div
+                  className={`w-2 h-2 rounded-full ${statusColor} ${
+                    isSocketConnected ? "animate-pulse" : ""
+                  }`}
+                />
                 <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-                  {isConnected ? "Live" : "Offline"}
+                  {displayStatus}
                 </span>
               </div>
             )}
