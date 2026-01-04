@@ -32,70 +32,62 @@ export const SocketProvider = ({ children }) => {
 
     // 1. Establish connection if a valid user ID is found
     if (currentUserId) {
-      // Use the environment variable for the backend URL
       const socketUrl = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
       newSocket = io(socketUrl, {
         query: { userId: currentUserId },
-        transports: ["websocket"],
-        withCredentials: true, // ✅ CRITICAL: Matches backend CORS for session persistence
+        transports: ["websocket", "polling"], // Added polling fallback for better compatibility
+        withCredentials: true, // ✅ CRITICAL for shopeasy.sid session persistence
         reconnection: true,
-        reconnectionAttempts: 5,
-        reconnectionDelay: 1000,
+        reconnectionAttempts: 10,
+        reconnectionDelay: 2000,
       });
 
       newSocket.on("connect", () => {
         console.log(`✅ Socket Connected: ${newSocket.id}`);
-        // Ensure seller/user joins their specific room for private broadcasts
+        // Re-join room on every connect/reconnect to ensure data delivery
         newSocket.emit("join_seller_room", currentUserId);
       });
 
-      // 2. 📦 Listen for "order_alert" (Real-time Order Popups)
+      // 2. 📦 Real-time Order Alerts
       newSocket.on("order_alert", (data) => {
-        console.log("📦 Socket received order_alert:", data);
+        console.log("📦 Order alert received:", data);
+        const toastStyle = {
+          fontWeight: "bold",
+          borderRadius: "12px",
+          padding: "16px",
+        };
 
         if (data.type === "success") {
           toast.success(data.message, {
             duration: 6000,
             icon: "📦",
-            style: {
-              background: "#10B981",
-              color: "#fff",
-              fontWeight: "bold",
-              borderRadius: "12px",
-            },
-          });
-        } else if (data.type === "error") {
-          toast.error(data.message, {
-            duration: 6000,
-            icon: "❌",
-            style: { borderRadius: "12px" },
+            style: { ...toastStyle, background: "#10B981", color: "#fff" },
           });
         } else {
           toast(data.message, {
-            duration: 4000,
+            duration: 5000,
             icon: "ℹ️",
-            style: { borderRadius: "12px" },
+            style: toastStyle,
           });
         }
       });
 
-      // 3. 🔔 Listen for "new_notification" (Updates Bell Icon/Badge)
+      // 3. 🔔 General Notifications
       newSocket.on("new_notification", (notification) => {
-        console.log("🔔 New Notification Received:", notification);
-        toast(notification.title || "New Notification", {
+        console.log("🔔 New Notification:", notification);
+        toast(notification.title || "New Message", {
           icon: "🔔",
           duration: 4000,
           style: {
             border: "1px solid #3b82f6",
-            padding: "16px",
-            color: "#3b82f6",
-            background: "#fff",
+            color: "#1e40af",
+            background: "#eff6ff",
             borderRadius: "12px",
           },
         });
 
-        // ✅ Immediate UI Sync: Tell Navbar to refresh the notification dot
+        // Inform other components (like Navbar) to refresh unread counts
         window.dispatchEvent(new Event("notification-updated"));
       });
 
@@ -106,26 +98,28 @@ export const SocketProvider = ({ children }) => {
       setSocket(newSocket);
     }
 
-    // 4. Handle Login/Logout sync across multiple browser tabs
+    // 4. Multi-tab Sync Logic
     const handleSync = () => {
       const id = getUserId();
-      // If user logged out in another tab, clean up connection
+      // User logged out in another tab
       if (!id && newSocket) {
+        console.log("🔄 Tab sync: Disconnecting socket due to logout");
         newSocket.disconnect();
         setSocket(null);
       }
-      // If user logged in, refresh to establish fresh authenticated state
+      // User logged in via another tab
       else if (id && !newSocket) {
+        console.log("🔄 Tab sync: Reloading to initialize socket");
         window.location.reload();
       }
     };
 
     window.addEventListener("storage", handleSync);
 
-    // 5. Cleanup on Unmount
+    // 5. Clean up logic
     return () => {
       if (newSocket) {
-        console.log("🔌 Socket Disconnecting...");
+        console.log("🔌 Cleaning up socket listeners...");
         newSocket.off("connect");
         newSocket.off("order_alert");
         newSocket.off("new_notification");
@@ -134,7 +128,7 @@ export const SocketProvider = ({ children }) => {
       }
       window.removeEventListener("storage", handleSync);
     };
-  }, []); // Empty dependencies ensure listener handles cross-tab sync
+  }, []);
 
   return (
     <SocketContext.Provider value={socket}>{children}</SocketContext.Provider>
@@ -143,9 +137,5 @@ export const SocketProvider = ({ children }) => {
 
 export const useSocket = () => {
   const context = useContext(SocketContext);
-  if (context === undefined) {
-    // This is optional but helpful for debugging
-    console.warn("useSocket must be used within a SocketProvider");
-  }
   return context;
 };

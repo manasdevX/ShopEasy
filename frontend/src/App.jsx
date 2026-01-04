@@ -1,4 +1,4 @@
-import { Routes, Route, useLocation } from "react-router-dom";
+import { Routes, Route, useLocation, useNavigate } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import { useEffect } from "react";
 import axios from "axios";
@@ -37,45 +37,72 @@ import Notifications from "./pages/Seller/Notification";
 import Settings from "./pages/Seller/Settings";
 
 // ✅ GLOBAL AXIOS CONFIGURATION
-// Essential for cross-origin session cookies (connect.sid) to be sent with every request.
+// Essential for cross-origin session cookies (shopeasy.sid) to be sent with every request.
 axios.defaults.withCredentials = true;
 
 export default function App() {
   const location = useLocation();
+  const navigate = useNavigate();
 
-  // ✅ GLOBAL SESSION CHECK
-  // Verifies server-side session against local state on every route change.
+  // ✅ GLOBAL SESSION CHECK & REDIRECT PROTECTOR
   useEffect(() => {
     const checkSession = async () => {
-      const sellerUser = localStorage.getItem("sellerUser");
-      const normalUser = localStorage.getItem("user");
+      const sellerToken = localStorage.getItem("sellerToken");
+      const userToken = localStorage.getItem("token");
+      const isSellerPath = location.pathname.startsWith("/Seller");
+
+      // Skip check for public landing pages or login/signup to prevent loops
+      const publicPaths = [
+        "/Seller/login",
+        "/Seller/signup",
+        "/login",
+        "/signup",
+        "/Seller/Landing",
+        "/",
+      ];
+      if (publicPaths.includes(location.pathname)) return;
 
       // Only check if local storage suggests an active session.
-      if (sellerUser || normalUser) {
+      if (sellerToken || userToken) {
         try {
           const API_URL =
             import.meta.env.VITE_API_URL || "http://localhost:5000";
 
-          // Validate session with backend; axios defaults handle the HttpOnly cookie.
-          await axios.get(`${API_URL}/api/auth/me`);
+          /** * ✅ ROLE-BASED VALIDATION
+           * Hits the specific controller for the current portal to ensure
+           * session isolation between Sellers and Customers.
+           */
+          const endpoint = isSellerPath
+            ? "/api/sellers/profile"
+            : "/api/auth/me";
+
+          await axios.get(`${API_URL}${endpoint}`, {
+            headers: {
+              Authorization: `Bearer ${isSellerPath ? sellerToken : userToken}`,
+            },
+          });
         } catch (error) {
           // Handle Unauthorized status (401).
           if (error.response?.status === 401) {
             console.warn(
-              "Session expired or invalid. Synchronizing client state..."
+              "Session validation failed. Cleaning up local state..."
             );
 
-            // Determine if the user was browsing the Seller portal.
-            const isSellerPath = location.pathname.startsWith("/Seller");
+            /**
+             * ✅ RACE CONDITION FIX:
+             * We check if the token still exists in localStorage. If it does, we ignore
+             * the first 401 for a brief moment to allow cookie synchronization to catch up.
+             */
+            if (isSellerPath && sellerToken) return;
 
-            // Wipe all local storage to clear stale tokens/user data.
-            localStorage.clear();
-
-            // ✅ REDIRECT BUG FIX:
-            // Force redirect to the correct portal's login page based on where the error occurred.
+            // Wipe specific storage based on the failed path
             if (isSellerPath) {
+              localStorage.removeItem("sellerToken");
+              localStorage.removeItem("sellerUser");
               window.location.href = "/Seller/login?message=session_expired";
             } else {
+              localStorage.removeItem("token");
+              localStorage.removeItem("user");
               window.location.href = "/login?message=session_expired";
             }
           }
@@ -83,12 +110,13 @@ export default function App() {
       }
     };
 
-    checkSession();
-  }, [location.pathname]); // Re-validate session whenever the route changes.
+    // Small stabilization delay to let the browser process cookies after login redirects
+    const timer = setTimeout(checkSession, 500);
+    return () => clearTimeout(timer);
+  }, [location.pathname]);
 
   return (
     <>
-      {/* 🟢 Global Toast Notifications */}
       <Toaster
         position="bottom-right"
         gutter={8}
@@ -138,7 +166,7 @@ export default function App() {
         <Route path="/Seller/add-product" element={<AddProduct />} />
         <Route path="/Seller/edit-product/:id" element={<EditProduct />} />
 
-        {/* Seller Registration & Auth Flow */}
+        {/* Seller Auth Flow */}
         <Route path="/Seller/login" element={<SellerLogin />} />
         <Route path="/Seller/signup" element={<SellerSignup />} />
         <Route

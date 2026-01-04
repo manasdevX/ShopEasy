@@ -3,13 +3,12 @@ import { useNavigate } from "react-router-dom";
 import SellerNavbar from "../../components/Seller/SellerNavbar";
 import SellerFooter from "../../components/Seller/SellerFooter";
 import { showSuccess, showError } from "../../utils/toast";
-import { useSocket } from "../../context/SocketContext"; // ✅ Socket Hook
+import { useSocket } from "../../context/SocketContext";
 import {
   BarChart3,
   ShoppingBag,
   Package,
   ArrowUpRight,
-  Clock,
   CheckCircle2,
   AlertCircle,
   Loader2,
@@ -22,7 +21,7 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const socket = useSocket(); // ✅ Initialize Socket
+  const socket = useSocket();
   const [loading, setLoading] = useState(true);
   const [lowStockItems, setLowStockItems] = useState([]);
 
@@ -34,25 +33,43 @@ export default function Dashboard() {
     trends: { revenue: "0%", revenueIsUp: true, products: "Active" },
   });
 
-  // --- 1. FETCH FUNCTIONS (Surgical use of credentials: "include") ---
+  /**
+   * Helper to clean up storage and redirect on session expiry
+   */
+  const handleSessionExpired = useCallback(() => {
+    localStorage.removeItem("sellerToken");
+    localStorage.removeItem("sellerUser");
+    navigate("/Seller/login?message=session_expired");
+  }, [navigate]);
+
+  // --- 1. FETCH FUNCTIONS ---
   const fetchLowStock = useCallback(async () => {
     try {
       const token = localStorage.getItem("sellerToken");
+      if (!token) return;
+
       const res = await fetch(`${API_URL}/api/products/seller/all`, {
-        headers: { Authorization: `Bearer ${token}` },
-        credentials: "include", // ✅ CRITICAL: Fix for session persistence
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
       });
-      const result = await res.json();
+
+      if (res.status === 401) {
+        handleSessionExpired();
+        return;
+      }
+
       if (res.ok) {
-        const low = result
-          .filter((p) => p.stock < 5)
-          .sort((a, b) => a.stock - b.stock);
-        setLowStockItems(low);
+        const result = await res.json();
+        setLowStockItems(
+          result.filter((p) => p.stock < 5).sort((a, b) => a.stock - b.stock)
+        );
       }
     } catch (error) {
       console.error("Error fetching inventory:", error);
     }
-  }, []);
+  }, [handleSessionExpired]);
 
   const fetchDashboardData = useCallback(async () => {
     try {
@@ -61,39 +78,51 @@ export default function Dashboard() {
         navigate("/Seller/login");
         return;
       }
+
       const res = await fetch(`${API_URL}/api/sellers/dashboard`, {
-        headers: { Authorization: `Bearer ${token}` },
-        credentials: "include", // ✅ CRITICAL: Fix for session persistence
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
       });
-      const result = await res.json();
 
       if (res.ok) {
+        const result = await res.json();
         setData(result);
+        setLoading(false);
       } else if (res.status === 401) {
-        // ✅ Session expired handler
-        localStorage.removeItem("sellerToken");
-        localStorage.removeItem("sellerUser");
-        navigate("/Seller/login?message=session_expired");
+        handleSessionExpired();
+      } else {
+        showError("Failed to load dashboard data");
       }
     } catch (error) {
       console.error("Dashboard Fetch Error:", error);
+      showError("Network error. Please check your connection.");
     } finally {
       setLoading(false);
     }
-  }, [navigate]);
+  }, [navigate, handleSessionExpired]);
 
   // --- 2. INITIAL LOAD ---
   useEffect(() => {
+    const token = localStorage.getItem("sellerToken");
+    const userData = localStorage.getItem("sellerUser");
+
+    if (!token || !userData) {
+      navigate("/Seller/login");
+      return;
+    }
+
+    // Load data immediately
     fetchDashboardData();
     fetchLowStock();
-  }, [fetchDashboardData, fetchLowStock]);
+  }, [fetchDashboardData, fetchLowStock, navigate]);
 
   // --- 3. SOCKET.IO REAL-TIME LOGIC ---
   useEffect(() => {
     let seller = null;
     try {
-      const stored =
-        localStorage.getItem("sellerUser") || localStorage.getItem("user");
+      const stored = localStorage.getItem("sellerUser");
       if (stored && stored !== "undefined") {
         seller = JSON.parse(stored);
       }
@@ -102,12 +131,9 @@ export default function Dashboard() {
     }
 
     if (socket && seller?._id) {
-      console.log("🔌 Dashboard Joining Room:", seller._id);
       socket.emit("join_seller_room", seller._id);
 
-      // ⚡ LIVE UPDATE: Refresh stats silently when a new order arrives
       const handleOrderAlert = () => {
-        console.log("💰 Dashboard: New Order Received - Refreshing Stats");
         fetchDashboardData();
         fetchLowStock();
       };
@@ -126,27 +152,31 @@ export default function Dashboard() {
       style: "currency",
       currency: "INR",
       maximumFractionDigits: 0,
-    }).format(amount);
+    }).format(amount || 0);
   };
 
   const handleRemoveProduct = async (id) => {
     if (!window.confirm("Are you sure you want to remove this product?"))
       return;
+
     try {
       const token = localStorage.getItem("sellerToken");
       const res = await fetch(`${API_URL}/api/products/${id}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-        credentials: "include", // ✅ Added for session support
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
       });
 
       if (res.ok) {
-        showSuccess(`Product deleted successfully`);
+        showSuccess("Product deleted successfully");
         fetchDashboardData();
         fetchLowStock();
       } else {
         const result = await res.json();
         showError(result.message || "Failed to delete product");
+        if (res.status === 401) handleSessionExpired();
       }
     } catch (error) {
       showError("Server error. Please try again.");
@@ -157,7 +187,7 @@ export default function Dashboard() {
     {
       title: "Total Revenue",
       value: loading ? "..." : formatCurrency(data.stats.totalRevenue),
-      trend: loading ? "..." : data.trends?.revenue || "0%",
+      trend: data.trends?.revenue || "0%",
       trendUp: data.trends?.revenueIsUp,
       icon: BarChart3,
     },
@@ -170,7 +200,7 @@ export default function Dashboard() {
     {
       title: "Total Products",
       value: loading ? "..." : data.stats.totalProducts,
-      trend: loading ? "..." : data.trends?.products || "Active",
+      trend: "Active",
       icon: Package,
     },
     {
@@ -181,25 +211,34 @@ export default function Dashboard() {
     },
   ];
 
+  if (loading && !data.seller.name) {
+    return (
+      <div className="bg-white dark:bg-[#030712] min-h-screen flex flex-col items-center justify-center">
+        <Loader2 className="animate-spin h-12 w-12 text-orange-500" />
+        <p className="mt-4 text-slate-600 dark:text-slate-400">
+          Loading your store...
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-white dark:bg-[#030712] min-h-screen transition-colors duration-500 font-sans flex flex-col">
       <SellerNavbar isLoggedIn={true} />
 
       <main className="flex-grow max-w-7xl w-full mx-auto px-6 py-12">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
-          <div>
-            <h1 className="text-5xl font-black text-slate-900 dark:text-white tracking-tighter">
-              {loading ? "Loading..." : data.seller.businessName || "My Store"}
-              <span className="text-orange-500">.</span>
-            </h1>
-            <p className="text-slate-500 dark:text-slate-400 font-medium mt-3 text-lg">
-              Welcome back,{" "}
-              <span className="text-slate-900 dark:text-slate-200 font-bold">
-                {loading ? "..." : data.seller.name}
-              </span>
-              .
-            </p>
-          </div>
+        <div className="mb-12">
+          <h1 className="text-5xl font-black text-slate-900 dark:text-white tracking-tighter uppercase">
+            {data.seller.businessName || "My Store"}
+            <span className="text-orange-500">.</span>
+          </h1>
+          <p className="text-slate-500 dark:text-slate-400 font-medium mt-3 text-lg">
+            Welcome back,{" "}
+            <span className="text-slate-900 dark:text-slate-200 font-bold">
+              {data.seller.name}
+            </span>
+            .
+          </p>
         </div>
 
         {/* STATS GRID */}
@@ -233,19 +272,13 @@ export default function Dashboard() {
           ))}
         </div>
 
-        {/* MAIN CONTENT SPLIT */}
         <div className="grid lg:grid-cols-3 gap-8">
           {/* RECENT PRODUCTS TABLE */}
           <div className="lg:col-span-2 bg-white dark:bg-slate-900/20 rounded-[3rem] border border-slate-100 dark:border-slate-800 overflow-hidden shadow-sm">
             <div className="p-8 border-b border-slate-50 dark:border-slate-800 flex justify-between items-center bg-slate-50/30 dark:bg-transparent">
-              <div>
-                <h3 className="text-xl font-black text-slate-900 dark:text-white">
-                  Recent Inventory
-                </h3>
-                <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-1">
-                  Active Listings
-                </p>
-              </div>
+              <h3 className="text-xl font-black text-slate-900 dark:text-white">
+                Recent Inventory
+              </h3>
               <Settings
                 size={20}
                 className="text-slate-400 cursor-pointer hover:rotate-90 transition-transform duration-500"
@@ -262,19 +295,7 @@ export default function Dashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
-                  {loading ? (
-                    <tr>
-                      <td
-                        colSpan="4"
-                        className="px-8 py-10 text-center text-slate-500"
-                      >
-                        <div className="flex justify-center items-center gap-2">
-                          <Loader2 className="animate-spin" size={20} /> Loading
-                          inventory...
-                        </div>
-                      </td>
-                    </tr>
-                  ) : data.recentProducts.length === 0 ? (
+                  {data.recentProducts.length === 0 ? (
                     <tr>
                       <td
                         colSpan="4"
@@ -304,91 +325,66 @@ export default function Dashboard() {
           {/* LOW STOCK ALERT SIDEBAR */}
           <div className="space-y-6">
             <div className="bg-slate-900 dark:bg-slate-900/60 rounded-[2.5rem] p-8 text-white relative border border-slate-800 shadow-2xl">
-              <div className="relative z-10">
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center gap-2 bg-red-500/10 text-red-500 w-fit px-3 py-1 rounded-full border border-red-500/20">
-                    <AlertCircle size={14} />
-                    <span className="text-[10px] font-black uppercase tracking-widest">
-                      Inventory Alert
-                    </span>
-                  </div>
-                  <span className="text-[10px] font-black text-slate-500 uppercase">
-                    {lowStockItems.length} Items
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-2 bg-red-500/10 text-red-500 px-3 py-1 rounded-full border border-red-500/20">
+                  <AlertCircle size={14} />
+                  <span className="text-[10px] font-black uppercase tracking-widest">
+                    Alert
                   </span>
                 </div>
-
-                <h3 className="text-2xl font-black mb-4 tracking-tighter">
-                  Critical Stock
-                </h3>
-
-                <div className="space-y-4 mb-8 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                  {lowStockItems.length > 0 ? (
-                    lowStockItems.map((prod) => (
-                      <div
-                        key={prod._id}
-                        onClick={() =>
-                          navigate(`/Seller/edit-product/${prod._id}`)
-                        }
-                        className="group cursor-pointer p-3 rounded-2xl hover:bg-white/5 transition-all border border-transparent hover:border-slate-800"
-                      >
-                        <div className="flex justify-between items-center gap-4">
-                          <div className="flex-grow min-w-0">
-                            <p className="text-sm font-bold text-slate-200 group-hover:text-orange-500 transition-colors truncate">
-                              {prod.name}
-                            </p>
-                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">
-                              SKU: {prod._id.slice(-6).toUpperCase()}
-                            </p>
-                          </div>
-                          <div className="shrink-0 text-right">
-                            <span
-                              className={`text-xs font-black px-2 py-1 rounded-lg ${
-                                prod.stock === 0
-                                  ? "bg-red-500 text-white"
-                                  : "bg-orange-500/20 text-orange-500 border border-orange-500/20"
-                              }`}
-                            >
-                              {prod.stock}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="w-full bg-slate-800 h-1 mt-3 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full transition-all duration-1000 ${
-                              prod.stock === 0 ? "bg-red-500" : "bg-orange-500"
-                            }`}
-                            style={{
-                              width: `${Math.max((prod.stock / 5) * 100, 5)}%`,
-                            }}
-                          ></div>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="py-10 text-center bg-slate-800/20 rounded-[2rem] border border-dashed border-slate-800">
-                      <CheckCircle2
-                        size={32}
-                        className="mx-auto text-emerald-500 mb-3 opacity-20"
-                      />
-                      <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">
-                        Inventory Healthy
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                <button
-                  onClick={() => navigate("/Seller/products")}
-                  className="w-full py-4 bg-white text-slate-900 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-orange-500 hover:text-white transition-all active:scale-95"
-                >
-                  View Full Inventory
-                </button>
+                <span className="text-[10px] font-black text-slate-500 uppercase">
+                  {lowStockItems.length} Items
+                </span>
               </div>
+              <h3 className="text-2xl font-black mb-4 tracking-tighter">
+                Critical Stock
+              </h3>
+              <div className="space-y-4 mb-8 max-h-[300px] overflow-y-auto custom-scrollbar">
+                {lowStockItems.length > 0 ? (
+                  lowStockItems.map((prod) => (
+                    <div
+                      key={prod._id}
+                      onClick={() =>
+                        navigate(`/Seller/edit-product/${prod._id}`)
+                      }
+                      className="group cursor-pointer p-3 rounded-2xl hover:bg-white/5 transition-all border border-transparent hover:border-slate-800"
+                    >
+                      <div className="flex justify-between items-center gap-4">
+                        <div className="flex-grow min-w-0">
+                          <p className="text-sm font-bold text-slate-200 group-hover:text-orange-500 transition-colors truncate">
+                            {prod.name}
+                          </p>
+                        </div>
+                        <span
+                          className={`text-xs font-black px-2 py-1 rounded-lg ${
+                            prod.stock === 0
+                              ? "bg-red-500 text-white"
+                              : "bg-orange-500/20 text-orange-500"
+                          }`}
+                        >
+                          {prod.stock}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="py-10 text-center bg-slate-800/20 rounded-[2rem] border border-dashed border-slate-800">
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+                      Inventory Healthy
+                    </p>
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => navigate("/Seller/products")}
+                className="w-full py-4 bg-white text-slate-900 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-orange-500 hover:text-white transition-all active:scale-95"
+              >
+                View Full Inventory
+              </button>
             </div>
           </div>
         </div>
       </main>
-
       <SellerFooter />
     </div>
   );
@@ -424,14 +420,14 @@ function ProductRow({ id, name, stock, amount, onRemove, onEdit }) {
           <button
             onClick={() => onEdit(id)}
             className="p-2.5 text-slate-400 hover:text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-500/10 transition-all border border-transparent hover:border-orange-200 dark:hover:border-orange-900/30"
-            title="Edit Product"
+            title="Edit"
           >
             <Edit3 size={18} />
           </button>
           <button
             onClick={() => onRemove(id)}
             className="p-2.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all border border-transparent hover:border-red-200 dark:hover:border-red-900/30"
-            title="Remove Product"
+            title="Remove"
           >
             <Trash2 size={18} />
           </button>

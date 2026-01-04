@@ -1,33 +1,32 @@
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import Seller from "../models/seller.js";
-import Session from "../models/Session.js"; // ✅ Matches export default
+import Session from "../models/Session.js";
+import SellerSession from "../models/SellerSession.js"; // ✅ New Seller-specific session model
 
 /* ======================================================
-   1. PROTECT (For Customers & Admins)
+    1. PROTECT (For Customers & Admins)
 ====================================================== */
 export const protect = async (req, res, next) => {
   let token;
 
-  // Check for token in Headers or Cookies
   if (
     req.headers.authorization &&
     req.headers.authorization.startsWith("Bearer")
   ) {
     token = req.headers.authorization.split(" ")[1];
   } else if (req.cookies && req.cookies.accessToken) {
-    token = req.cookies.accessToken; // Support for HttpOnly cookies
+    token = req.cookies.accessToken;
   }
 
   if (token) {
     try {
-      // 1. Verify Token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      // 2. Check if this session exists in DB
+      // Check the generic User Session model
       const sessionExists = await Session.findOne({
-        user: decoded.id, // Matches Session Model 'user' field
-        refreshToken: token, // Matches Session Model 'refreshToken' field
+        user: decoded.id,
+        refreshToken: token,
       });
 
       if (!sessionExists) {
@@ -36,7 +35,6 @@ export const protect = async (req, res, next) => {
         });
       }
 
-      // 3. Fetch User (Customers/Admins)
       req.user = await User.findById(decoded.id).select("-password");
 
       if (!req.user) {
@@ -53,7 +51,7 @@ export const protect = async (req, res, next) => {
 
       next();
     } catch (error) {
-      console.error("Auth Middleware Error:", error.message);
+      console.error("User Auth Error:", error.message);
       if (error.name === "TokenExpiredError") {
         return res
           .status(401)
@@ -61,97 +59,80 @@ export const protect = async (req, res, next) => {
       }
       return res.status(401).json({ message: "Not authorized, token failed" });
     }
-  }
-
-  if (!token) {
+  } else {
     return res.status(401).json({ message: "Not authorized, no token" });
   }
 };
 
 /* ======================================================
-   2. PROTECT SELLER (For Vendors Only) 
-   ✅ UPDATED WITH HYBRID AUTH TO FIX INSTANT REDIRECT
+    2. PROTECT SELLER (Isolated for Vendors)
+    ✅ FIXED: Uses SellerSession model for total isolation
 ====================================================== */
 export const protectSeller = async (req, res, next) => {
   let token;
 
-  // 🟢 STEP A: CHECK FOR EXPRESS SESSION FIRST (Prevents Redirect Loop)
-  // This recognizes the session cookie created during login
+  // 1. Extract Token from Header or Cookies
+  if (req.headers.authorization?.startsWith("Bearer")) {
+    token = req.headers.authorization.split(" ")[1];
+  } else if (req.cookies?.accessToken) {
+    token = req.cookies.accessToken;
+  } else if (req.cookies?.sellerAccessToken) {
+    token = req.cookies.sellerAccessToken;
+  }
+
+  // 🔵 STEP A: JWT LOGIC (Primary for API)
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+      // ✅ KEY CHANGE: Check SellerSession instead of Session
+      const sessionExists = await SellerSession.findOne({
+        seller: decoded.id,
+        refreshToken: token,
+      });
+
+      if (sessionExists) {
+        req.seller = await Seller.findById(decoded.id).select("-password");
+
+        if (req.seller && req.seller.isActive) {
+          // Sync with Express Session (Cookie-based fallback)
+          if (req.session) {
+            req.session.sellerId = req.seller._id;
+            req.session.role = "seller";
+          }
+          return next();
+        } else if (req.seller && !req.seller.isActive) {
+          return res.status(403).json({ message: "Seller account suspended." });
+        }
+      }
+    } catch (error) {
+      console.log("Seller JWT Validation failed, checking session...");
+    }
+  }
+
+  // 🟢 STEP B: EXPRESS SESSION FALLBACK (Cookie-based)
   if (req.session && req.session.sellerId) {
     try {
       req.seller = await Seller.findById(req.session.sellerId).select(
         "-password"
       );
       if (req.seller && req.seller.isActive) {
-        return next(); // ✅ Session found and valid, proceed immediately
+        return next();
       }
     } catch (error) {
-      console.error("Session Auth Error:", error.message);
+      console.error("Seller Session Error:", error.message);
     }
   }
 
-  // 🔵 STEP B: FALLBACK TO JWT TOKEN (Headers or Cookies)
-  if (
-    req.headers.authorization &&
-    req.headers.authorization.startsWith("Bearer")
-  ) {
-    token = req.headers.authorization.split(" ")[1];
-  } else if (req.cookies && req.cookies.accessToken) {
-    token = req.cookies.accessToken;
-  }
-
-  if (token) {
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-      // Verify Session in DB for Token-based access
-      const sessionExists = await Session.findOne({
-        user: decoded.id,
-        refreshToken: token,
-      });
-
-      // Fetch Seller data
-      req.seller = await Seller.findById(decoded.id).select("-password");
-
-      if (!req.seller) {
-        return res
-          .status(401)
-          .json({ message: "Not authorized, seller not found" });
-      }
-
-      if (!req.seller.isActive) {
-        return res
-          .status(403)
-          .json({ message: "Seller account is inactive or suspended." });
-      }
-
-      // ✅ RE-SYNC SESSION: Link JWT to Express Session if missing
-      if (req.session && !req.session.sellerId) {
-        req.session.sellerId = req.seller._id;
-        req.session.role = "seller";
-      }
-
-      next();
-    } catch (error) {
-      console.error("Seller Auth Error:", error.message);
-      if (error.name === "TokenExpiredError") {
-        return res
-          .status(401)
-          .json({ message: "Session expired, please login again" });
-      }
-      return res.status(401).json({ message: "Not authorized, token failed" });
-    }
-  }
-
-  if (!token && !req.session?.sellerId) {
-    return res
-      .status(401)
-      .json({ message: "Not authorized as seller, no session or token found" });
-  }
+  // ❌ STEP C: AUTHENTICATION FAILED
+  return res.status(401).json({
+    message: "Seller session expired. Please login again.",
+    redirect: "/Seller/login",
+  });
 };
 
 /* ======================================================
-   3. ADMIN (Role Check)
+    3. ADMIN (Role Check)
 ====================================================== */
 export const admin = (req, res, next) => {
   if (req.user && (req.user.role === "admin" || req.user.isAdmin)) {
@@ -159,4 +140,45 @@ export const admin = (req, res, next) => {
   } else {
     res.status(403).json({ message: "Not authorized as an admin" });
   }
+};
+
+/* ======================================================
+    4. OPTIONAL SELLER AUTH (For Public Store Pages)
+====================================================== */
+export const optionalSellerAuth = async (req, res, next) => {
+  let token;
+
+  if (req.headers.authorization?.startsWith("Bearer")) {
+    token = req.headers.authorization.split(" ")[1];
+  } else if (req.cookies?.accessToken) {
+    token = req.cookies.accessToken;
+  }
+
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const sessionExists = await SellerSession.findOne({
+        seller: decoded.id,
+        refreshToken: token,
+      });
+
+      if (sessionExists) {
+        req.seller = await Seller.findById(decoded.id).select("-password");
+      }
+    } catch (error) {
+      // Silent fail
+    }
+  }
+
+  if (!req.seller && req.session?.sellerId) {
+    try {
+      req.seller = await Seller.findById(req.session.sellerId).select(
+        "-password"
+      );
+    } catch (error) {
+      // Silent fail
+    }
+  }
+
+  next();
 };

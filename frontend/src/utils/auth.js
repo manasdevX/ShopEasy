@@ -10,7 +10,6 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 export const logout = async (role = "user") => {
   try {
     // 1. Tell the backend to destroy the session and clear cookies
-    // This hits the logoutUser controller we updated earlier
     await axios.post(
       `${API_URL}/api/auth/logout`,
       {},
@@ -28,10 +27,7 @@ export const logout = async (role = "user") => {
       localStorage.removeItem("user");
     }
 
-    // 3. Clear any generic shared data
-    localStorage.removeItem("cartItems"); // Optional: clear cart on logout
-
-    // 4. Force a hard refresh to the login page to kill all socket connections
+    // 3. Force a hard refresh to the login page to kill all socket connections
     window.location.href = role === "seller" ? "/Seller/login" : "/login";
   }
 };

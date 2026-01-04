@@ -1,6 +1,7 @@
 import Seller from "../models/seller.js";
 import Product from "../models/Product.js";
 import Order from "../models/Order.js";
+import SellerSession from "../models/SellerSession.js"; // ✅ New Import
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import sendEmail from "../utils/emailHelper.js";
@@ -16,7 +17,6 @@ const generateToken = (id) => {
 
 /**
  * Helper: Clear Seller Cache
- * Ensures that profile updates are reflected immediately by clearing Redis.
  */
 const clearSellerCache = async (sellerId) => {
   try {
@@ -56,23 +56,32 @@ export const registerSeller = async (req, res) => {
     });
 
     if (seller) {
-      // ✅ LINK SESSION FOR LOGIN PERSISTENCE
+      const token = generateToken(seller._id);
+
+      // ✅ 1. Create entry in SellerSession Collection
+      await SellerSession.create({
+        seller: seller._id,
+        refreshToken: token,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 Days
+        ipAddress: req.ip,
+        userAgent: req.headers["user-agent"],
+      });
+
+      // ✅ 2. Link Express Session for persistence
       req.session.sellerId = seller._id;
       req.session.role = "seller";
 
       req.session.save((err) => {
-        if (err) {
-          console.error("Session Save Error:", err);
+        if (err)
           return res
             .status(500)
             .json({ message: "Session initialization failed" });
-        }
         res.status(201).json({
           _id: seller._id,
           name: seller.name,
           email: seller.email,
           role: seller.role,
-          token: generateToken(seller._id),
+          token: token,
         });
       });
     } else {
@@ -102,22 +111,31 @@ export const loginSeller = async (req, res) => {
         .json({ message: "Invalid email/phone or password" });
     }
 
-    // ✅ LINK SESSION FOR INSTANT LOGIN PERSISTENCE
+    const token = generateToken(seller._id);
+
+    // ✅ 1. Create entry in SellerSession Collection (Total isolation from User sessions)
+    await SellerSession.create({
+      seller: seller._id,
+      refreshToken: token,
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 Days
+      ipAddress: req.ip,
+      userAgent: req.headers["user-agent"],
+    });
+
+    // ✅ 2. Link Express Session
     req.session.sellerId = seller._id;
     req.session.role = "seller";
 
     req.session.save((err) => {
-      if (err) {
-        console.error("Session Save Error:", err);
+      if (err)
         return res.status(500).json({ message: "Internal Server Error" });
-      }
       res.json({
         _id: seller._id,
         name: seller.name,
         email: seller.email,
         businessName: seller.businessName,
         role: seller.role,
-        token: generateToken(seller._id),
+        token: token,
       });
     });
   } catch (error) {
@@ -328,12 +346,10 @@ export const addBankDetails = async (req, res) => {
 
     await seller.save();
     await clearSellerCache(seller._id);
-    res
-      .status(200)
-      .json({
-        message: "Bank details updated",
-        bankDetails: seller.bankDetails,
-      });
+    res.status(200).json({
+      message: "Bank details updated",
+      bankDetails: seller.bankDetails,
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -348,7 +364,6 @@ export const getSellerDashboard = async (req, res) => {
   try {
     const sellerId = req.seller._id;
 
-    // Fetch all stats concurrently for better performance
     const [allProducts, orders, ratingStats] = await Promise.all([
       Product.find({ seller: sellerId }),
       Order.find({ "orderItems.seller": sellerId }),
@@ -407,11 +422,16 @@ export const searchSellerData = async (req, res) => {
 // @desc    Delete Seller Account
 export const deleteSellerAccount = async (req, res) => {
   try {
-    await clearSellerCache(req.seller._id);
-    await Seller.findByIdAndDelete(req.seller._id);
+    const sellerId = req.seller._id;
 
-    // ✅ Clear session on deletion
-    req.session.destroy();
+    // ✅ Clean up Specific Seller Sessions
+    await SellerSession.deleteMany({ seller: sellerId });
+    await clearSellerCache(sellerId);
+
+    await Seller.findByIdAndDelete(sellerId);
+
+    // ✅ Clear Express Session
+    if (req.session) req.session.destroy();
 
     res
       .status(200)
