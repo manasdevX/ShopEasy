@@ -20,6 +20,7 @@ import Reviews from "./pages/Reviews";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import Help from "./pages/Help";
+import ShippingPolicy from "./pages/ShippingPolicy";
 
 // --- SELLER PAGES ---
 import SellerLanding from "./pages/Seller/Landing";
@@ -181,6 +182,7 @@ export default function App() {
         <Route path="/Terms" element={<Terms />} />
         <Route path="/Privacy" element={<Privacy />} />
         <Route path="/Help" element={<Help />} />
+        <Route path="/Shipping-policy" element={<ShippingPolicy />} />
       </Routes>
     </>
   );

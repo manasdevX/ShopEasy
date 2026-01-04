@@ -1,19 +1,35 @@
+import { Link } from "react-router-dom";
+
 export default function AuthFooter() {
   return (
     <footer className="mt-auto py-4 text-center text-sm text-gray-500">
-      <p>
-        © {new Date().getFullYear()} ShopEasy. All rights reserved.
-      </p>
-      <div className="mt-1 space-x-4">
-        <span className="hover:underline cursor-pointer">
-          Terms
-        </span>
-        <span className="hover:underline cursor-pointer">
-          Privacy
-        </span>
-        <span className="hover:underline cursor-pointer">
-          Help
-        </span>
+      <div className="pt-8 border-t border-slate-100 dark:border-slate-900 text-center">
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          © {new Date().getFullYear()} ShopEasy. All rights reserved.
+        </p>
+        <div className="mt-2 flex justify-center gap-6 text-sm text-slate-500 dark:text-slate-500">
+          <Link
+          state={{origin : "/"}}
+            to="/Terms"
+            className="hover:underline hover:text-orange-500 transition-colors"
+          >
+            Terms
+          </Link>
+          <Link
+          state={{origin : "/"}}
+            to="/Privacy"
+            className="hover:underline hover:text-orange-500 transition-colors"
+          >
+            Privacy
+          </Link>
+          <Link
+          state={{origin : "/"}}
+            to="/Help"
+            className="hover:underline hover:text-orange-500 transition-colors"
+          >
+            Help
+          </Link>
+        </div>
       </div>
     </footer>
   );

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useSocket } from "../../context/SocketContext";
-import { logout } from "../../utils/auth"; // ✅ Using the new professional logout utility
+import { logout } from "../../utils/auth";
 import {
   Moon,
   Sun,
@@ -11,13 +11,11 @@ import {
   Package,
   ListOrdered,
   LogOut,
-  User,
-  Check,
   Store,
   LayoutDashboard,
   Loader2,
+  User,
   X,
-  Settings as SettingsIcon,
 } from "lucide-react";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
@@ -50,9 +48,7 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
   // --- SOCKET.IO SYNC ---
   useEffect(() => {
     if (!socket) return;
-
     setIsConnected(socket.connected);
-
     const onConnect = () => setIsConnected(true);
     const onDisconnect = () => setIsConnected(false);
     const onNotify = () => {
@@ -120,9 +116,8 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
     setIsDark(!isDark);
   };
 
-  // --- LOGOUT LOGIC ---
   const handleLogoutClick = () => {
-    logout("seller"); // ✅ Triggers the universal async logout logic
+    logout("seller");
   };
 
   // --- SEARCH LOGIC ---
@@ -139,9 +134,7 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
       try {
         const res = await fetch(
           `${API_URL}/api/sellers/search?query=${searchQuery}`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
+          { headers: { Authorization: `Bearer ${token}` } }
         );
         const result = await res.json();
         if (res.ok) setSearchResults(result.results);
@@ -155,7 +148,6 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
     return () => clearTimeout(delayDebounceFn);
   }, [searchQuery, token]);
 
-  // Click Outside logic
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (searchRef.current && !searchRef.current.contains(e.target))
@@ -183,60 +175,60 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
   return (
     <nav className="sticky top-0 z-[100] bg-white dark:bg-[#030712] border-b border-slate-100 dark:border-slate-800 transition-all duration-300">
       <div className="w-full px-4 sm:px-8 py-4">
-        <div className="flex items-center justify-between gap-8">
-          {/* LOGO */}
-          <Link
-            to={isAuth ? "/Seller/Dashboard" : "/Seller/Landing"}
-            className="flex items-center gap-2.5 shrink-0"
-          >
-            <div className="bg-orange-500 p-2 rounded-xl shadow-lg shadow-orange-500/20">
-              <Store className="text-white" size={22} />
-            </div>
-            <div className="hidden sm:block">
-              <span className="text-xl font-black tracking-tighter text-slate-900 dark:text-white block leading-none">
-                ShopEasy
-              </span>
-              <span className="text-[10px] font-black uppercase tracking-widest text-orange-500">
-                Seller Central
-              </span>
-            </div>
-          </Link>
+        {/* Main Header Row */}
+        <div className="flex items-center gap-6">
+          
+          {/* 1. LOGO SECTION */}
+          <div className="shrink-0">
+            <Link
+              to={isAuth ? "/Seller/Dashboard" : "/Seller/Landing"}
+              className="flex items-center gap-2.5"
+            >
+              <div className="bg-orange-500 p-2 rounded-xl shadow-lg shadow-orange-500/20">
+                <Store className="text-white" size={22} />
+              </div>
+              <div className="hidden md:block">
+                <span className="text-xl font-black tracking-tighter text-slate-900 dark:text-white block leading-none">
+                  ShopEasy
+                </span>
+                <span className="text-[10px] font-black uppercase tracking-widest text-orange-500">
+                  Seller Central
+                </span>
+              </div>
+            </Link>
+          </div>
 
-          {/* SEARCH BOX */}
-          <div className="flex-grow max-w-2xl relative" ref={searchRef}>
+          {/* 2. SEARCH BAR SECTION (Fills available space) */}
+          <div className="flex-grow max-w-4xl relative" ref={searchRef}>
             {isAuth && !isOnboarding && (
-              <>
-                <div className="relative group">
-                  <Search
-                    className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-orange-500 transition-colors"
-                    size={18}
-                  />
-                  <input
-                    type="text"
-                    placeholder="Search inventory or orders..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onFocus={() =>
-                      searchQuery.length > 2 && setShowDropdown(true)
-                    }
-                    className="w-full bg-slate-100 dark:bg-slate-900 border-none rounded-xl py-2.5 pl-12 pr-10 text-sm font-medium outline-none focus:ring-2 focus:ring-orange-500/20 transition-all"
-                  />
-                  {searchQuery && (
-                    <button
-                      onClick={() => setSearchQuery("")}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
-                    >
-                      <X size={14} />
-                    </button>
-                  )}
-                </div>
+              <div className="relative group">
+                <Search
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-orange-500 transition-colors"
+                  size={18}
+                />
+                <input
+                  type="text"
+                  placeholder="Search inventory or orders..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onFocus={() => searchQuery.length > 2 && setShowDropdown(true)}
+                  className="w-full bg-slate-100 dark:bg-slate-900 border-none rounded-xl py-2.5 pl-12 pr-10 text-sm font-medium outline-none focus:ring-2 focus:ring-orange-500/20 transition-all"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
 
+                {/* Search Results Dropdown */}
                 {showDropdown && (
                   <div className="absolute top-full mt-2 w-full bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-2xl overflow-hidden z-[101]">
                     {isSearching ? (
                       <div className="p-6 text-center text-slate-500 flex items-center justify-center gap-2 text-xs font-bold uppercase">
-                        <Loader2 className="animate-spin" size={16} />{" "}
-                        Searching...
+                        <Loader2 className="animate-spin" size={16} /> Searching...
                       </div>
                     ) : (
                       <div className="max-h-80 overflow-y-auto p-2">
@@ -256,12 +248,8 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
                                 className="w-10 h-10 rounded-lg object-cover bg-slate-100"
                               />
                               <div>
-                                <p className="text-sm font-bold dark:text-white line-clamp-1">
-                                  {p.name}
-                                </p>
-                                <p className="text-xs text-slate-500">
-                                  ₹{p.price} • Stock: {p.stock}
-                                </p>
+                                <p className="text-sm font-bold dark:text-white line-clamp-1">{p.name}</p>
+                                <p className="text-xs text-slate-500">₹{p.price} • Stock: {p.stock}</p>
                               </div>
                             </div>
                           ))
@@ -274,21 +262,15 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
                     )}
                   </div>
                 )}
-              </>
+              </div>
             )}
           </div>
 
-          {/* ACTIONS */}
-          <div className="flex items-center gap-4 sm:gap-6 shrink-0">
+          {/* 3. ACTIONS SECTION (Pushed to the right) */}
+          <div className="shrink-0 flex items-center gap-3 sm:gap-4 ml-auto">
             {isAuth && (
-              <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-slate-50 dark:bg-slate-900 rounded-full border border-slate-100 dark:border-slate-800">
-                <div
-                  className={`w-2 h-2 rounded-full ${
-                    isConnected
-                      ? "bg-emerald-500 shadow-[0_0_8px_#10b981]"
-                      : "bg-rose-500"
-                  } animate-pulse`}
-                />
+              <div className="hidden lg:flex items-center gap-2 px-3 py-1 bg-slate-50 dark:bg-slate-900 rounded-full border border-slate-100 dark:border-slate-800">
+                <div className={`w-2 h-2 rounded-full ${isConnected ? "bg-emerald-500 shadow-[0_0_8px_#10b981]" : "bg-rose-500"} animate-pulse`} />
                 <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
                   {isConnected ? "Live" : "Offline"}
                 </span>
@@ -297,7 +279,7 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
 
             <button
               onClick={toggleTheme}
-              className="p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500"
+              className="p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 cursor-pointer"
             >
               {isDark ? <Sun size={20} /> : <Moon size={20} />}
             </button>
@@ -315,42 +297,22 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
             )}
 
             {isAuth ? (
-              <div className="relative group">
+              <div className="relative group cursor-pointer">
                 <button className="flex items-center gap-2 group-hover:text-orange-500 transition-colors">
-                  <div className="w-8 h-8 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center text-orange-600 dark:text-orange-400 font-bold border border-orange-200 dark:border-orange-800 uppercase">
+                  <div className="w-8 h-8 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center text-orange-600 dark:text-orange-400 font-bold border border-orange-200 dark:border-orange-800 uppercase cursor-pointer">
                     {seller?.name?.charAt(0) || "S"}
                   </div>
-                  <ChevronDown
-                    size={16}
-                    className="text-slate-400 transition-transform group-hover:rotate-180"
-                  />
+                  <ChevronDown size={16} className="text-slate-400 transition-transform group-hover:rotate-180 cursor-pointer" />
                 </button>
-                <div className="absolute top-full right-0 w-52 pt-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
+                <div className="absolute top-full right-0 w-52 pt-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[110]">
                   <div className="bg-white dark:bg-slate-900 rounded-xl overflow-hidden shadow-xl border border-slate-100 dark:border-slate-800">
                     <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                        Store Manager
-                      </p>
-                      <p className="text-xs font-bold truncate dark:text-white mt-0.5">
-                        {seller?.email}
-                      </p>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Store Manager</p>
+                      <p className="text-xs font-bold truncate dark:text-white mt-0.5">{seller?.email}</p>
                     </div>
-                    <Link
-                      to="/Seller/Dashboard"
-                      className="block px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 text-sm font-medium"
-                    >
-                      Dashboard
-                    </Link>
-                    <Link
-                      to="/Seller/Settings"
-                      className="block px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 text-sm font-medium"
-                    >
-                      Settings
-                    </Link>
-                    <button
-                      onClick={handleLogoutClick}
-                      className="w-full text-left px-4 py-2.5 hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 text-sm font-bold flex items-center gap-2 border-t dark:border-slate-800"
-                    >
+                    <Link to="/Seller/Dashboard" className="block px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 text-sm font-medium">Dashboard</Link>
+                    <Link to="/Seller/Settings" className="block px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 text-sm font-medium">Settings</Link>
+                    <button onClick={handleLogoutClick} className="w-full text-left px-4 py-2.5 hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 text-sm font-bold flex items-center gap-2 border-t dark:border-slate-800 cursor-pointer">
                       <LogOut size={16} /> Logout
                     </button>
                   </div>
@@ -359,15 +321,24 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
             ) : (
               <Link
                 to="/Seller/login"
-                className="px-5 py-2.5 bg-slate-900 dark:bg-orange-500 text-white rounded-xl font-bold text-sm hover:scale-105 transition-all active:scale-95"
+                className="px-5 py-2.5 flex gap-1 text-white rounded-xl font-bold text-md hover:text-orange-500 transition-all"
               >
+                <User size={18} className="mt-1" />
                 Login
               </Link>
             )}
+
+            {/* FIXED BECOME A SELLER BUTTON */}
+            <Link
+              to="/"
+              className="hidden lg:flex items-center whitespace-nowrap px-5 py-2.5 rounded-xl border-2 border-orange-500/20 text-orange-500 hover:bg-orange-500 hover:text-white font-bold text-xs uppercase tracking-widest transition-all"
+            >
+              <Store size={16} className="mr-2" /> Switch to Buying
+            </Link>
           </div>
         </div>
 
-        {/* BOTTOM NAV LINKS (Visible only when authenticated and not onboarding) */}
+        {/* BOTTOM NAV LINKS */}
         {isAuth && !isOnboarding && (
           <div className="flex items-center gap-8 mt-6 border-t border-slate-50 dark:border-slate-900 pt-4 overflow-x-auto no-scrollbar">
             {navLinks.map((link) => {
@@ -377,15 +348,11 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
                   key={link.name}
                   to={link.path}
                   className={`flex items-center gap-2 pb-2 text-[11px] font-black uppercase tracking-[0.15em] transition-all relative whitespace-nowrap ${
-                    isActive
-                      ? "text-orange-500"
-                      : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                    isActive ? "text-orange-500" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                   }`}
                 >
                   <link.icon size={14} strokeWidth={3} /> {link.name}
-                  {isActive && (
-                    <span className="absolute bottom-0 left-0 w-full h-0.5 bg-orange-500 rounded-full" />
-                  )}
+                  {isActive && <span className="absolute bottom-0 left-0 w-full h-0.5 bg-orange-500 rounded-full" />}
                 </Link>
               );
             })}

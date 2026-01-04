@@ -1,9 +1,9 @@
 import React from "react";
 import { Search, Package, CreditCard, RefreshCcw, Truck, MessageSquare, ExternalLink } from "lucide-react";
 import Navbar from "../components/PaymentHeader";
-import Footer from "../components/PaymentFooter";
 
 export default function Help() {
+
   const categories = [
     { icon: <Package size={24} />, title: "Orders", desc: "Shipping & Fulfillment" },
     { icon: <CreditCard size={24} />, title: "Payments", desc: "Taxes & Payouts" },
@@ -13,8 +13,7 @@ export default function Help() {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-[#030712]">
-      <Navbar />
-      
+      <Navbar/>
       {/* Hero Section */}
       <div className="bg-slate-900 dark:bg-slate-950 py-20 px-6">
         <div className="max-w-4xl mx-auto text-center">
@@ -55,7 +54,6 @@ export default function Help() {
         </div>
       </main>
 
-      <Footer />
     </div>
   );
 }

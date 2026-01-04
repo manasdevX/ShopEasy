@@ -15,6 +15,9 @@ export default function SellerLanding() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
+    window.scrollTo(0, 0);
+    sessionStorage.removeItem('original_entry_path');
+    
     // Check if the seller token exists in localStorage
     const token = localStorage.getItem("sellerToken");
     setIsLoggedIn(!!token);

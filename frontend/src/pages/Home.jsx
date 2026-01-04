@@ -69,6 +69,10 @@ const getCategoryImage = (categoryName) => {
 export default function Home() {
   const isLoggedIn = !!localStorage.getItem("token");
 
+  useEffect(() => {
+  sessionStorage.removeItem('original_entry_path');
+}, []);
+
   // --- STATE ---
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);

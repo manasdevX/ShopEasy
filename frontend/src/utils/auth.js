@@ -28,6 +28,6 @@ export const logout = async (role = "user") => {
     }
 
     // 3. Force a hard refresh to the login page to kill all socket connections
-    window.location.href = role === "seller" ? "/Seller/login" : "/login";
+    window.location.href = role === "seller" ? "/Seller/Landing" : "/";
   }
 };
