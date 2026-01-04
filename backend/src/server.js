@@ -32,6 +32,7 @@ const io = new Server(server, {
   },
   transports: ["websocket", "polling"], // Fallback to polling if WebSocket is blocked
   allowEIO3: true,
+  pingTimeout: 60000, // Handle potential latency in cloud deployments
 });
 
 // 4. Attach 'io' to the Express app instance
@@ -48,7 +49,7 @@ io.on("connection", (socket) => {
 
   if (userId && userId !== "undefined") {
     socket.join(userId);
-    console.log(`📡 Socket connected: ${socket.id} (User: ${userId})`);
+    console.log(`📡 Socket connected: ${socket.id} (User ID: ${userId})`);
   }
 
   /**
@@ -69,6 +70,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", (reason) => {
+    // Optional: Log disconnections for debugging
     // console.log(`🔌 Client ${socket.id} disconnected: ${reason}`);
   });
 });
@@ -92,6 +94,6 @@ process.on("unhandledRejection", (err) => {
 
 process.on("uncaughtException", (err) => {
   console.log(`🚨 Uncaught Exception: ${err.message}`);
-  // Graceful exit if needed
-  // process.exit(1);
+  // Graceful exit recommended for uncaught exceptions to avoid unstable state
+  // server.close(() => process.exit(1));
 });

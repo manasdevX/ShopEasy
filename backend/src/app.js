@@ -19,7 +19,6 @@ const app = express();
 
 /**
  * 🟢 CLOUD DEPLOYMENT & PROXY CONFIG
- * Essential for Render/Vercel to allow 'secure: true' cookies over HTTPS.
  */
 app.set("trust proxy", 1);
 
@@ -27,7 +26,7 @@ app.set("trust proxy", 1);
 app.use(
   cors({
     origin: ["http://localhost:5173", "https://shop-easy-livid.vercel.app"],
-    credentials: true, // ✅ Required to allow cookies to be sent and received
+    credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: [
       "Content-Type",
@@ -44,34 +43,35 @@ app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
 /**
  * 🟢 SESSION CONFIGURATION
- * Optimized to prevent database bloat and ensure cookie/session alignment.
+ * Optimized to stop guest session bloat.
  */
 app.use(
   session({
     secret: process.env.SESSION_SECRET || "shopeasy_secret_77",
     resave: false,
-    saveUninitialized: false, // ✅ CRITICAL: Prevents empty session documents for guest visitors
+    // ✅ saveUninitialized: false ensures NO document is created until you
+    // explicitly add data (like req.session.userId = user._id)
+    saveUninitialized: false,
     proxy: true,
     name: "shopeasy.sid",
     store: MongoStore.create({
       mongoUrl: process.env.MONGO_URI,
-      // 🟢 Reduced TTL to 1 day (86400 seconds) to clear data faster
       ttl: 24 * 60 * 60,
-      autoRemove: "native", // Uses MongoDB's internal TTL index for automatic deletion
+      autoRemove: "native",
+      // 🟢 Change the collection name so it doesn't conflict with your manual model
+      collectionName: "app_sessions",
     }),
     cookie: {
-      secure: process.env.NODE_ENV === "production", // ✅ True on HTTPS
+      secure: process.env.NODE_ENV === "production",
       httpOnly: true,
-      // 🟢 'none' allows cookies to travel between Vercel (Frontend) and Render (Backend)
       sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-      maxAge: 24 * 60 * 60 * 1000, // 🟢 1 day (Matches the Store TTL for consistency)
+      maxAge: 24 * 60 * 60 * 1000,
     },
   })
 );
 
 /**
  * 🟢 SOCKET.IO INTEGRATION
- * Attaches the socket instance to the request object for real-time controllers.
  */
 app.use((req, res, next) => {
   req.io = req.app.get("socketio");
@@ -88,9 +88,6 @@ app.use("/api/cart", cartRoutes);
 app.use("/api/payment", paymentRoutes);
 app.use("/api/notifications", notificationRoutes);
 
-/**
- * Health Check for Uptime Monitoring
- */
 app.get("/health", (req, res) => {
   res.status(200).json({
     status: "active",
@@ -99,9 +96,6 @@ app.get("/health", (req, res) => {
   });
 });
 
-/**
- * 🛡️ 404 ROUTE HANDLER
- */
 app.use((req, res) => {
   res.status(404).json({
     success: false,
@@ -109,9 +103,6 @@ app.use((req, res) => {
   });
 });
 
-/**
- * 🚨 GLOBAL ERROR HANDLER
- */
 app.use((err, req, res, next) => {
   console.error("🔥 Server Error Stack:", err.stack);
   const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
