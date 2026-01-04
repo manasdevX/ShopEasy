@@ -19,7 +19,11 @@ const PORT = process.env.PORT || 5000;
 const server = http.createServer(app);
 
 // 3. Initialize Socket.IO with CORS settings
-// ✅ These MUST match the CORS settings in app.js
+/**
+ * ✅ MATCHED CORS CONFIGURATION
+ * withCredentials: true must be set on both the Express app and Socket.IO
+ * to ensure sessions are shared across the handshake.
+ */
 const io = new Server(server, {
   cors: {
     origin: [
@@ -27,44 +31,62 @@ const io = new Server(server, {
       "https://shop-easy-livid.vercel.app", // Vercel Production
     ],
     methods: ["GET", "POST", "PUT", "DELETE"],
-    credentials: true,
+    credentials: true, // ✅ Required for session-based socket auth
   },
+  // Adding transparency for production stability
+  transports: ["websocket", "polling"],
+  allowEIO3: true,
 });
 
 // 4. Attach 'io' to the Express app instance
-// This allows req.io to be accessed in app.js middleware
+// This allows req.io to be accessed in controllers via req.app.get("socketio")
 app.set("socketio", io);
 
 // 5. Handle Real-Time Connections
 io.on("connection", (socket) => {
-  // 🔍 Optional: Detective Logger to track who connects
-  // console.log(`✅ Socket Connected: ${socket.id}`);
-
-  // Identification via query string (Current setup)
+  /**
+   * 📡 IDENTITY MANAGEMENT
+   * We use the userId passed from the frontend query to place the user/seller
+   * in a unique room. This allows us to send notifications to specific IDs.
+   */
   const userId = socket.handshake.query.userId;
-  if (userId) {
+
+  if (userId && userId !== "undefined") {
     socket.join(userId);
-    console.log(`📡 User ${userId} joined personal room`);
+    console.log(`📡 Client ${socket.id} joined room: ${userId}`);
   }
 
-  // Seller specific rooms (For Dashboard Alerts)
+  // ✅ SELLER SPECIFIC ROOM
+  // Used for real-time order alerts and dashboard refreshes
   socket.on("join_seller_room", (sellerId) => {
-    if (sellerId) {
+    if (sellerId && sellerId !== "undefined") {
       socket.join(sellerId);
-      console.log(`👨‍💼 Seller ${sellerId} joined notification room`);
+      console.log(`👨‍💼 Seller Room Active: ${sellerId}`);
     }
   });
 
-  socket.on("disconnect", () => {
-    // console.log("❌ Client Disconnected:", socket.id);
+  // Handle errors silently to prevent server crashes
+  socket.on("error", (err) => {
+    console.error(`❌ Socket Error for ${socket.id}:`, err.message);
+  });
+
+  socket.on("disconnect", (reason) => {
+    // console.log(`🔌 Client Disconnected (${reason}): ${socket.id}`);
   });
 });
 
 // 6. Start the Server
 server.listen(PORT, () => {
-  console.log("========================================");
+  console.log("==========================================");
   console.log(`🚀 SERVER RUNNING ON PORT: ${PORT}`);
-  console.log(`📡 SOCKET.IO ENGINE: Initialized`);
-  console.log(`🔒 SESSION MODE: Secure & Trust Proxy Active`);
-  console.log("========================================");
+  console.log(`📡 SOCKET.IO ENGINE: Ready`);
+  console.log(`🌍 ENVIRONMENT: ${process.env.NODE_ENV || "development"}`);
+  console.log(`🔒 SESSION SECURITY: Cookie Sync Enabled`);
+  console.log("==========================================");
+});
+
+// Handle unhandled promise rejections for server stability
+process.on("unhandledRejection", (err) => {
+  console.log(`🚨 Unhandled Rejection: ${err.message}`);
+  // server.close(() => process.exit(1)); // Optional: close server
 });

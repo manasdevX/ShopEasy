@@ -13,8 +13,6 @@ export default function Login() {
 
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
-  const [identifierError, setIdentifierError] = useState("");
-  const [passwordError, setPasswordError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -23,10 +21,32 @@ export default function Login() {
     autofill:shadow-[inset_0_0_0px_1000px_#ffffff] dark:autofill:shadow-[inset_0_0_0px_1000px_#1e293b]
     autofill:text-fill-slate-900 dark:autofill:text-fill-white border-gray-300 dark:border-slate-700`;
 
+  const handleLoginSuccess = (data) => {
+    // 1. Store the JWT token for API headers
+    localStorage.setItem("sellerToken", data.token);
+
+    // 2. Store user profile for UI state
+    const userProfile = {
+      _id: data._id || data.user?._id,
+      name: data.name || data.user?.name,
+      email: data.email || data.user?.email,
+      businessName: data.businessName || data.user?.businessName,
+      role: data.role || data.user?.role || "seller",
+    };
+    localStorage.setItem("sellerUser", JSON.stringify(userProfile));
+
+    showSuccess("Login successful!");
+
+    // 3. Small delay (400ms) to ensure browser cookie-store and
+    // localStorage are fully synchronized before Dashboard mounts
+    setTimeout(() => {
+      navigate("/Seller/Dashboard");
+    }, 400);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Validation Logic
     const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
     const isValidPhone = (phone) => /^[0-9]{10}$/.test(phone);
 
@@ -54,27 +74,18 @@ export default function Login() {
       const res = await fetch(`${API_URL}/api/sellers/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include", // ✅ Essential to accept shopeasy.sid session cookies
+        credentials: "include", // ✅ Required for shopeasy.sid session cookie
         body: JSON.stringify({ email: identifier, password }),
       });
 
       const data = await res.json();
+
       if (!res.ok) {
         showError(data.message || "Login failed");
         return;
       }
 
-      // === AUTH PERSISTENCE ===
-      localStorage.setItem("sellerToken", data.token);
-      localStorage.setItem("sellerUser", JSON.stringify(data.user));
-
-      showSuccess("Login successful!");
-
-      // ✅ FIX: Small delay ensures the cookie is written to the browser
-      // before Dashboard tries to fetch data, preventing immediate 401s.
-      setTimeout(() => {
-        navigate("/Seller/Dashboard");
-      }, 400);
+      handleLoginSuccess(data);
     } catch (error) {
       console.error("Login Error:", error);
       showError("Server error. Please try again.");
@@ -86,15 +97,17 @@ export default function Login() {
   const googleLogin = useGoogleLogin({
     onSuccess: async (tokenResponse) => {
       try {
+        setLoading(true);
         const res = await fetch(`${API_URL}/api/auth/google`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          credentials: "include", // ✅ Essential for session cookies
+          credentials: "include", // ✅ Required for session persistence
           body: JSON.stringify({
             token: tokenResponse.access_token,
             role: "seller",
           }),
         });
+
         const data = await res.json();
 
         if (res.ok) {
@@ -107,26 +120,19 @@ export default function Login() {
               },
             });
           } else {
-            localStorage.setItem("sellerToken", data.token);
-            localStorage.setItem(
-              "sellerUser",
-              JSON.stringify(data.user || data)
-            );
-
-            showSuccess("Login successful!");
-
-            // ✅ Fix for session race condition
-            setTimeout(() => {
-              navigate("/Seller/Dashboard");
-            }, 400);
+            handleLoginSuccess(data);
           }
         } else {
           showError(data.message || "Google Login Failed");
         }
-      } catch {
+      } catch (error) {
+        console.error("Google Login Error:", error);
         showError("Google Login Connection Failed");
+      } finally {
+        setLoading(false);
       }
     },
+    onError: () => showError("Google login failed"),
   });
 
   return (
@@ -139,48 +145,29 @@ export default function Login() {
             ShopEasy
           </h1>
           <p className="text-center text-gray-500 dark:text-slate-400 mb-8 font-medium">
-            Login to your account
+            Seller Login
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <input
                 type="text"
-                autoComplete="off"
+                autoComplete="email"
                 placeholder="Email or Phone Number"
                 value={identifier}
-                onChange={(e) => {
-                  setIdentifier(e.target.value);
-                  setIdentifierError("");
-                }}
-                className={`${inputBase} ${
-                  identifierError
-                    ? "border-red-500"
-                    : "focus:ring-2 focus:ring-orange-400"
-                }`}
+                onChange={(e) => setIdentifier(e.target.value)}
+                className={`${inputBase} focus:ring-2 focus:ring-orange-400`}
               />
-              {identifierError && (
-                <p className="text-red-500 text-xs mt-1 ml-1">
-                  {identifierError}
-                </p>
-              )}
             </div>
 
             <div className="relative">
               <input
                 type={showPassword ? "text" : "password"}
                 placeholder="Password"
-                autoComplete="off"
+                autoComplete="current-password"
                 value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  setPasswordError("");
-                }}
-                className={`${inputBase} pr-12 ${
-                  passwordError
-                    ? "border-red-500"
-                    : "focus:ring-2 focus:ring-orange-400"
-                }`}
+                onChange={(e) => setPassword(e.target.value)}
+                className={`${inputBase} pr-12 focus:ring-2 focus:ring-orange-400`}
               />
               <button
                 type="button"
@@ -230,8 +217,9 @@ export default function Login() {
             className={`w-full flex items-center justify-center gap-3 
               bg-[#e8f0fe] dark:bg-slate-800 hover:bg-[#dfe9fd] dark:hover:bg-slate-700
               text-[#1a73e8] dark:text-blue-400 font-medium 
-              py-3 rounded-lg transition
-              ${loading ? "opacity-60 cursor-not-allowed" : ""}`}
+              py-3 rounded-lg transition ${
+                loading ? "opacity-60 cursor-not-allowed" : ""
+              }`}
           >
             <img
               src="https://developers.google.com/identity/images/g-logo.png"
