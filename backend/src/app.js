@@ -19,7 +19,7 @@ const app = express();
 
 /**
  * 🟢 CLOUD DEPLOYMENT & PROXY CONFIG
- * Essential for Render/Vercel to allow cookies over HTTPS.
+ * Essential for Render/Vercel to allow 'secure: true' cookies over HTTPS.
  */
 app.set("trust proxy", 1);
 
@@ -27,7 +27,7 @@ app.set("trust proxy", 1);
 app.use(
   cors({
     origin: ["http://localhost:5173", "https://shop-easy-livid.vercel.app"],
-    credentials: true, // ✅ Allows cookies to be sent and received
+    credentials: true, // ✅ Required to allow cookies to be sent and received
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: [
       "Content-Type",
@@ -44,33 +44,34 @@ app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
 /**
  * 🟢 SESSION CONFIGURATION
- * This manages the 'shopeasy.sid' cookie to prevent instant redirects.
+ * Optimized to prevent database bloat and ensure cookie/session alignment.
  */
 app.use(
   session({
     secret: process.env.SESSION_SECRET || "shopeasy_secret_77",
     resave: false,
-    saveUninitialized: false,
-    proxy: true, // ✅ Required for secure: true behind a proxy
+    saveUninitialized: false, // ✅ CRITICAL: Prevents empty session documents for guest visitors
+    proxy: true,
     name: "shopeasy.sid",
     store: MongoStore.create({
       mongoUrl: process.env.MONGO_URI,
-      ttl: 14 * 24 * 60 * 60, // 14 days
-      autoRemove: "native",
+      // 🟢 Reduced TTL to 1 day (86400 seconds) to clear data faster
+      ttl: 24 * 60 * 60,
+      autoRemove: "native", // Uses MongoDB's internal TTL index for automatic deletion
     }),
     cookie: {
-      secure: process.env.NODE_ENV === "production", // ✅ True in production (HTTPS)
+      secure: process.env.NODE_ENV === "production", // ✅ True on HTTPS
       httpOnly: true,
-      // 'none' allows cookies between Vercel and Render. 'lax' for localhost.
+      // 🟢 'none' allows cookies to travel between Vercel (Frontend) and Render (Backend)
       sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      maxAge: 24 * 60 * 60 * 1000, // 🟢 1 day (Matches the Store TTL for consistency)
     },
   })
 );
 
 /**
  * 🟢 SOCKET.IO INTEGRATION
- * Attaches the socket instance to the request object for real-time order alerts.
+ * Attaches the socket instance to the request object for real-time controllers.
  */
 app.use((req, res, next) => {
   req.io = req.app.get("socketio");
