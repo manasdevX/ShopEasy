@@ -2,14 +2,13 @@ import React, { useState, useEffect } from "react";
 import { Search, ChevronDown, MessageSquare, HelpCircle, ArrowLeft } from "lucide-react";
 import Navbar from "../components/PaymentHeader";
 import Footer from "../components/PaymentFooter";
-import { useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 export default function FAQs() {
-  const location = useLocation();
-  const Start = location.state?.origin;
-
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState(null);
+
+  const navigate = useNavigate();
 
   // Auto-scroll to top on load
   useEffect(() => {
@@ -121,13 +120,13 @@ export default function FAQs() {
         <div className="mt-20 p-8 bg-orange-500 rounded-[3rem] text-center text-white shadow-2xl shadow-orange-500/20">
           <h2 className="text-2xl font-black mb-2">Still have questions?</h2>
           <p className="opacity-90 mb-8 font-medium">Our dedicated seller support team is ready to help you 24/7.</p>
-          <button className="bg-white text-orange-500 px-8 py-4 rounded-2xl font-black text-sm transition-all hover:scale-105 active:scale-95 flex items-center gap-3 mx-auto">
+          <button onClick={() => navigate("/ContactUs" , { state: { fromContact: true } })} className="bg-white text-orange-500 px-8 py-4 rounded-2xl font-black text-sm transition-all hover:scale-105 active:scale-95 flex items-center gap-3 mx-auto">
             <MessageSquare size={18} /> Contact Support
           </button>
         </div>
       </main>
 
-      <Footer origin={Start} />
+      <Footer />
     </div>
   );
 }

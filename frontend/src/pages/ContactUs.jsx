@@ -7,14 +7,13 @@ import {
   MessageCircle,
   ArrowRight,
 } from "lucide-react";
-import PaymentHeader from "../components/PaymentHeader"; 
+import PaymentHeader from "../components/PaymentHeader";
 import PaymentFooter from "../components/PaymentFooter";
 import { useLocation } from "react-router-dom";
 
-
 export default function ContactPage() {
-    const location = useLocation();
-    const comeFrom = location.state?.fromContact;
+  const location = useLocation();
+  const comeFrom = location.state?.fromContact;
 
   const team = [
     { name: "Manas Agnihotri", phone: "+91 9690886564" },
@@ -55,9 +54,7 @@ export default function ContactPage() {
                     <h3 className="text-xl font-bold text-slate-900 dark:text-white">
                       {person.name}
                     </h3>
-                    <p
-                      className="inline-flex items-center gap-2 mt-4 text-orange-600 dark:text-orange-500 font-semibold group"
-                    >
+                    <p className="inline-flex items-center gap-2 mt-4 text-orange-600 dark:text-orange-500 font-semibold group">
                       {person.phone}
                     </p>
                   </div>
@@ -115,9 +112,18 @@ export default function ContactPage() {
                   </div>
 
                   <div className="pt-6 border-t border-slate-200 dark:border-slate-800 space-y-4">
+                    {/* Email Section */}
                     <div className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-400">
                       <Mail size={16} className="text-slate-400" />
                       <span>hello@shopeasy.com</span>
+                    </div>
+
+                    {/* Toll Free Number Section */}
+                    <div className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-400">
+                      <Phone size={16} className="text-slate-400" />
+                      <div className="flex flex-row inline-block">
+                        <span className="font-medium">1800-123-4567</span>
+                      </div>
                     </div>
                   </div>
                 </div>
