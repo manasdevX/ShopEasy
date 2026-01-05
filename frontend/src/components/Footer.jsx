@@ -90,7 +90,7 @@ export default function Footer() {
             </h3>
             <div className="space-y-4">
               <Link
-                to="/contact"
+                to="/ContactUs"
                 className="group flex items-center gap-3 p-3 rounded-xl border border-slate-100 dark:border-slate-800 hover:border-orange-500 dark:hover:border-orange-500 transition-all"
               >
                 <div className="p-2 bg-orange-100 dark:bg-orange-500/10 text-orange-600 rounded-lg group-hover:bg-orange-500 group-hover:text-white transition-colors">

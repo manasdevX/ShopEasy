@@ -22,6 +22,7 @@ import Terms from "./pages/Terms";
 import Help from "./pages/Help";
 import ShippingPolicy from "./pages/ShippingPolicy";
 import FAQs from "./pages/FAQs";
+import ContactUs from "./pages/ContactUs";
 
 // --- SELLER PAGES ---
 import SellerLanding from "./pages/Seller/Landing";
@@ -185,6 +186,7 @@ export default function App() {
         <Route path="/Help" element={<Help />} />
         <Route path="/Shipping-policy" element={<ShippingPolicy />} />
         <Route path="/FAQs" element={<FAQs />} />
+        <Route path="/ContactUs" element={<ContactUs />} />
       </Routes>
     </>
   );
