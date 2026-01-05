@@ -250,9 +250,9 @@ We’ve designed a secure and intuitive entry point for our merchants, featuring
 ### 🛍️ Customer Experience
 A seamless shopping interface designed for high performance and easy product discovery.
 
-| Home Page | Product Search |
-| :---: | :---: |
-| ![Home Page](./assets/User-Home.png) | ![Search Discovery](./assets/User-Search.png) |
+| Home Page + Product Search |
+| :---: |
+| ![Home Page](./assets/User-Search.png) |
 
 **Features:**
 * **Responsive Layout:** Clean, modern interface optimized for desktop browsing.
