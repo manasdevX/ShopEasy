@@ -1,8 +1,11 @@
 import React from "react";
 import { Search, Package, CreditCard, RefreshCcw, Truck, MessageSquare, ExternalLink } from "lucide-react";
 import Navbar from "../components/PaymentHeader";
+import { useNavigate } from "react-router-dom";
+
 
 export default function Help() {
+  const navigate = useNavigate();
 
   const categories = [
     { icon: <Package size={24} />, title: "Orders", desc: "Shipping & Fulfillment" },
@@ -46,9 +49,9 @@ export default function Help() {
         <div className="bg-white dark:bg-slate-900 rounded-[3rem] p-10 border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row items-center justify-between gap-8">
           <div>
             <h2 className="text-2xl font-black text-slate-900 dark:text-white mb-2">Still need assistance?</h2>
-            <p className="text-slate-500 dark:text-slate-400">Our support team is available 24/7 for dedicated seller support.</p>
+            <p className="text-slate-500 dark:text-slate-400">Support available Monday to Friday, 10:00 AM – 5:00 PM.</p>
           </div>
-          <button className="flex items-center gap-3 bg-orange-500 hover:bg-orange-600 text-white px-8 py-4 rounded-2xl font-black text-sm transition-all shadow-lg shadow-orange-500/20">
+          <button onClick={() => navigate("/ContactUs" , { state: { fromContact: true } })} className="flex items-center gap-3 bg-orange-500 hover:bg-orange-600 text-white px-8 py-4 rounded-2xl font-black text-sm transition-all shadow-lg shadow-orange-500/20">
             <MessageSquare size={18} /> Contact Support
           </button>
         </div>
