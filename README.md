@@ -251,7 +251,7 @@ We’ve designed a secure and intuitive entry point for our merchants, featuring
   </tr>
   <tr>
     <td colspan="2" align="center">
-      <img src="./assets/User-Forget_password.png" alt="Forgot Password" width="60%" />
+      <img src="./assets/User_Forgot_password.png" alt="Forgot Password" width="60%" />
     </td>
   </tr>
 </table>
@@ -268,7 +268,7 @@ A seamless shopping interface designed for high performance and easy product dis
 | Home Page + Product Search |
 | :---: |
 | ![Home Page](./assets/User-Search.png) |
-| ![Search Results](./assets/Seacrh_Result.png) |
+| ![Search Results](./assets/User-Search_results.png) |
 
 **Features:**
 * **Responsive Layout:** Clean, modern interface optimized for desktop browsing.
@@ -277,7 +277,7 @@ A seamless shopping interface designed for high performance and easy product dis
 #### 👤 User Account & Profile
 A comprehensive, all-in-one management hub where users can monitor their account status and update their personal credentials in real-time.
 
-![User Profile](./assets/User_Profile.png)
+![User Profile](./assets/User-Profile.png)
 
 **Features:**
 * **Identity Management:** View personal details with an integrated **Profile Picture Upload** feature to personalize the account.
@@ -299,7 +299,7 @@ A dynamic tracking system that provides customers with full transparency and con
 #### ❤️ Personal Wishlist
 A curated space for users to save their favorite products and manage their shopping interests before making a final purchase.
 
-![User Wishlist](./assets/User_Wishlist.png)
+![User Wishlist](./assets/User-Wishlist.png)
 
 **Features:**
 * **Exclusive Product Collection:** Displays only the products specifically added by the user for quick future access.
@@ -311,7 +311,7 @@ A curated space for users to save their favorite products and manage their shopp
 #### 📍 Address Management
 A smart address book that combines manual control with automated location intelligence for a friction-less checkout experience.
 
-![User Addresses](./assets/User_Addresses.png)
+![User Addresses](./assets/User-Addresses.png)
 
 **Features:**
 * **Smart Geolocation:** Features a "Use My Current Location" tool that automatically detects and fills in address details using the browser's live location API.
@@ -324,7 +324,7 @@ A smart address book that combines manual control with automated location intell
 A robust security suite where users can manage their credentials and control their account lifecycle.
 
 ##### **Primary Privacy & Security**
-![Account Privacy](./assets/User_Privacy.png)
+![Account Privacy](./assets/User-Privacy.png)
 
 ##### **Security Workflows**
 We provide dedicated interfaces for sensitive account updates and recovery.
@@ -367,7 +367,7 @@ A high-conversion product page designed with interactive elements and real-time 
 #### 🛒 Smart Cart & Order Orchestration
 The Cart system acts as a high-performance bridge between product discovery and final payment, focusing on price transparency and psychological purchase triggers.
 
-![User Cart](./assets/User_Cart.png)
+![User Cart](./assets/User-Cart.png)
 
 **Features:**
 
