@@ -42,13 +42,13 @@ export default function Footer() {
             </h3>
             <ul className="space-y-4 text-sm text-slate-600 dark:text-slate-400">
               <li>
-                <FooterLink to="/products" label="All Products" />
+                <FooterLink to="/search?q=" label="All Products" />
               </li>
               <li>
-                <FooterLink to="/categories" label="Featured Collections" />
+                <FooterLink to="/#Categories-section" label="Featured Collections" />
               </li>
               <li>
-                <FooterLink to="/offers" label="Today's Deals" />
+                <FooterLink to="/#products-section" label="Today's Deals" />
               </li>
               <li>
                 <FooterLink to="/Seller/Landing" label="Become a Seller" />
@@ -72,10 +72,13 @@ export default function Footer() {
                 <FooterLink to="/Shipping-policy" label="Shipping Policy" />
               </li>
               <li>
-                <FooterLink to="/returns" label="Returns & Refunds" />
+                <FooterLink
+                  to="/account?tab=orders"
+                  label="Returns & Refunds"
+                />
               </li>
               <li>
-                <FooterLink to="/faq" label="FAQs" />
+                <FooterLink to="/FAQs" label="FAQs" />
               </li>
             </ul>
           </div>
@@ -122,21 +125,21 @@ export default function Footer() {
           </p>
           <div className="mt-2 flex justify-center gap-6 text-sm text-slate-500 dark:text-slate-500">
             <Link
-            state={{origin : "/"}}
+              state={{ origin: "/" }}
               to="/Terms"
               className="hover:underline hover:text-orange-500 transition-colors"
             >
               Terms
             </Link>
             <Link
-            state={{origin : "/"}}
+              state={{ origin: "/" }}
               to="/Privacy"
               className="hover:underline hover:text-orange-500 transition-colors"
             >
               Privacy
             </Link>
             <Link
-            state={{origin : "/"}}
+              state={{ origin: "/" }}
               to="/Help"
               className="hover:underline hover:text-orange-500 transition-colors"
             >
@@ -151,10 +154,24 @@ export default function Footer() {
 
 // Sub-components remain the same...
 function FooterLink({ to, label }) {
+  const handleClick = (e) => {
+    // Check if the link is a hash on the current page
+    if (to.startsWith("/#") && window.location.pathname === "/") {
+      e.preventDefault();
+      const id = to.split("#")[1]; 
+      const element = document.getElementById(id);
+
+      if (element) {
+        element.scrollIntoView({ behavior: "smooth" });
+      }
+    }
+  };
+
   return (
     <Link
       to={to}
-      className="hover:text-orange-500 hover:translate-x-1 transition-all inline-block"
+      onClick={handleClick}
+      className="hover:text-orange-500 hover:translate-x-1 transition-all inline-block cursor-pointer"
     >
       {label}
     </Link>

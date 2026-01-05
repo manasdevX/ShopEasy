@@ -285,7 +285,7 @@ export default function Home() {
       </section>
 
       {/* --- REAL CATEGORY GRID --- */}
-      <section className="py-20 max-w-7xl mx-auto px-6">
+      <section className="py-20 max-w-7xl mx-auto px-6" id="Categories-section">
         <div className="flex justify-between items-end mb-10">
           <div>
             <h2 className="text-3xl font-black dark:text-white">

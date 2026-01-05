@@ -16,6 +16,7 @@ import {
   Loader2,
   User,
   X,
+  ShieldCheck, // Added for the completed step icon
 } from "lucide-react";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
@@ -171,12 +172,7 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const navLinks = [
-    { name: "Dashboard", path: "/Seller/Dashboard", icon: LayoutDashboard },
-    { name: "Inventory", path: "/Seller/products", icon: Package },
-    { name: "Orders", path: "/Seller/orders", icon: ListOrdered },
-  ];
-
+  // --- ONBOARDING LOGIC ---
   const onboardingPaths = [
     "/Seller/login",
     "/Seller/signup",
@@ -186,15 +182,18 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
   ];
   const isOnboarding = onboardingPaths.includes(location.pathname);
 
-  // 🟢 DISPLAY LOGIC
-  // Since we start as true, this will show "Live" immediately on mount.
-  const displayStatus = isAuth ? "Live" : "Offline";
+  // Stepper Configuration
+  const steps = [
+    { name: "Email & Password", paths: ["/Seller/signup", "/Seller/login", "/Seller/forgot-password"] },
+    { name: "Business Details", paths: ["/Seller/register"] },
+    { name: "Bank Details", paths: ["/Seller/bank-details"] },
+  ];
 
-  const statusColor = isAuth
-    ? isSocketConnected
-      ? "bg-emerald-500 shadow-[0_0_8px_#10b981]" // Connected (Bright Green)
-      : "bg-emerald-500/50" // Connecting/Syncing (Dim Green - fallback)
-    : "bg-amber-500"; // Offline
+  const navLinks = [
+    { name: "Dashboard", path: "/Seller/Dashboard", icon: LayoutDashboard },
+    { name: "Inventory", path: "/Seller/products", icon: Package },
+    { name: "Orders", path: "/Seller/orders", icon: ListOrdered },
+  ];
 
   return (
     <nav className="sticky top-0 z-[100] bg-white dark:bg-[#030712] border-b border-slate-100 dark:border-slate-800 transition-all duration-300">
@@ -222,8 +221,9 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
             </Link>
           </div>
 
-          {/* 2. SEARCH BAR SECTION (Fills available space) */}
+          {/* 2. CENTER SECTION: SEARCH OR ONBOARDING STEPPER */}
           <div className="flex-grow max-w-4xl relative" ref={searchRef}>
+            {/* --- CASE A: SHOW SEARCH BAR --- */}
             {isAuth && !isOnboarding && (
               <div className="relative group">
                 <Search
@@ -288,9 +288,60 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
                 )}
               </div>
             )}
+
+            {/* --- CASE B: SHOW ONBOARDING STEPPER --- */}
+            {isOnboarding && (
+              <div className="flex items-center justify-center gap-3 sm:gap-8">
+                {steps.map((step, index) => {
+                  const isCurrent = step.paths.includes(location.pathname);
+                  const isCompleted = steps.slice(index + 1).some(s => s.paths.includes(location.pathname));
+
+                  return (
+                    <React.Fragment key={step.name}>
+                      <div className="flex items-center gap-3 relative group">
+                        {/* Step Circle */}
+                        <div className={`
+                          w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all duration-300
+                          ${isCompleted ? "bg-orange-500 border-orange-500 text-white" : 
+                            isCurrent ? "border-orange-500 text-orange-500 bg-orange-500/5" : 
+                            "border-slate-200 dark:border-slate-800 text-slate-300 dark:text-slate-700"}
+                        `}>
+                          {isCompleted ? (
+                            <ShieldCheck size={14} strokeWidth={3} />
+                          ) : (
+                            <span className="text-[10px] font-black">{index + 1}</span>
+                          )}
+                        </div>
+
+                        {/* Step Label */}
+                        <div className="flex flex-col">
+                          <span className={`
+                            text-[10px] font-black uppercase tracking-widest hidden md:block transition-colors
+                            ${isCurrent ? "text-slate-900 dark:text-white" : "text-slate-400 dark:text-slate-600"}
+                          `}>
+                            {step.name}
+                          </span>
+                          {/* Underline matching your reference image */}
+                          {isCurrent && (
+                            <div className="h-0.5 w-full bg-orange-500 rounded-full mt-0.5 hidden md:block" />
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Connecting Line */}
+                      {index < steps.length - 1 && (
+                        <div className={`h-[1px] w-6 sm:w-12 transition-colors duration-500 ${
+                          isCompleted ? "bg-orange-500" : "bg-slate-200 dark:bg-slate-800"
+                        }`} />
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
-          {/* 3. ACTIONS SECTION (Pushed to the right) */}
+          {/* 3. ACTIONS SECTION */}
           <div className="shrink-0 flex items-center gap-3 sm:gap-4 ml-auto">
             {isAuth && (
               <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-slate-50 dark:bg-slate-900 rounded-full border border-slate-100 dark:border-slate-800">
@@ -356,7 +407,6 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
               </Link>
             )}
 
-            {/* FIXED BECOME A SELLER BUTTON */}
             <Link
               to="/"
               className="hidden lg:flex items-center whitespace-nowrap px-5 py-2.5 rounded-xl border-2 border-orange-500/20 text-orange-500 hover:bg-orange-500 hover:text-white font-bold text-xs uppercase tracking-widest transition-all"

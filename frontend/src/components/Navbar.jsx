@@ -57,7 +57,7 @@ export default function Navbar() {
   // ✅ LIVE SEARCH LOGIC
   useEffect(() => {
     const fetchSuggestions = async () => {
-      if (searchTerm.trim().length < 2) {
+      if (searchTerm.trim().length < 1) {
         setSuggestions([]);
         setShowDropdown(false);
         return;
@@ -135,10 +135,9 @@ export default function Navbar() {
 
   const handleSearch = (e) => {
     if (e) e.preventDefault();
-    if (searchTerm.trim()) {
-      setShowDropdown(false);
-      navigate(`/search?q=${encodeURIComponent(searchTerm.trim())}`);
-    }
+    setShowDropdown(false);
+    navigate(`/search?q=${encodeURIComponent(searchTerm.trim())}`);
+    
   };
 
   // ✅ LOGOUT FUNCTION (The Bug Fix)
