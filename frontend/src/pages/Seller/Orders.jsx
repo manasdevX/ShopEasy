@@ -411,7 +411,7 @@ export default function SellerOrders() {
                       <span
                         className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter border ${getStatusColor(
                           order.status
-                        )}`}
+                        )}`} 
                       >
                         {order.status}
                       </span>
