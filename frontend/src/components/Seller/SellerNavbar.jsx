@@ -121,6 +121,10 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
 
   const isAuth = propIsLoggedIn || !!token;
 
+  // --- DYNAMIC STATUS LOGIC ---
+  const statusColor = isSocketConnected ? "bg-emerald-500" : "bg-red-500";
+  const displayStatus = isSocketConnected ? "Live" : "Disconnected";
+
   // --- THEME LOGIC ---
   const [isDark, setIsDark] = useState(
     document.documentElement.classList.contains("dark")
@@ -184,7 +188,10 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
 
   // Stepper Configuration
   const steps = [
-    { name: "Email & Password", paths: ["/Seller/signup", "/Seller/login", "/Seller/forgot-password"] },
+    {
+      name: "Email & Password",
+      paths: ["/Seller/signup", "/Seller/login", "/Seller/forgot-password"],
+    },
     { name: "Business Details", paths: ["/Seller/register"] },
     { name: "Bank Details", paths: ["/Seller/bank-details"] },
   ];
@@ -200,7 +207,6 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
       <div className="w-full px-4 sm:px-8 py-4">
         {/* Main Header Row */}
         <div className="flex items-center gap-6">
-          
           {/* 1. LOGO SECTION */}
           <div className="shrink-0">
             <Link
@@ -235,7 +241,9 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
                   placeholder="Search inventory or orders..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  onFocus={() => searchQuery.length > 2 && setShowDropdown(true)}
+                  onFocus={() =>
+                    searchQuery.length > 2 && setShowDropdown(true)
+                  }
                   className="w-full bg-slate-100 dark:bg-slate-900 border-none rounded-xl py-2.5 pl-12 pr-10 text-sm font-medium outline-none focus:ring-2 focus:ring-orange-500/20 transition-all"
                 />
                 {searchQuery && (
@@ -252,7 +260,8 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
                   <div className="absolute top-full mt-2 w-full bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-2xl overflow-hidden z-[101]">
                     {isSearching ? (
                       <div className="p-6 text-center text-slate-500 flex items-center justify-center gap-2 text-xs font-bold uppercase">
-                        <Loader2 className="animate-spin" size={16} /> Searching...
+                        <Loader2 className="animate-spin" size={16} />{" "}
+                        Searching...
                       </div>
                     ) : (
                       <div className="max-h-80 overflow-y-auto p-2">
@@ -272,8 +281,12 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
                                 className="w-10 h-10 rounded-lg object-cover bg-slate-100"
                               />
                               <div>
-                                <p className="text-sm font-bold dark:text-white line-clamp-1">{p.name}</p>
-                                <p className="text-xs text-slate-500">₹{p.price} • Stock: {p.stock}</p>
+                                <p className="text-sm font-bold dark:text-white line-clamp-1">
+                                  {p.name}
+                                </p>
+                                <p className="text-xs text-slate-500">
+                                  ₹{p.price} • Stock: {p.stock}
+                                </p>
                               </div>
                             </div>
                           ))
@@ -294,31 +307,47 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
               <div className="flex items-center justify-center gap-3 sm:gap-8">
                 {steps.map((step, index) => {
                   const isCurrent = step.paths.includes(location.pathname);
-                  const isCompleted = steps.slice(index + 1).some(s => s.paths.includes(location.pathname));
+                  const isCompleted = steps
+                    .slice(index + 1)
+                    .some((s) => s.paths.includes(location.pathname));
 
                   return (
                     <React.Fragment key={step.name}>
                       <div className="flex items-center gap-3 relative group">
                         {/* Step Circle */}
-                        <div className={`
+                        <div
+                          className={`
                           w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all duration-300
-                          ${isCompleted ? "bg-orange-500 border-orange-500 text-white" : 
-                            isCurrent ? "border-orange-500 text-orange-500 bg-orange-500/5" : 
-                            "border-slate-200 dark:border-slate-800 text-slate-300 dark:text-slate-700"}
-                        `}>
+                          ${
+                            isCompleted
+                              ? "bg-orange-500 border-orange-500 text-white"
+                              : isCurrent
+                              ? "border-orange-500 text-orange-500 bg-orange-500/5"
+                              : "border-slate-200 dark:border-slate-800 text-slate-300 dark:text-slate-700"
+                          }
+                        `}
+                        >
                           {isCompleted ? (
                             <ShieldCheck size={14} strokeWidth={3} />
                           ) : (
-                            <span className="text-[10px] font-black">{index + 1}</span>
+                            <span className="text-[10px] font-black">
+                              {index + 1}
+                            </span>
                           )}
                         </div>
 
                         {/* Step Label */}
                         <div className="flex flex-col">
-                          <span className={`
+                          <span
+                            className={`
                             text-[10px] font-black uppercase tracking-widest hidden md:block transition-colors
-                            ${isCurrent ? "text-slate-900 dark:text-white" : "text-slate-400 dark:text-slate-600"}
-                          `}>
+                            ${
+                              isCurrent
+                                ? "text-slate-900 dark:text-white"
+                                : "text-slate-400 dark:text-slate-600"
+                            }
+                          `}
+                          >
                             {step.name}
                           </span>
                           {/* Underline matching your reference image */}
@@ -330,9 +359,13 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
 
                       {/* Connecting Line */}
                       {index < steps.length - 1 && (
-                        <div className={`h-[1px] w-6 sm:w-12 transition-colors duration-500 ${
-                          isCompleted ? "bg-orange-500" : "bg-slate-200 dark:bg-slate-800"
-                        }`} />
+                        <div
+                          className={`h-[1px] w-6 sm:w-12 transition-colors duration-500 ${
+                            isCompleted
+                              ? "bg-orange-500"
+                              : "bg-slate-200 dark:bg-slate-800"
+                          }`}
+                        />
                       )}
                     </React.Fragment>
                   );
@@ -381,17 +414,37 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
                   <div className="w-8 h-8 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center text-orange-600 dark:text-orange-400 font-bold border border-orange-200 dark:border-orange-800 uppercase cursor-pointer">
                     {seller?.name?.charAt(0) || "S"}
                   </div>
-                  <ChevronDown size={16} className="text-slate-400 transition-transform group-hover:rotate-180 cursor-pointer" />
+                  <ChevronDown
+                    size={16}
+                    className="text-slate-400 transition-transform group-hover:rotate-180 cursor-pointer"
+                  />
                 </button>
                 <div className="absolute top-full right-0 w-52 pt-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-[110]">
                   <div className="bg-white dark:bg-slate-900 rounded-xl overflow-hidden shadow-xl border border-slate-100 dark:border-slate-800">
                     <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Store Manager</p>
-                      <p className="text-xs font-bold truncate dark:text-white mt-0.5">{seller?.email}</p>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                        Store Manager
+                      </p>
+                      <p className="text-xs font-bold truncate dark:text-white mt-0.5">
+                        {seller?.email}
+                      </p>
                     </div>
-                    <Link to="/Seller/Dashboard" className="block px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 text-sm font-medium">Dashboard</Link>
-                    <Link to="/Seller/Settings" className="block px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 text-sm font-medium">Settings</Link>
-                    <button onClick={handleLogoutClick} className="w-full text-left px-4 py-2.5 hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 text-sm font-bold flex items-center gap-2 border-t dark:border-slate-800 cursor-pointer">
+                    <Link
+                      to="/Seller/Dashboard"
+                      className="block px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 text-sm font-medium"
+                    >
+                      Dashboard
+                    </Link>
+                    <Link
+                      to="/Seller/Settings"
+                      className="block px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 text-sm font-medium"
+                    >
+                      Settings
+                    </Link>
+                    <button
+                      onClick={handleLogoutClick}
+                      className="w-full text-left px-4 py-2.5 hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 text-sm font-bold flex items-center gap-2 border-t dark:border-slate-800 cursor-pointer"
+                    >
                       <LogOut size={16} /> Logout
                     </button>
                   </div>
@@ -426,11 +479,15 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
                   key={link.name}
                   to={link.path}
                   className={`flex items-center gap-2 pb-2 text-[11px] font-black uppercase tracking-[0.15em] transition-all relative whitespace-nowrap ${
-                    isActive ? "text-orange-500" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                    isActive
+                      ? "text-orange-500"
+                      : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                   }`}
                 >
                   <link.icon size={14} strokeWidth={3} /> {link.name}
-                  {isActive && <span className="absolute bottom-0 left-0 w-full h-0.5 bg-orange-500 rounded-full" />}
+                  {isActive && (
+                    <span className="absolute bottom-0 left-0 w-full h-0.5 bg-orange-500 rounded-full" />
+                  )}
                 </Link>
               );
             })}
