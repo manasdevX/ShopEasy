@@ -232,5 +232,31 @@ Once the application is set up and running, ShopEasy provides a complete e-comme
 
 ## 📸 Screenshots
 
-### 🏠 Home Page
+### 🛒 ShopEasy User
+
+#### 🔐 Authentication & Onboarding
+We’ve designed a secure and intuitive entry point for our merchants, featuring a multi-step registration process to ensure data integrity.
+
+| Existing User Login | New User Signup |
+| :---: | :---: |
+| ![Login](./assets/User-Login.png) | ![Signup](./assets/User-Signup.png) |
+
+**Features:**
+* **Instant Validation:** Real-time feedback on email formats and password strength to reduce user errors.
+* **Seamless Switching:** Easy toggle between login and signup modes to minimize friction.
+* **Secure Sessions:** Implementation of JWT-based authentication to keep user sessions safe across page reloads.
+* **Verification:** Real time Otp based verification system for email and phone number.
+
+### 🛍️ Customer Experience
+A seamless shopping interface designed for high performance and easy product discovery.
+
+| Home Page | Product Search |
+| :---: | :---: |
+| ![Home Page](./assets/User-Home.png) | ![Search Discovery](./assets/User-Search.png) |
+
+**Features:**
+* **Responsive Layout:** Clean, modern interface optimized for desktop browsing.
+* **Intuitive Search:** Fast, reliable search functionality to find products across all categories.
+
+
 
