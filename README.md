@@ -509,4 +509,66 @@ Management of the primary shipping origin. This address is used by the logistics
 ![Seller Store Address](./assets/Seller-Store_address.png)
 
 
+## 📞 Customer Communication & Support
+A contact us page that shows the contact details and office address.
 
+![Contact Us](./assets/Contact-Us.png)
+
+
+---
+
+## 🚀 Conclusion & Future Roadmap
+
+This project represents a comprehensive, full-stack implementation of a modern Multi-Vendor Marketplace. It bridges the gap between complex backend logic (Session management, MongoDB Aggregation, Socket.io) and a polished, responsive Frontend (React, Tailwind).
+
+**The goal was simple:** To build a platform that is not just functional, but scalable, secure, and ready for real-world deployment.
+
+### 🔮 Future Improvements
+* [ ] AI-based Product Recommendations.
+
+---
+
+<div align="center">
+  <h3>✨ Thank you for checking out this project! ✨</h3>
+  <p>If you found this code helpful or interesting, please consider giving it a ⭐️.</p>
+
+  <div align="center">
+  <h3>🤝 Connect with the Team</h3>
+  <table>
+    <tr>
+      <td align="center" width="50%">
+        <strong>Shourya</strong>
+        <br/><br/>
+        <a href="https://github.com/shourya-shivhareE" target="_blank">
+          <img src="https://img.shields.io/badge/GITHUB-Profile-black?style=for-the-badge&logo=github" alt="GitHub">
+        </a>
+        <br/>
+        <a href="https://www.linkedin.com/in/shourya-shivhare-a9444130a/" target="_blank">
+          <img src="https://img.shields.io/badge/LINKEDIN-Connect-blue?style=for-the-badge&logo=linkedin" alt="LinkedIn">
+        </a>
+        <br/>
+        <a href="mailto:shouryashivhare2005@gmail.com">
+          <img src="https://img.shields.io/badge/EMAIL-Contact_Me-red?style=for-the-badge&logo=gmail" alt="Email">
+        </a>
+      </td>
+      <td align="center" width="50%">
+        <strong>Manas</strong>
+        <br/><br/>
+        <a href="https://github.com/manasdevX" target="_blank">
+          <img src="https://img.shields.io/badge/GITHUB-Profile-black?style=for-the-badge&logo=github" alt="GitHub">
+        </a>
+        <br/>
+        <a href="https://www.linkedin.com/in/manas-agnihotri-318117332/" target="_blank">
+          <img src="https://img.shields.io/badge/LINKEDIN-Connect-blue?style=for-the-badge&logo=linkedin" alt="LinkedIn">
+        </a>
+        <br/>
+        <a href="mailto:agnihotrimanas99@gmail.com">
+          <img src="https://img.shields.io/badge/EMAIL-Contact_Me-red?style=for-the-badge&logo=gmail" alt="Email">
+        </a>
+      </td>
+    </tr>
+  </table>
+</div>
+  
+  <p><i>Built with ❤️ using the MERN Stack</i></p>
+</div>
