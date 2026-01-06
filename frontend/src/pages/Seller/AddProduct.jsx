@@ -140,7 +140,7 @@ export default function AddProduct() {
     }
     
     // Check for selling can't be greater than MRP
-    if(formData.mrp < formData.price) {
+    if(Number(formData.mrp) < Number(formData.price)) {
       return showError("You cannot sell at a price greater than MRP.")
     }
 
