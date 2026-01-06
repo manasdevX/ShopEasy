@@ -110,7 +110,7 @@ export default function BankDetails() {
       const signupRes = await fetch(`${API_URL}/api/sellers/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include", // ✅ Ensures session cookie is accepted
+        credentials: "include",
         body: JSON.stringify(step1),
       });
 
@@ -121,19 +121,32 @@ export default function BankDetails() {
       const token = signupData.token;
 
       // =========================================================
-      // 4. API CALL 2: Save Profile (Business Details)
+      // 4. API CALL 2: Save Profile (Business Details Mapping)
       // =========================================================
+      // mapping step2 keys to match backend controller: gstin, address
+      const profilePayload = {
+        businessName: step2.businessName || step2.legalBusinessName,
+        businessType: step2.businessType,
+        gstin: step2.gstNumber || step2.gstin || step2.GSTIN,
+        address: step2.pickupAddress || step2.address,
+      };
+
       const profileRes = await fetch(`${API_URL}/api/sellers/profile`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        credentials: "include", // ✅ Ensures existing session is recognized
-        body: JSON.stringify(step2),
+        credentials: "include",
+        body: JSON.stringify(profilePayload),
       });
 
-      if (!profileRes.ok) throw new Error("Failed to save business details");
+      if (!profileRes.ok) {
+        const profileErr = await profileRes.json();
+        throw new Error(
+          profileErr.message || "Failed to save business details"
+        );
+      }
 
       // =========================================================
       // 5. API CALL 3: Save Bank Details
@@ -152,7 +165,7 @@ export default function BankDetails() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        credentials: "include", // ✅ Final step session confirmation
+        credentials: "include",
         body: JSON.stringify(bankPayload),
       });
 
@@ -162,7 +175,7 @@ export default function BankDetails() {
       localStorage.removeItem("seller_step1");
       localStorage.removeItem("seller_step2");
       localStorage.setItem("sellerToken", token);
-      localStorage.setItem("sellerUser", JSON.stringify(signupData.seller));
+      localStorage.setItem("sellerUser", JSON.stringify(signupData));
 
       showSuccess("Seller Account Created Successfully!");
       navigate("/Seller/Dashboard");

@@ -30,13 +30,15 @@ export default function SellerOrders() {
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
-  const socket = useSocket();
+
+  // ✅ Access context mainly for connection status check if needed
+  const { isConnected } = useSocket();
 
   // State for Dropdown and Modal
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [selectedOrder, setSelectedOrder] = useState(null);
 
-  // --- 1. FETCH ORDERS (With Session fix) ---
+  // --- 1. FETCH ORDERS ---
   const fetchOrders = useCallback(
     async (isSilent = false) => {
       if (!isSilent) setLoading(true);
@@ -46,7 +48,7 @@ export default function SellerOrders() {
           `${API_URL}/api/orders/seller-orders?status=${activeTab}&search=${searchQuery}`,
           {
             headers: { Authorization: `Bearer ${token}` },
-            credentials: "include", // ✅ CRITICAL: Ensures the HttpOnly session cookie is sent back to the server
+            credentials: "include",
           }
         );
         const data = await res.json();
@@ -54,7 +56,6 @@ export default function SellerOrders() {
         if (res.ok) {
           setOrders(data);
         } else if (res.status === 401) {
-          // session persistence handled by App.jsx/Navbar, but we log here for debugging
           console.error("Session expired while fetching orders");
         }
       } catch (error) {
@@ -75,36 +76,20 @@ export default function SellerOrders() {
     return () => clearTimeout(delayDebounce);
   }, [fetchOrders]);
 
-  // --- 3. SOCKET.IO REAL-TIME LOGIC ---
+  // --- 3. REAL-TIME ORDER SYNC ---
+  // Listens for the global 'refresh-data' event dispatched by SocketContext
   useEffect(() => {
-    let seller = null;
-    try {
-      const stored =
-        localStorage.getItem("sellerUser") || localStorage.getItem("user");
-      if (stored && stored !== "undefined") {
-        seller = JSON.parse(stored);
-      }
-    } catch (e) {
-      console.error("Parsing error", e);
-    }
+    const handleGlobalRefresh = () => {
+      console.log("📦 Orders: Syncing new orders via global event...");
+      fetchOrders(true); // Silent refresh
+    };
 
-    if (socket && seller?._id) {
-      // Ensure seller is in their room to receive new order broadcasts
-      socket.emit("join_seller_room", seller._id);
+    window.addEventListener("refresh-data", handleGlobalRefresh);
 
-      // Listen for new orders to refresh the list automatically
-      const handleSocketOrderAlert = () => {
-        console.log("📦 New Order Received via Socket: Syncing list...");
-        fetchOrders(true); // Silent background refresh to keep UI updated
-      };
-
-      socket.on("order_alert", handleSocketOrderAlert);
-
-      return () => {
-        socket.off("order_alert", handleSocketOrderAlert);
-      };
-    }
-  }, [socket, fetchOrders]);
+    return () => {
+      window.removeEventListener("refresh-data", handleGlobalRefresh);
+    };
+  }, [fetchOrders]);
 
   // Auto-refresh Modal content when Order Data updates in background
   useEffect(() => {
@@ -126,7 +111,7 @@ export default function SellerOrders() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        credentials: "include", // ✅ Fixed: Sends session cookie to authorize status change
+        credentials: "include",
         body: JSON.stringify({ status: newStatus }),
       });
 
@@ -411,7 +396,7 @@ export default function SellerOrders() {
                       <span
                         className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter border ${getStatusColor(
                           order.status
-                        )}`} 
+                        )}`}
                       >
                         {order.status}
                       </span>

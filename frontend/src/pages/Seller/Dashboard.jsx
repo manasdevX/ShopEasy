@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import SellerNavbar from "../../components/Seller/SellerNavbar";
 import SellerFooter from "../../components/Seller/SellerFooter";
-import { showSuccess, showError } from "../../utils/toast"; // ✅ Toast Import
+import { showSuccess, showError } from "../../utils/toast";
 import { useSocket } from "../../context/SocketContext";
 import {
   BarChart3,
@@ -21,15 +21,12 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const socket = useSocket();
+
+  // ✅ Access global connection state for UI status
+  const { isConnected } = useSocket();
+
   const [loading, setLoading] = useState(true);
   const [lowStockItems, setLowStockItems] = useState([]);
-
-  // 🟢 Optimistic UI: Initialize as Live if seller exists
-  const [isLive, setIsLive] = useState(() => {
-    const stored = localStorage.getItem("sellerUser");
-    return stored ? true : false;
-  });
 
   const [data, setData] = useState({
     seller: { name: "", businessName: "My Store", rating: 0 },
@@ -119,50 +116,23 @@ export default function Dashboard() {
     fetchLowStock();
   }, [fetchDashboardData, fetchLowStock, navigate]);
 
-  // --- 3. SOCKET.IO REAL-TIME LOGIC (ROBUST) ---
+  // --- 3. REAL-TIME DATA SYNC ---
+  // Listens for the global 'refresh-data' event dispatched by SocketContext
   useEffect(() => {
-    let seller = null;
-    try {
-      const stored = localStorage.getItem("sellerUser");
-      if (stored && stored !== "undefined") {
-        seller = JSON.parse(stored);
-      }
-    } catch (e) {
-      console.error("Parsing error", e);
-    }
-
-    if (!seller?._id || !socket) return;
-
-    // 🟢 Join Room Logic
-    const joinRoom = () => {
-      // console.log("Joining Seller Room:", seller._id);
-      socket.emit("join_seller_room", seller._id);
-      setIsLive(true);
+    const handleGlobalRefresh = () => {
+      console.log("🔄 Dashboard: Syncing data via global event...");
+      fetchDashboardData();
+      fetchLowStock();
     };
 
-    // 🟢 Order Alert Handler
-    const handleOrderAlert = () => {
-      showSuccess("🎉 New Order Received!"); // ✅ Notification
-      fetchDashboardData(); // ✅ Refresh Data
-      fetchLowStock(); // ✅ Refresh Stock
-    };
+    // Attach listener
+    window.addEventListener("refresh-data", handleGlobalRefresh);
 
-    // 🟢 Connection Logic
-    if (socket.connected) {
-      joinRoom();
-    } else {
-      socket.connect();
-    }
-
-    // 🟢 Listeners
-    socket.on("connect", joinRoom);
-    socket.on("order_alert", handleOrderAlert);
-
+    // Cleanup
     return () => {
-      socket.off("connect", joinRoom);
-      socket.off("order_alert", handleOrderAlert);
+      window.removeEventListener("refresh-data", handleGlobalRefresh);
     };
-  }, [socket, fetchDashboardData, fetchLowStock]);
+  }, [fetchDashboardData, fetchLowStock]);
 
   // --- HELPERS & HANDLERS ---
   const formatCurrency = (amount) => {
@@ -224,8 +194,8 @@ export default function Dashboard() {
     {
       title: "Store Rating",
       value: loading ? "..." : data.seller.rating || "N/A",
-      trend: isLive ? "Live" : "Offline",
-      trendUp: isLive,
+      trend: isConnected ? "Live" : "Offline",
+      trendUp: isConnected,
       icon: CheckCircle2,
     },
   ];

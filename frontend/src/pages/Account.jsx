@@ -138,7 +138,7 @@ export default function Account() {
 
       case "Return Requested":
         return "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-500/10 dark:text-orange-500 dark:border-orange-500/20";
-      
+
       case "Processing":
       default:
         return "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-500 dark:border-amber-500/20";
@@ -427,9 +427,42 @@ export default function Account() {
         method: "PUT",
         headers: { Authorization: `Bearer ${token}` },
       });
+
       const updatedAddresses = await res.json();
+
       if (res.ok) {
-        setUser((prev) => ({ ...prev, addresses: updatedAddresses }));
+        // 1. Find the new default address from the updated list
+        const newDefault = updatedAddresses.find((addr) => addr.isDefault);
+
+        if (newDefault) {
+          // 2. Create the object structure expected by the Profile tab
+          const newProfileAddress = {
+            name: newDefault.fullName,
+            phone: newDefault.phone,
+            street: newDefault.addressLine,
+            city: newDefault.city,
+            state: newDefault.state,
+            pincode: newDefault.pincode,
+            country: newDefault.country,
+            type: newDefault.type,
+          };
+
+          // 3. Update both 'user' state (display) and 'formData' state (edit mode)
+          setUser((prev) => ({
+            ...prev,
+            addresses: updatedAddresses,
+            address: newProfileAddress, // <--- This updates the Profile View
+          }));
+
+          setFormData((prev) => ({
+            ...prev,
+            address: newProfileAddress, // <--- This updates the form data if you click Edit later
+          }));
+        } else {
+          // Fallback if no default found (rare case)
+          setUser((prev) => ({ ...prev, addresses: updatedAddresses }));
+        }
+
         showSuccess("Default Address Updated");
       }
     } catch (err) {

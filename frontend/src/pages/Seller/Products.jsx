@@ -18,7 +18,10 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export default function Products() {
   const navigate = useNavigate();
-  const socket = useSocket();
+
+  // ✅ Access socket context mainly for connection status check if needed
+  const { isConnected } = useSocket();
+
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -37,7 +40,7 @@ export default function Products() {
 
         const res = await fetch(`${API_URL}/api/products/seller/all`, {
           headers: { Authorization: `Bearer ${token}` },
-          credentials: "include", // ✅ CRITICAL: Required for session verification and persistence
+          credentials: "include",
         });
 
         const data = await res.json();
@@ -45,7 +48,6 @@ export default function Products() {
         if (res.ok) {
           setProducts(data);
         } else if (res.status === 401) {
-          // If session expired, clear local state and redirect to Seller Login
           localStorage.removeItem("sellerToken");
           localStorage.removeItem("sellerUser");
           navigate("/Seller/login?message=session_expired");
@@ -62,41 +64,25 @@ export default function Products() {
     [navigate]
   );
 
+  // Initial Fetch
   useEffect(() => {
     fetchProducts();
   }, [fetchProducts]);
 
-  // --- 2. SOCKET.IO REAL-TIME CONNECTION ---
+  // --- 2. REAL-TIME INVENTORY SYNC ---
+  // Listens for the global 'refresh-data' event dispatched by SocketContext
   useEffect(() => {
-    let seller = null;
-    try {
-      const stored =
-        localStorage.getItem("sellerUser") || localStorage.getItem("user");
-      if (stored && stored !== "undefined") {
-        seller = JSON.parse(stored);
-      }
-    } catch (e) {
-      console.error("Session parsing error", e);
-    }
+    const handleGlobalRefresh = () => {
+      console.log("📦 Inventory: Syncing stock levels via global event...");
+      fetchProducts(true); // Silent refresh
+    };
 
-    if (socket && seller?._id) {
-      // Join seller room to keep connection alive for inventory updates
-      socket.emit("join_seller_room", seller._id);
-      console.log("📡 Product Inventory: Monitoring real-time stock sync");
+    window.addEventListener("refresh-data", handleGlobalRefresh);
 
-      // Define handler for stock changes (e.g., when an order is placed)
-      const handleInventoryUpdate = () => {
-        console.log("📦 Stock change detected via socket, refreshing list...");
-        fetchProducts(true); // Silent background refresh
-      };
-
-      socket.on("order_alert", handleInventoryUpdate);
-
-      return () => {
-        socket.off("order_alert", handleInventoryUpdate);
-      };
-    }
-  }, [socket, fetchProducts]);
+    return () => {
+      window.removeEventListener("refresh-data", handleGlobalRefresh);
+    };
+  }, [fetchProducts]);
 
   // --- 3. DELETE ACTION ---
   const handleDelete = async (id) => {
@@ -112,7 +98,7 @@ export default function Products() {
       const res = await fetch(`${API_URL}/api/products/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
-        credentials: "include", // ✅ CRITICAL: Required for session verification
+        credentials: "include",
       });
 
       if (res.ok) {

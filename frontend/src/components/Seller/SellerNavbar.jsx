@@ -16,7 +16,7 @@ import {
   Loader2,
   User,
   X,
-  ShieldCheck, // Added for the completed step icon
+  ShieldCheck,
 } from "lucide-react";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
@@ -25,7 +25,9 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
   const navigate = useNavigate();
   const location = useLocation();
   const searchRef = useRef(null);
-  const socket = useSocket();
+
+  // ✅ FIX: Get 'isConnected' directly from Context (Single Source of Truth)
+  const { socket, isConnected } = useSocket();
 
   // --- STATE ---
   const [seller, setSeller] = useState(() => {
@@ -44,42 +46,6 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
   const [isSearching, setIsSearching] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const [hasUnread, setHasUnread] = useState(false);
-
-  /**
-   * 🟢 FIX: Start with TRUE (Optimistic UI)
-   * We initialize as 'true' so the UI shows "Live" immediately.
-   * If the socket is actually disconnected, useEffect will catch it and flip it to false,
-   * but this prevents the initial "Connecting..." flicker on navigation.
-   */
-  const [isSocketConnected, setIsSocketConnected] = useState(true);
-
-  // --- SOCKET.IO SYNC ---
-  useEffect(() => {
-    if (!socket) return;
-
-    // Sync with actual socket state after mount
-    if (socket.connected !== isSocketConnected) {
-      setIsSocketConnected(socket.connected);
-    }
-
-    const onConnect = () => setIsSocketConnected(true);
-    const onDisconnect = () => setIsSocketConnected(false);
-
-    const onNotify = () => {
-      setHasUnread(true);
-      window.dispatchEvent(new Event("notification-updated"));
-    };
-
-    socket.on("connect", onConnect);
-    socket.on("disconnect", onDisconnect);
-    socket.on("new_notification", onNotify);
-
-    return () => {
-      socket.off("connect", onConnect);
-      socket.off("disconnect", onDisconnect);
-      socket.off("new_notification", onNotify);
-    };
-  }, [socket, isSocketConnected]);
 
   // --- AUTH & NOTIFICATION FETCH ---
   useEffect(() => {
@@ -121,9 +87,9 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
 
   const isAuth = propIsLoggedIn || !!token;
 
-  // --- DYNAMIC STATUS LOGIC ---
-  const statusColor = isSocketConnected ? "bg-emerald-500" : "bg-red-500";
-  const displayStatus = isSocketConnected ? "Live" : "Disconnected";
+  // --- DYNAMIC STATUS LOGIC (Using Context Value) ---
+  const statusColor = isConnected ? "bg-emerald-500" : "bg-red-500";
+  const displayStatus = isConnected ? "Live" : "Disconnected";
 
   // --- THEME LOGIC ---
   const [isDark, setIsDark] = useState(
@@ -380,7 +346,7 @@ export default function SellerNavbar({ isLoggedIn: propIsLoggedIn }) {
               <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-slate-50 dark:bg-slate-900 rounded-full border border-slate-100 dark:border-slate-800">
                 <div
                   className={`w-2 h-2 rounded-full ${statusColor} ${
-                    isSocketConnected ? "animate-pulse" : ""
+                    isConnected ? "animate-pulse" : ""
                   }`}
                 />
                 <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
