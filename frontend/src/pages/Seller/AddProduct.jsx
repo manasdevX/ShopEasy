@@ -129,14 +129,19 @@ export default function AddProduct() {
 
     // 1. VALIDATION: Check for Primary Image
     if (!files.thumbnail) {
-      toast.error("Please upload a primary product image");
+      showError("Please upload a primary product image");
       return;
     }
 
     // 2. VALIDATION: Check for Tags (Mandatory now)
     if (tags.length === 0) {
-      toast.error("Please add at least one search keyword (tag)");
+      showError("Please add at least one search keyword (tag)");
       return;
+    }
+    
+    // Check for selling can't be greater than MRP
+    if(formData.mrp < formData.price) {
+      return showError("You cannot sell at a price greater than MRP.")
     }
 
     setLoading(true);
@@ -190,9 +195,6 @@ export default function AddProduct() {
         throw new Error(result.message || "Failed to add product");
       }
 
-      if(formData.mrp < formData.price) {
-        return showError("You cannot sell at a price greater than MRP.")
-      }
 
       showSuccess("Product Listed Successfully! 🎉");
       navigate("/Seller/Dashboard");
