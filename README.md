@@ -351,7 +351,7 @@ We provide dedicated interfaces for sensitive account updates and recovery.
 #### 🔍 Product Intelligence & Details
 A high-conversion product page designed with interactive elements and real-time data synchronization to enhance the shopping experience.
 
-![Product Details](./assets/Product_Detail.png)
+| ![Product Details](./assets/Product_Detail.png) | ![Product Reviews](./assets/Product_Review.png) |
 
 **Features:**
 * **Dynamic Image Gallery:** Implements a multi-image carousel with thumbnail switching, full-screen previews, and smooth transition effects.
@@ -385,7 +385,7 @@ The Cart system acts as a high-performance bridge between product discovery and 
 * **Empty State Management:**
     * Includes a dedicated "Empty Cart" UI with a clear Call-to-Action (CTA) to drive users back to the shopping loop when no items are present.
 
-### **Technical Workflow**
+##### **Technical Workflow**
 
 | Feature | Implementation Detail |
 | :--- | :--- |
@@ -393,5 +393,137 @@ The Cart system acts as a high-performance bridge between product discovery and 
 | **Image Fail-safe** | Uses a `getImageUrl` utility with `ImageOff` fallback for broken links. |
 | **Data Persistence** | Syncs with MongoDB via JWT-authorized API calls. |
 | **Routing** | Uses `useLocation` to pass the "Checkout Manifest" to the Payment page. |
+
+
+
+### 🛒 ShopEasy Seller
+
+#### 🏪 Seller Access Point
+Quick and secure entry for merchants to manage their digital storefront.
+
+| Seller Login | Seller Signup |
+| :---: | :---: |
+| ![Login](./assets/Seller_login.png) | ![Signup](./assets/Seller_Signup.png) |
+
+
+#### 🚀 Seller Home Interface
+Once authenticated, sellers land on this intuitive entry point to manage their digital storefront.
+
+![Seller Landing](./Seller-Landing.png)
+
+---
+
+#### 🔔 Real-time Notifications
+The notification hub ensures sellers never miss a beat—tracking every order milestone from placement to cancellation.
+
+![Seller Notifications](./Seller-Notifications.png)
+
+* **Order Alerts:** Instant updates when a customer places a new order.
+* **Status Changes:** Real-time tracking for successful payments or order cancellations.
+* **Action Oriented:** Designed for quick navigation to the specific order for immediate fulfillment.
+
+---
+
+#### 📊 Seller Command Center
+The dashboard provides a high-level overview of business health, combining real-time data with proactive inventory management.
+
+![Seller Dashboard](./Seller-Dashboard.png)
+
+**Key Features Engineered:**
+* **⚡ Real-Time Socket Connectivity:** Integrated `Socket.io` to listen for `order_alert` events, allowing the dashboard to refresh and notify sellers the instant a sale happens without a page reload.
+* **📉 Smart Inventory Tracking:** A dedicated **Critical Stock** algorithm that auto-filters products with fewer than 5 units, helping merchants prevent "Out of Stock" scenarios.
+* **💰 Financial Analytics:** Dynamic calculation of **Total Revenue**, **Active Orders**, and **Store Ratings** with visual trend indicators.
+* **🛠️ Full CRUD Operations:** Streamlined product management (Create, Read, Update, Delete) directly from the "Recent Inventory" table with optimistic UI updates.
+* **🔐 Session & Security:** Robust token-based authentication with automatic session expiration handling and secure API communication.
+
+---
+
+#### 📦 Dynamic Inventory Management
+A high-performance interface for merchants to oversee their product catalog with real-time stock monitoring.
+
+![Seller Inventory](./Seller-Inventory.png)
+
+**Technical Implementation Details:**
+* **🔄 Socket-Driven Stock Sync:** The page utilizes `Socket.io` to listen for background inventory changes. If a customer purchases an item, the stock count updates **silently and automatically** without requiring a page refresh.
+* **🔍 Optimized Local Filtering:** Implemented a high-speed search and filter mechanism that allows sellers to navigate large catalogs instantly by product name or category.
+* **🛡️ Session Persistence:** Configured with `credentials: "include"` and robust 401 interceptors to ensure that merchant sessions remain secure and valid across all administrative actions.
+* **⚠️ Visual Stock Alerts:** Integrated a color-coded status system:
+    * **Red:** Out of Stock alert.
+    * **Amber:** Low Stock warning (under 10 units).
+    * **Slate:** Healthy inventory levels.
+* **✨ Smooth UX Operations:** Features like "Silent Refresh," manual override sync, and optimistic UI deletions ensure a lag-free experience for the merchant.
+
+---
+
+#### 🚚 Advanced Order Fulfillment System
+A high-performance dashboard designed for merchants to manage the end-to-end lifecycle of customer orders with real-time synchronization and professional reporting.
+
+![Seller Orders](./Seller-Orders.png)
+
+**Key Technical Implementations**
+
+* **⚡ Real-Time Order Alerts (Socket.io):** Implemented a dedicated "Seller Room" using WebSockets. When a customer places an order, the merchant receives an instant background sync via the `order_alert` event. This ensures zero-latency fulfillment without manual page reloads.
+    
+* **📄 Enterprise-Grade PDF Reporting:** Integrated a custom export engine using `jsPDF` and `autoTable`. Merchants can generate timestamped, branded fulfillment reports that include:
+    * Masked Order IDs & Customer Contact Details.
+    * Formatted Shipping Manifests for logistics.
+    * Revenue breakdowns for offline bookkeeping and accounting.
+
+* **📊 Live Business Intelligence:** The dashboard features a real-time stats grid that dynamically calculates:
+    * **Net Revenue:** Real-time calculation of seller earnings (`sellerTotal`).
+    * **Fulfillment Ratio:** Instant visibility of Pending vs. Delivered vs. Cancelled orders.
+
+
+
+* **🔄 Context-Aware State Management:** The UI utilizes intelligent conditional rendering to toggle action buttons based on the order's `status` (e.g., "Mark as Shipped" only appears for "Processing" orders). This prevents logical state errors and streamlines merchant operations.
+
+* **🔍 Granular Order Inspection:** A deep-dive Modal interface provides complete transparency into:
+    * **Payment Verification:** Real-time verification of `isPaid` (Paid vs. Pending).
+    * **Product Manifests:** Multi-item support with individual quantity and unit-price tracking.
+    * **Shipping Logs:** Direct access to customer coordinates and phone contact info.
+
+---
+#### ⚙️ Merchant Settings & Compliance
+A comprehensive configuration suite allowing sellers to manage their identity, business legitimacy, and financial routing.
+
+##### 🏢 Core Configuration Modules
+
+| Module | Description | Technical Feature |
+| :--- | :--- | :--- |
+| **Account Info** | Personal merchant profile and secure credential management. | **Session-Linked updates** |
+| **Business Details** | Legal entity registration, Tax/GST information, and business type. | **Data Validation Logic** |
+| **Store Address** | Physical fulfillment location and logistics coordination. | **Geographic Mapping** |
+| **Bank Details** | Secure payout routing for automated revenue settlement. | **Encrypted Field Handling** |
+
+---
+
+##### 👤 1. Account & Security
+The gateway for personal profile management. This module ensures that merchant contact information is always synchronized with the communication engine.
+![Seller Account Info](./Seller-AccountInfo.png)
+
+##### 📈 2. Business Legitimacy
+A dedicated section for legal compliance. It handles the collection of business names, registration numbers, and tax identifiers required for legal e-commerce operations.
+![Seller Business Details](./Seller-Business_details.png)
+
+
+
+##### 📍 3. Fulfillment & Warehouse Logistics
+Management of the primary shipping origin. This address is used by the logistics engine to calculate shipping rates and coordinate pick-ups for new orders.
+![Seller Store Address](./Seller-Store_address.png)
+
+##### 🏦 4. Secure Payout Routing
+The financial backbone of the seller portal. This interface allows for the secure input of IFSC codes, Account Numbers, and Bank names to ensure automated and accurate revenue payouts.
+![Seller Bank Details](./Seller_bank-details_register.png)
+
+---
+
+**Technical Implementation Strategy**
+
+* **Atomic State Management:** Each settings page utilizes an "Atomic Update" strategy—only the fields changed by the user are sent to the API, reducing bandwidth and server load.
+* **Security-First Architecture:** Financial and legal data fields are handled with strict validation and are transmitted over secure, authenticated routes using `Authorization: Bearer` tokens.
+* **UX Consistency:** All four modules share a unified design language, featuring high-contrast typography, rounded "super-ellipse" containers, and dark-mode optimization for high-efficiency management.
+* **Optimistic Feedback:** Integrated toast notifications via `showSuccess` and `showError` provide immediate feedback during the data persistence process.
+
+
 
 
