@@ -268,7 +268,7 @@ export const createProduct = async (req, res) => {
       subCategory,
       brand,
       thumbnail,
-      images: allImages,
+      images: galleryImages,
       tags: parsedTags,
       isFeatured: isFeatured === "true" || isFeatured === true,
       isBestSeller: isBestSeller === "true" || isBestSeller === true,
