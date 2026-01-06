@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { ShoppingBag, Star, Heart, Loader2 } from "lucide-react";
 import { toast } from "react-hot-toast";
+import { showError , showSuccess } from "../utils/toast";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -55,7 +56,7 @@ export default function ProductCard({ product }) {
 
     const token = localStorage.getItem("token");
     if (!token) {
-      toast.error("Please login to add items to cart", { icon: "🔒" });
+      showError("Please login to add items to cart", { icon: "🔒" });
       return;
     }
 
@@ -72,13 +73,13 @@ export default function ProductCard({ product }) {
 
       const data = await res.json();
       if (res.ok) {
-        toast.success(`${product.name} added to cart!`);
+        showSuccess(`${product.name} added to cart!`);
         window.dispatchEvent(new Event("cartUpdated"));
       } else {
-        toast.error(data.message || "Failed to add item");
+        showError(data.message || "Failed to add item");
       }
     } catch (error) {
-      toast.error("Something went wrong");
+      showError("Something went wrong");
     } finally {
       setAdding(false);
     }
@@ -91,7 +92,7 @@ export default function ProductCard({ product }) {
 
     const token = localStorage.getItem("token");
     if (!token) {
-      toast.error("Please login to save items", { icon: "🔒" });
+      showError("Please login to save items", { icon: "🔒" });
       return;
     }
 
@@ -114,15 +115,15 @@ export default function ProductCard({ product }) {
         localStorage.setItem("user", JSON.stringify(user));
 
         setIsWishlisted(true);
-        toast.success("Added to Wishlist!", { icon: "❤️" });
+        showSuccess("Added to Wishlist!", { icon: "❤️" });
 
         // ✅ Notify other instances of ProductCard and Account page
         window.dispatchEvent(new Event("wishlistUpdated"));
       } else {
-        toast.error(data.message || "Failed to update wishlist");
+        showError(data.message || "Failed to update wishlist");
       }
     } catch (error) {
-      toast.error("Server error");
+      showError("Server error");
     } finally {
       setWishlisting(false);
     }
@@ -192,12 +193,16 @@ export default function ProductCard({ product }) {
 
       {/* RATING & CATEGORY */}
       <div className="flex justify-between items-center mb-2 px-1">
-        <div className="flex items-center gap-1 text-orange-400">
+        {product.rating? (<div className="flex items-center gap-1 text-orange-400">
           <Star size={12} fill="currentColor" />
           <span className="text-[11px] font-black text-slate-500 dark:text-slate-400">
-            {product.rating || "4.5"}
+            {product.rating}
           </span>
-        </div>
+        </div>) : (<div className="flex items-center gap-1 text-orange-400">
+          <span className="text-[11px] font-black text-slate-500 dark:text-slate-400">
+            No Reviews
+          </span>
+        </div>)}
         <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
           {product.category || "Premium"}
         </span>
