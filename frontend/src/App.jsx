@@ -63,6 +63,7 @@ export default function App() {
         "/Seller/bank-details", // ✅ ADD THIS (Step 3)
         "/login",
         "/signup",
+        "/forgot-password",
         "/Seller/Landing",
         "/",
         "/ContactUs",
