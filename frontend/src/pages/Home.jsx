@@ -257,13 +257,13 @@ export default function Home() {
       <section className="py-12 border-y border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/20">
         <div className="max-w-7xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-8">
           {[
-            { icon: Truck, label: "Free Shipping", sub: "Orders over ₹999" },
+            { icon: Truck, label: "Free Shipping", sub: "Orders over ₹400" },
             {
               icon: ShieldCheck,
               label: "Secure Payment",
               sub: "100% Protected",
             },
-            { icon: RotateCcw, label: "Easy Returns", sub: "30 Day Window" },
+            { icon: RotateCcw, label: "Easy Returns", sub: "14 Day Window" },
             {
               icon: ShoppingBag,
               label: "Quality Check",
