@@ -1,8 +1,7 @@
-import React from "react";
+import { React , useEffect } from "react";
 import { Search, Package, CreditCard, RefreshCcw, Truck, MessageSquare, ExternalLink } from "lucide-react";
 import Navbar from "../components/PaymentHeader";
 import { useNavigate } from "react-router-dom";
-
 
 export default function Help() {
   const navigate = useNavigate();
@@ -13,6 +12,14 @@ export default function Help() {
     { icon: <RefreshCcw size={24} />, title: "Returns", desc: "Refunds & Disputes" },
     { icon: <Truck size={24} />, title: "Delivery", desc: "Carrier Partners" },
   ];
+
+  useEffect(() => {
+    window.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: "instant", // Use "smooth" if you want a sliding effect
+    });
+  }, []);
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-[#030712]">

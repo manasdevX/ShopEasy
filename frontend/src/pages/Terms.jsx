@@ -1,8 +1,16 @@
-import React from "react";
+import { React , useEffect } from "react";
 import { Gavel, Scale, AlertCircle } from "lucide-react";
 import Navbar from "../components/PaymentHeader";
 
 export default function Terms() {
+
+  useEffect(() => {
+    window.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: "instant", // Use "smooth" if you want a sliding effect
+    });
+  }, []);
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-[#030712]">

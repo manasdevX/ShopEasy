@@ -1,10 +1,18 @@
-import React from "react";
+import { React , useEffect } from "react";
 import { ShieldCheck, Eye, Lock, Globe, ArrowLeft, Bell } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "../components/PaymentHeader";
 
 export default function Privacy() {
   const navigate = useNavigate();
+
+  useEffect(() => {
+    window.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: "instant", // Use "smooth" if you want a sliding effect
+    });
+  }, []);
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-[#030712] font-sans transition-colors">
