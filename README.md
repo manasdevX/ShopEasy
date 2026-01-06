@@ -532,13 +532,11 @@ This project represents a comprehensive, full-stack implementation of a modern M
   <h3>✨ Thank you for checking out this project! ✨</h3>
   <p>If you found this code helpful or interesting, please consider giving it a ⭐️.</p>
 
-  <div align="center">
   <h3>🤝 Connect with the Team</h3>
-  <table>
+  <table width="100%">
     <tr>
-      <td align="center" width="50%">
-        <strong>Shourya</strong>
-        <br/><br/>
+      <td align="center" width="50%" style="vertical-align: top;">
+        <p><strong>Shourya</strong></p>
         <a href="https://github.com/shourya-shivhareE" target="_blank">
           <img src="https://img.shields.io/badge/GITHUB-Profile-black?style=for-the-badge&logo=github" alt="GitHub">
         </a>
@@ -551,9 +549,8 @@ This project represents a comprehensive, full-stack implementation of a modern M
           <img src="https://img.shields.io/badge/EMAIL-Contact_Me-red?style=for-the-badge&logo=gmail" alt="Email">
         </a>
       </td>
-      <td align="center" width="50%">
-        <strong>Manas</strong>
-        <br/><br/>
+      <td align="center" width="50%" style="vertical-align: top;">
+        <p><strong>Manas</strong></p>
         <a href="https://github.com/manasdevX" target="_blank">
           <img src="https://img.shields.io/badge/GITHUB-Profile-black?style=for-the-badge&logo=github" alt="GitHub">
         </a>
@@ -568,7 +565,7 @@ This project represents a comprehensive, full-stack implementation of a modern M
       </td>
     </tr>
   </table>
-</div>
-  
-  <p><i>Built with ❤️ using the MERN Stack</i></p>
+
+  <br />
+  <p align="center"><i>Built with ❤️ using the MERN Stack</i></p>
 </div>
