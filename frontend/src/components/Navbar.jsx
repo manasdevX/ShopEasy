@@ -14,6 +14,7 @@ import {
   Loader2,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { showSuccess } from "../utils/toast";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -156,15 +157,19 @@ export default function Navbar() {
       setCartCount(0);
       setUser(null);
 
-      toast.success("Logged out successfully");
+      showSuccess("Logged out successfully");
 
-      // 3. Redirect
-      window.location.href = "/";
+      setTimeout(() => {
+        window.location.href = "/";
+      }, 1000);
+
     } catch (err) {
       console.error("Logout failed", err);
       // Fallback: Force clear local state even if backend fails
       localStorage.clear();
-      window.location.href = "/";
+      setTimeout(() => {
+        window.location.href = "/";
+      }, 1000);
     }
   };
 

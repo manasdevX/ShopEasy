@@ -1,4 +1,4 @@
-import React from "react";
+import { React , useEffect } from "react";
 import {
   Phone,
   Mail,
@@ -14,6 +14,14 @@ import { useLocation } from "react-router-dom";
 export default function ContactPage() {
   const location = useLocation();
   const comeFrom = location.state?.fromContact;
+
+  useEffect(() => {
+    window.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: "instant", // Use "smooth" if you want a sliding effect
+    });
+  }, []);
 
   const team = [
     { name: "Manas Agnihotri", phone: "+91 9690886564" },
