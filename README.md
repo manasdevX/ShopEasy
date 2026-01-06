@@ -524,7 +524,7 @@ This project represents a comprehensive, full-stack implementation of a modern M
 **The goal was simple:** To build a platform that is not just functional, but scalable, secure, and ready for real-world deployment.
 
 ### 🔮 Future Improvements
-* [ ] AI-based Product Recommendations.
+**AI-based Product Recommendations.**
 
 ---
 
