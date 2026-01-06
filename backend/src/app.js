@@ -3,7 +3,7 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import session from "express-session";
 import MongoStore from "connect-mongo";
-import "./config/redis.js";
+import redisClient from "./config/redis.js";
 
 // --- ROUTES IMPORTS ---
 import productRoutes from "./routes/product.routes.js";
@@ -19,6 +19,7 @@ const app = express();
 
 /**
  * 🟢 CLOUD DEPLOYMENT & PROXY CONFIG
+ * Required for secure cookies to work on platforms like Heroku, Render, or AWS.
  */
 app.set("trust proxy", 1);
 
@@ -43,22 +44,19 @@ app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
 /**
  * 🟢 SESSION CONFIGURATION
- * Optimized to stop guest session bloat.
+ * Optimized to stop guest session bloat and ensure persistence.
  */
 app.use(
   session({
     secret: process.env.SESSION_SECRET || "shopeasy_secret_77",
     resave: false,
-    // ✅ saveUninitialized: false ensures NO document is created until you
-    // explicitly add data (like req.session.userId = user._id)
-    saveUninitialized: false,
+    saveUninitialized: false, // Ensures NO document is created until data is added.
     proxy: true,
     name: "shopeasy.sid",
     store: MongoStore.create({
       mongoUrl: process.env.MONGO_URI,
-      ttl: 24 * 60 * 60,
+      ttl: 24 * 60 * 60, // 1 Day
       autoRemove: "native",
-      // 🟢 Change the collection name so it doesn't conflict with your manual model
       collectionName: "app_sessions",
     }),
     cookie: {
@@ -71,10 +69,17 @@ app.use(
 );
 
 /**
- * 🟢 SOCKET.IO INTEGRATION
+ * 🟢 SOCKET.IO INTEGRATION MIDDLEWARE
+ * This MUST be placed before routes so that controllers can access req.io.
  */
 app.use((req, res, next) => {
-  req.io = req.app.get("socketio");
+  const io = req.app.get("socketio");
+  if (io) {
+    req.io = io;
+  } else {
+    // Helpful for debugging why socket signals aren't sending.
+    // console.warn("⚠️ [DEBUG] Socket.io instance not found on app settings.");
+  }
   next();
 });
 
@@ -96,6 +101,7 @@ app.get("/health", (req, res) => {
   });
 });
 
+// --- 404 HANDLER ---
 app.use((req, res) => {
   res.status(404).json({
     success: false,
@@ -103,8 +109,15 @@ app.use((req, res) => {
   });
 });
 
+// --- GLOBAL ERROR HANDLER (CRASH PREVENTION) ---
 app.use((err, req, res, next) => {
+  // ✅ FIX: Check if headers are already sent to prevent server crash
+  if (res.headersSent) {
+    return next(err);
+  }
+
   console.error("🔥 Server Error Stack:", err.stack);
+
   const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
   res.status(statusCode).json({
     success: false,

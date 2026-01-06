@@ -116,18 +116,46 @@ export const sendMobileOtp = async (req, res) => {
 /* ======================================================
    3. CHECK OTP (Generic)
 ====================================================== */
+/* ======================================================
+   3. CHECK OTP (Generic)
+====================================================== */
 export const checkOtp = async (req, res) => {
   try {
     let { identifier, otp } = req.body;
-    const normalizedIdentifier = identifier.trim().toLowerCase();
+    
+    // 1. First, standard normalization (trim/lowercase)
+    let normalizedIdentifier = identifier.trim().toLowerCase();
+
+    // 2. Check if this looks like a phone number (digits/plus only)
+    // If it's NOT an email (doesn't contain @), assume it's a phone number
+    if (!normalizedIdentifier.includes('@')) {
+       // Clean any non-digit/non-plus chars (like spaces or dashes)
+       const cleaned = normalizedIdentifier.replace(/[^0-9+]/g, "");
+       
+       // Apply the SAME formatting logic as sendMobileOtp
+       // If it's exactly 10 digits, assume India (+91)
+       if (cleaned.length === 10 && /^\d+$/.test(cleaned)) {
+          normalizedIdentifier = "+91" + cleaned;
+       } else {
+          normalizedIdentifier = cleaned;
+       }
+    }
+
+    // 3. Query with the correctly formatted identifier
     const validOtp = await Otp.findOne({
       identifier: normalizedIdentifier,
       otp,
     });
+
     if (!validOtp)
       return res.status(400).json({ message: "Invalid or expired OTP" });
+
+    // Optional: Delete OTP after successful use to prevent reuse
+    // await Otp.deleteOne({ _id: validOtp._id });
+
     res.status(200).json({ success: true, message: "Verified successfully" });
   } catch (error) {
+    console.error("Check OTP Error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };

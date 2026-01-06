@@ -3,6 +3,9 @@ import { Toaster } from "react-hot-toast";
 import { useEffect } from "react";
 import axios from "axios";
 
+// ✅ Import Socket Provider
+import { SocketProvider } from "./context/SocketContext";
+
 // --- USER PAGES ---
 import Home from "./pages/Home";
 import Login from "./pages/Login";
@@ -40,24 +43,24 @@ import Notifications from "./pages/Seller/Notification";
 import Settings from "./pages/Seller/Settings";
 
 // ✅ GLOBAL AXIOS CONFIGURATION
-// Essential for cross-origin session cookies (shopeasy.sid) to be sent with every request.
 axios.defaults.withCredentials = true;
 
 export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // ✅ GLOBAL SESSION CHECK & REDIRECT PROTECTOR
+  // ✅ GLOBAL SESSION CHECK
   useEffect(() => {
     const checkSession = async () => {
       const sellerToken = localStorage.getItem("sellerToken");
       const userToken = localStorage.getItem("token");
       const isSellerPath = location.pathname.startsWith("/Seller");
 
-      // Skip check for public landing pages or login/signup to prevent loops
       const publicPaths = [
         "/Seller/login",
         "/Seller/signup",
+        "/Seller/register", // ✅ ADD THIS (Step 2)
+        "/Seller/bank-details", // ✅ ADD THIS (Step 3)
         "/login",
         "/signup",
         "/Seller/Landing",
@@ -65,16 +68,10 @@ export default function App() {
       ];
       if (publicPaths.includes(location.pathname)) return;
 
-      // Only check if local storage suggests an active session.
       if (sellerToken || userToken) {
         try {
           const API_URL =
             import.meta.env.VITE_API_URL || "http://localhost:5000";
-
-          /** * ✅ ROLE-BASED VALIDATION
-           * Hits the specific controller for the current portal to ensure
-           * session isolation between Sellers and Customers.
-           */
           const endpoint = isSellerPath
             ? "/api/sellers/profile"
             : "/api/auth/me";
@@ -85,20 +82,10 @@ export default function App() {
             },
           });
         } catch (error) {
-          // Handle Unauthorized status (401).
           if (error.response?.status === 401) {
-            console.warn(
-              "Session validation failed. Cleaning up local state..."
-            );
-
-            /**
-             * ✅ RACE CONDITION FIX:
-             * We check if the token still exists in localStorage. If it does, we ignore
-             * the first 401 for a brief moment to allow cookie synchronization to catch up.
-             */
+            console.warn("Session validation failed. Cleaning up...");
             if (isSellerPath && sellerToken) return;
 
-            // Wipe specific storage based on the failed path
             if (isSellerPath) {
               localStorage.removeItem("sellerToken");
               localStorage.removeItem("sellerUser");
@@ -113,8 +100,7 @@ export default function App() {
       }
     };
 
-    // Small stabilization delay to let the browser process cookies after login redirects
-    const timer = setTimeout(checkSession, 500);
+    const timer = setTimeout(checkSession, 100);
     return () => clearTimeout(timer);
   }, [location.pathname]);
 
@@ -132,62 +118,59 @@ export default function App() {
             borderRadius: "12px",
             boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)",
           },
-          success: {
-            duration: 5000,
-            theme: { primary: "#22c55e" },
-          },
-          error: {
-            duration: 5000,
-            theme: { primary: "#ef4444" },
-          },
+          success: { duration: 5000, theme: { primary: "#22c55e" } },
+          error: { duration: 5000, theme: { primary: "#ef4444" } },
         }}
       />
 
-      <Routes>
-        {/* --- User / Customer Routes --- */}
-        <Route path="/" element={<Home />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
-        <Route path="/update-password" element={<UpdatePassword />} />
-        <Route path="/update-email" element={<UpdateEmail />} />
-        <Route path="/account" element={<Account />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/search" element={<SearchResults />} />
-        <Route path="/product/:id" element={<ProductDetails />} />
-        <Route path="/payment" element={<Payment />} />
-        <Route path="/product/:id/reviews" element={<Reviews />} />
-        <Route path="/OrderSummary" element={<OrderSummary />} />
-        <Route path="/cart" element={<Cart />} />
+      {/* ✅ WRAP ROUTES WITH SOCKET PROVIDER */}
+      <SocketProvider>
+        <Routes>
+          {/* --- User / Customer Routes --- */}
+          <Route path="/" element={<Home />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
+          <Route path="/update-password" element={<UpdatePassword />} />
+          <Route path="/update-email" element={<UpdateEmail />} />
+          <Route path="/account" element={<Account />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/search" element={<SearchResults />} />
+          <Route path="/product/:id" element={<ProductDetails />} />
+          <Route path="/payment" element={<Payment />} />
+          <Route path="/product/:id/reviews" element={<Reviews />} />
+          <Route path="/OrderSummary" element={<OrderSummary />} />
+          <Route path="/cart" element={<Cart />} />
 
-        {/* --- Seller Portal Routes --- */}
-        <Route path="/Seller/Landing" element={<SellerLanding />} />
-        <Route path="/Seller/Dashboard" element={<Dashboard />} />
-        <Route path="/Seller/Notifications" element={<Notifications />} />
-        <Route path="/Seller/Settings" element={<Settings />} />
-        <Route path="/Seller/products" element={<Products />} />
-        <Route path="/Seller/orders" element={<SellerOrders />} />
-        <Route path="/Seller/add-product" element={<AddProduct />} />
-        <Route path="/Seller/edit-product/:id" element={<EditProduct />} />
+          {/* --- Seller Portal Routes --- */}
+          <Route path="/Seller/Landing" element={<SellerLanding />} />
+          <Route path="/Seller/Dashboard" element={<Dashboard />} />
+          <Route path="/Seller/Notifications" element={<Notifications />} />
+          <Route path="/Seller/Settings" element={<Settings />} />
+          <Route path="/Seller/products" element={<Products />} />
+          <Route path="/Seller/orders" element={<SellerOrders />} />
+          <Route path="/Seller/add-product" element={<AddProduct />} />
+          <Route path="/Seller/edit-product/:id" element={<EditProduct />} />
 
-        {/* Seller Auth Flow */}
-        <Route path="/Seller/login" element={<SellerLogin />} />
-        <Route path="/Seller/signup" element={<SellerSignup />} />
-        <Route
-          path="/Seller/forgot-password"
-          element={<SellerForgotPassword />}
-        />
-        <Route path="/Seller/register" element={<SellerRegister />} />
-        <Route path="/Seller/bank-details" element={<BankDetails />} />
-        <Route path="/Seller/setup" element={<SellerRegister />} />
+          {/* Seller Auth Flow */}
+          <Route path="/Seller/login" element={<SellerLogin />} />
+          <Route path="/Seller/signup" element={<SellerSignup />} />
+          <Route
+            path="/Seller/forgot-password"
+            element={<SellerForgotPassword />}
+          />
+          <Route path="/Seller/register" element={<SellerRegister />} />
+          <Route path="/Seller/bank-details" element={<BankDetails />} />
+          <Route path="/Seller/setup" element={<SellerRegister />} />
 
-        {/* --- General Utility Routes --- */}
-        <Route path="/Terms" element={<Terms />} />
-        <Route path="/Privacy" element={<Privacy />} />
-        <Route path="/Help" element={<Help />} />
-        <Route path="/Shipping-policy" element={<ShippingPolicy />} />
-        <Route path="/FAQs" element={<FAQs />} />
-        <Route path="/ContactUs" element={<ContactUs />} />
-      </Routes>
+          {/* --- General Utility Routes --- */}
+          <Route path="/Terms" element={<Terms />} />
+          <Route path="/Privacy" element={<Privacy />} />
+          <Route path="/Help" element={<Help />} />
+          <Route path="/Shipping-policy" element={<ShippingPolicy />} />
+          <Route path="/FAQs" element={<FAQs />} />
+          <Route path="/ContactUs" element={<ContactUs />} />
+        </Routes>
+      </SocketProvider>
     </>
   );
 }
