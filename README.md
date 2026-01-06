@@ -237,24 +237,11 @@ Once the application is set up and running, ShopEasy provides a complete e-comme
 #### 🔐 Authentication & Onboarding
 We’ve designed a secure and intuitive entry point for our merchants, featuring a multi-step registration process to ensure data integrity.
 
-<table width="100%">
-  <tr>
-    <th align="center">Existing User Login</th>
-    <th align="center">New User Signup</th>
-  </tr>
-  <tr>
-    <td align="center"><img src="./assets/User-Login.png" alt="Login" /></td>
-    <td align="center"><img src="./assets/User-Signup.png" alt="Signup" /></td>
-  </tr>
-  <tr>
-    <th colspan="2" align="center">Password Recovery</th>
-  </tr>
-  <tr>
-    <td colspan="2" align="center">
-      <img src="./assets/User_Forgot_password.png" alt="Forgot Password" width="60%" />
-    </td>
-  </tr>
-</table>
+| User Login | Account Creation |
+| :---: | :---: |
+| ![User Login](./assets/User-Login.png) | ![User Signup](./assets/User-Signup.png) |
+| **Recovery Initiation** | **OTP Verification** |
+| ![Forgot Password](./assets/User_Forgot_password.png) | ![Forgot Password confirmation](./assets/Seller-Forgot_password0.png) |
 
 **Features:**
 * **Instant Validation:** Real-time feedback on email formats and password strength to reduce user errors.
@@ -351,6 +338,8 @@ We provide dedicated interfaces for sensitive account updates and recovery.
 #### 🔍 Product Intelligence & Details
 A high-conversion product page designed with interactive elements and real-time data synchronization to enhance the shopping experience.
 
+| Product Details | Product Reviews |
+| :---: | :---: |
 | ![Product Details](./assets/Product_Detail.png) | ![Product Reviews](./assets/Product_Review.png) |
 
 **Features:**
@@ -403,20 +392,21 @@ Quick and secure entry for merchants to manage their digital storefront.
 
 | Seller Login | Seller Signup |
 | :---: | :---: |
-| ![Login](./assets/Seller_login.png) | ![Signup](./assets/Seller_Signup.png) |
+| ![Login](./assets/Seller_login.jpeg) | ![Signup](./assets/Seller_Signup.jpeg) |
+|![Seller Business Details](./assets/Seller_Business_details.png) | ![Seller Bank Details](./assets/Seller_bank-details_register.png) |
 
 
 #### 🚀 Seller Home Interface
 Once authenticated, sellers land on this intuitive entry point to manage their digital storefront.
 
-![Seller Landing](./Seller-Landing.png)
+![Seller Landing](./assets/Seller-Landing.png)
 
 ---
 
 #### 🔔 Real-time Notifications
 The notification hub ensures sellers never miss a beat—tracking every order milestone from placement to cancellation.
 
-![Seller Notifications](./Seller-Notifications.png)
+![Seller Notifications](./assets/Seller-Notification.png)
 
 * **Order Alerts:** Instant updates when a customer places a new order.
 * **Status Changes:** Real-time tracking for successful payments or order cancellations.
@@ -424,10 +414,10 @@ The notification hub ensures sellers never miss a beat—tracking every order mi
 
 ---
 
-#### 📊 Seller Command Center
+#### 📊 Seller Dashboard
 The dashboard provides a high-level overview of business health, combining real-time data with proactive inventory management.
 
-![Seller Dashboard](./Seller-Dashboard.png)
+![Seller Dashboard](./assets/Seller-Dashboard.png)
 
 **Key Features Engineered:**
 * **⚡ Real-Time Socket Connectivity:** Integrated `Socket.io` to listen for `order_alert` events, allowing the dashboard to refresh and notify sellers the instant a sale happens without a page reload.
@@ -441,9 +431,13 @@ The dashboard provides a high-level overview of business health, combining real-
 #### 📦 Dynamic Inventory Management
 A high-performance interface for merchants to oversee their product catalog with real-time stock monitoring.
 
-![Seller Inventory](./Seller-Inventory.png)
+![Seller Inventory](./assets/Seller-Inventory.png)
+| Add New Product | Edit & Refine |
+| :---: | :---: |
+| ![Add Product](./assets/Add-Product.png) | ![Edit Product](./assets/Edit-Product.png) |
 
 **Technical Implementation Details:**
+* **Comprehensive CRUD operations allowing merchants to seamlessly onboard new items or adjust existing listings with real-time validation.
 * **🔄 Socket-Driven Stock Sync:** The page utilizes `Socket.io` to listen for background inventory changes. If a customer purchases an item, the stock count updates **silently and automatically** without requiring a page refresh.
 * **🔍 Optimized Local Filtering:** Implemented a high-speed search and filter mechanism that allows sellers to navigate large catalogs instantly by product name or category.
 * **🛡️ Session Persistence:** Configured with `credentials: "include"` and robust 401 interceptors to ensure that merchant sessions remain secure and valid across all administrative actions.
@@ -458,7 +452,7 @@ A high-performance interface for merchants to oversee their product catalog with
 #### 🚚 Advanced Order Fulfillment System
 A high-performance dashboard designed for merchants to manage the end-to-end lifecycle of customer orders with real-time synchronization and professional reporting.
 
-![Seller Orders](./Seller-Orders.png)
+![Seller Orders](./assets/Seller-Orders.png)
 
 **Key Technical Implementations**
 
@@ -499,31 +493,20 @@ A comprehensive configuration suite allowing sellers to manage their identity, b
 
 ##### 👤 1. Account & Security
 The gateway for personal profile management. This module ensures that merchant contact information is always synchronized with the communication engine.
-![Seller Account Info](./Seller-AccountInfo.png)
+![Seller Account Info](./assets/Seller-AccountInfo.png)
 
 ##### 📈 2. Business Legitimacy
 A dedicated section for legal compliance. It handles the collection of business names, registration numbers, and tax identifiers required for legal e-commerce operations.
-![Seller Business Details](./Seller-Business_details.png)
+![Seller Business Details](./assets/Seller-Business_details.png)
 
 
+##### 🏦 3. Bank Details
+A dedicated section for showing the bank details of the Seller.
+![Seller Business Details](./assets/Seller-Bank_details.png)
 
-##### 📍 3. Fulfillment & Warehouse Logistics
+##### 📍 4. Fulfillment & Warehouse Logistics
 Management of the primary shipping origin. This address is used by the logistics engine to calculate shipping rates and coordinate pick-ups for new orders.
-![Seller Store Address](./Seller-Store_address.png)
-
-##### 🏦 4. Secure Payout Routing
-The financial backbone of the seller portal. This interface allows for the secure input of IFSC codes, Account Numbers, and Bank names to ensure automated and accurate revenue payouts.
-![Seller Bank Details](./Seller_bank-details_register.png)
-
----
-
-**Technical Implementation Strategy**
-
-* **Atomic State Management:** Each settings page utilizes an "Atomic Update" strategy—only the fields changed by the user are sent to the API, reducing bandwidth and server load.
-* **Security-First Architecture:** Financial and legal data fields are handled with strict validation and are transmitted over secure, authenticated routes using `Authorization: Bearer` tokens.
-* **UX Consistency:** All four modules share a unified design language, featuring high-contrast typography, rounded "super-ellipse" containers, and dark-mode optimization for high-efficiency management.
-* **Optimistic Feedback:** Integrated toast notifications via `showSuccess` and `showError` provide immediate feedback during the data persistence process.
-
+![Seller Store Address](./assets/Seller-Store_address.png)
 
 
 
