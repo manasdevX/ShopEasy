@@ -130,7 +130,7 @@ export const SocketProvider = ({ children }) => {
           icon: "🚀",
           style: {
             ...toastStyle,
-            background: "#f97316", // ShopEasy Orange
+            background: "#10B981", 
             color: "#fff",
           },
         });
