@@ -140,7 +140,7 @@ export default function EditProduct() {
     }));
   };
 
-  if (formData.mrp < formData.price) {
+  if (Number(formData.mrp) < Number(formData.price)) {
     return showError("You cannot sell at a price greater than MRP.");
   }
 
@@ -167,6 +167,11 @@ export default function EditProduct() {
   // --- ✅ FIX: ROBUST UPDATE HANDLER ---
   const handleUpdate = async (e) => {
     if (e) e.preventDefault();
+    if (!formData.thumbnail) {
+      showError("Please upload a primary product image");
+      return;
+    }
+
     setIsUpdating(true);
 
     const updateData = new FormData();
@@ -194,24 +199,29 @@ export default function EditProduct() {
       updateData.append("existingThumbnail", formData.thumbnail);
     }
 
-    // 3. Handle GALLERY IMAGES
-    // We iterate through the 4 slots to see what we need to keep or upload.
+    // --- 3. Handle GALLERY IMAGES ---
+    let hasExistingImages = false;
+
     for (let i = 0; i < 4; i++) {
-      const newFile = newGalleryFiles[i]; // Is there a new file?
-      const existingUrl = formData.images[i]; // Is there a preview/url?
+      const newFile = newGalleryFiles[i];
+      const existingUrl = formData.images[i];
 
       if (newFile) {
-        // Case A: New File Upload -> Append to 'images' for Cloudinary upload
         updateData.append("images", newFile);
       } else if (
         existingUrl &&
         typeof existingUrl === "string" &&
         existingUrl.startsWith("http")
       ) {
-        // Case B: Existing URL -> Append to 'existingImages' so backend keeps it
         updateData.append("existingImages", existingUrl);
+        hasExistingImages = true;
       }
-      // Case C: Null/Empty -> Do nothing, effectively deleting it from backend list
+    }
+
+    // ✅ FIX: If all gallery images were deleted, send an empty indicator
+    // This prevents the backend from "ignoring" the deletion.
+    if (!hasExistingImages && !newGalleryFiles.some((f) => f !== null)) {
+      updateData.append("existingImages", "");
     }
 
     try {
