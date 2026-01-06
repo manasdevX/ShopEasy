@@ -65,8 +65,20 @@ export default function App() {
         "/signup",
         "/Seller/Landing",
         "/",
+        "/ContactUs",
+        "/Terms",
+        "/Privacy",
+        "/Help",
+        "/Shipping-policy",
+        "/FAQs",
+        "/search",
       ];
-      if (publicPaths.includes(location.pathname)) return;
+      // ✅ Allow public paths OR any product detail page
+      if (
+        publicPaths.includes(location.pathname) ||
+        location.pathname.startsWith("/product/")
+      )
+        return;
 
       if (sellerToken || userToken) {
         try {

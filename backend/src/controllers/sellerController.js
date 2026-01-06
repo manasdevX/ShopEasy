@@ -49,9 +49,22 @@ const clearSellerCache = async (sellerId) => {
 
 // @desc    Register new seller
 // @route   POST /api/sellers/register
+// @desc    Register new seller
+// @route   POST /api/sellers/register
 export const registerSeller = async (req, res) => {
   try {
-    const { name, email, password, phone, googleId } = req.body;
+    // ✅ 1. Extract address and business details alongside other fields
+    let {
+      name,
+      email,
+      password,
+      phone,
+      googleId,
+      address,
+      businessName,
+      businessType,
+      gstin,
+    } = req.body;
 
     if (!name || !email || !password || !phone) {
       return res
@@ -59,23 +72,35 @@ export const registerSeller = async (req, res) => {
         .json({ message: "Please fill all required fields" });
     }
 
+    // ✅ 2. Handle Address Object -> String Conversion (Same logic as updateSellerAddress)
+    if (address && typeof address === "object") {
+      const { street = "", city = "", state = "", zip = "" } = address;
+      address = `${street}, ${city}, ${state}, ${zip}`;
+    }
+
     const sellerExists = await Seller.findOne({ email: email.toLowerCase() });
     if (sellerExists)
       return res.status(400).json({ message: "Seller email already exists" });
 
+    // ✅ 3. Include address in creation
     const seller = await Seller.create({
       name,
       email: email.toLowerCase(),
       password,
       phone,
       googleId,
-      isOnline: true, // 🟢 FORCE LIVE ON REGISTER
+      address: address || "", // ✅ Save the address!
+      businessName, // Optional: save if provided
+      businessType, // Optional
+      gstin, // Optional
+      isOnline: true,
     });
 
     if (seller) {
       const token = generateToken(seller._id);
 
-      // 🟢 1. CHECK SESSION LIMIT
+      // ... (Rest of your session logic remains exactly the same) ...
+
       try {
         await checkSessionLimit(SellerSession, "seller", seller._id, 2);
       } catch (limitError) {
@@ -84,16 +109,14 @@ export const registerSeller = async (req, res) => {
           .json({ message: limitError.message });
       }
 
-      // ✅ 2. Create entry in SellerSession Collection
       await SellerSession.create({
         seller: seller._id,
         refreshToken: token,
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 Days
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
         ipAddress: req.ip,
         userAgent: req.headers["user-agent"],
       });
 
-      // ✅ 3. Link Express Session for persistence
       req.session.sellerId = seller._id;
       req.session.role = "seller";
 
@@ -103,12 +126,11 @@ export const registerSeller = async (req, res) => {
             .status(500)
             .json({ message: "Session initialization failed" });
 
-        // 🟢 FIX: Set Cookie so logout can find the token
         res.cookie("accessToken", token, {
           httpOnly: true,
           secure: process.env.NODE_ENV === "production",
           sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-          maxAge: 30 * 24 * 60 * 60 * 1000, // 30 Days
+          maxAge: 30 * 24 * 60 * 60 * 1000,
         });
 
         res.status(201).json({
@@ -116,8 +138,10 @@ export const registerSeller = async (req, res) => {
           name: seller.name,
           email: seller.email,
           role: seller.role,
-          isOnline: seller.isOnline, // ✅ Send status to frontend
+          isOnline: seller.isOnline,
           token: token,
+          // ✅ Return the address so frontend updates immediately
+          address: seller.address,
         });
       });
     } else {
