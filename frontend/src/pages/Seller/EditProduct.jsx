@@ -438,8 +438,34 @@ export default function EditProduct() {
                     >
                       <option>Electronics</option>
                       <option>Fashion</option>
-                      <option>Home & Decor</option>
+                      <option>Home</option>
                       <option>Beauty</option>
+                      <option>Sports</option>
+                      <option>Kitchen-Accessories</option>
+                      <option>Groceries</option>
+                      <option>Sports-Accessories</option>
+                      <option>Smartphones</option>
+                      <option>Mobile-Accessories</option>
+                      <option>Mens-Watches</option>
+                      <option>Mens-Shoes</option>
+                      <option>Womens-Watches</option>
+                      <option>Womens-Dresses</option>
+                      <option>Womens-Shoes</option>
+                      <option>Womens-Bags</option>
+                      <option>Womens-Jewellery</option>
+                      <option>Sunglasses</option>
+                      <option>Mens-Shirts</option>
+                      <option>Tops</option>
+                      <option>Motorcycle</option>
+                      <option>Home-Decoration</option>
+                      <option>Fragrances</option>
+                      <option>Vechile</option>
+                      <option>Vechile</option>
+                      <option>Laptops</option>
+                      <option>Furniture</option>
+                      <option>Skin-Care</option>
+                      <option>Tablets</option>
+                      <option>Others</option>
                     </select>
                   </div>
                 </div>
