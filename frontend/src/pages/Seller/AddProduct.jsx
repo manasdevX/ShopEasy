@@ -326,7 +326,6 @@ export default function AddProduct() {
               </div>
             </section>
 
-            {/* NEW: Visibility Settings moved to Left Column */}
             <section className="bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border border-slate-200 dark:border-slate-800">
               <h3 className={labelStyle}>
                 <Sparkles size={14} /> Visibility Settings
@@ -361,7 +360,6 @@ export default function AddProduct() {
             </section>
           </div>
 
-          {/* RIGHT COLUMN: FORM (Matching Edit UI) */}
           <div className="lg:col-span-8">
             <form
               id="product-form"
@@ -409,6 +407,31 @@ export default function AddProduct() {
                       <option>Home</option>
                       <option>Beauty</option>
                       <option>Sports</option>
+                      <option>Kitchen-Accessories</option>
+                      <option>Groceries</option>
+                      <option>Sports-Accessories</option>
+                      <option>Smartphones</option>
+                      <option>Mobile-Accessories</option>
+                      <option>Mens-Watches</option>
+                      <option>Mens-Shoes</option>
+                      <option>Womens-Watches</option>
+                      <option>Womens-Dresses</option>
+                      <option>Womens-Shoes</option>
+                      <option>Womens-Bags</option>
+                      <option>Womens-Jewellery</option>
+                      <option>Sunglasses</option>
+                      <option>Mens-Shirts</option>
+                      <option>Tops</option>
+                      <option>Motorcycle</option>
+                      <option>Home-Decoration</option>
+                      <option>Fragrances</option>
+                      <option>Vechile</option>
+                      <option>Vechile</option>
+                      <option>Laptops</option>
+                      <option>Furniture</option>
+                      <option>Skin-Care</option>
+                      <option>Tablets</option>
+                      <option>Others</option>
                     </select>
                   </div>
                 </div>
