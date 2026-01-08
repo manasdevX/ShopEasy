@@ -100,46 +100,65 @@ export default function CheckoutPage() {
     fetchAddresses();
   }, [token]);
 
-  // ================= IMPROVED GEOLOCATION =================
   const handleUseCurrentLocation = () => {
     if (!navigator.geolocation) {
-      showError("Geolocation not supported");
+      showError("Geolocation is not supported by your browser");
       return;
     }
+
     setIsLocating(true);
+
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         const { latitude, longitude } = pos.coords;
+        const GOOGLE_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+
         try {
           const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`
+            `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${GOOGLE_KEY}`
           );
           const data = await res.json();
-          if (data && data.address) {
-            const addr = data.address;
-            const fullStreet = [addr.road, addr.suburb, addr.neighbourhood]
-              .filter(Boolean)
-              .join(", ");
+
+          if (data.status === "OK" && data.results.length > 0) {
+            const addressComponents = data.results[0].address_components;
+
+            // Helper to extract specific components from Google's format
+            const getComp = (type) =>
+              addressComponents.find((c) => c.types.includes(type))
+                ?.long_name || "";
+
+            // Mapping Google fields to your existing newAddress state
+            const streetNumber = getComp("street_number");
+            const route = getComp("route");
+            const sublocality = getComp("sublocality_level_1");
+
             setNewAddress((prev) => ({
               ...prev,
-              street: fullStreet || data.display_name.split(",")[0],
-              city: addr.city || addr.town || addr.village || "",
-              pincode: addr.postcode || "",
-              state: addr.state || "",
+              street: [streetNumber, route, sublocality]
+                .filter(Boolean)
+                .join(", "),
+              city:
+                getComp("locality") || getComp("administrative_area_level_2"),
+              state: getComp("administrative_area_level_1"),
+              pincode: getComp("postal_code"),
             }));
-            showSuccess("Location detected!");
+
+            showSuccess("Location detected via Google!");
+          } else {
+            throw new Error(data.error_message || "No results found");
           }
         } catch (e) {
-          showError("Failed to fetch details");
+          console.error("Google Geocoding Error:", e);
+          showError("Failed to fetch address details");
         } finally {
           setIsLocating(false);
         }
       },
-      () => {
+      (error) => {
         setIsLocating(false);
-        showError("Access denied");
+        showError("Location access denied");
       },
-      { enableHighAccuracy: true }
+      { enableHighAccuracy: true, timeout: 10000 }
     );
   };
 
@@ -174,8 +193,9 @@ export default function CheckoutPage() {
 
   // ================= UPDATED PAYMENT HANDLER =================
   const handlePayment = async () => {
-    if (!selectedAddress) return toast.error("Please select a shipping address");
-    
+    if (!selectedAddress)
+      return toast.error("Please select a shipping address");
+
     setIsProcessing(true); // START SPINNER
 
     try {
@@ -211,25 +231,25 @@ export default function CheckoutPage() {
           }),
         });
         const data = await res.json();
-        
+
         if (res.ok) {
           showSuccess("Order Placed!");
           localStorage.removeItem("cart");
           window.dispatchEvent(new Event("cartUpdated"));
-          
+
           // ✅ FIX: Use URL Parameter for COD as well for consistency
           // Check if data is the order object directly or wrapped in data.order
-          const orderId = data._id || data.order?._id; 
+          const orderId = data._id || data.order?._id;
           navigate(`/OrderSummary?orderId=${orderId}`);
         } else {
           showError(data.message || "Failed to place order");
         }
-        setIsProcessing(false); 
+        setIsProcessing(false);
         return;
       }
 
       // 2. ONLINE PAYMENT (RAZORPAY) LOGIC
-      
+
       // A. Load Script
       const isScriptLoaded = await loadRazorpayScript();
       if (!isScriptLoaded) {
@@ -257,91 +277,93 @@ export default function CheckoutPage() {
 
       // C. Open Razorpay Modal
       const options = {
-        key: RAZORPAY_KEY_ID, 
-        amount: orderData.amount, 
+        key: RAZORPAY_KEY_ID,
+        amount: orderData.amount,
         currency: "INR",
         name: "ShopEasy",
         description: "Payment for order",
-        order_id: orderData.id, 
+        order_id: orderData.id,
         handler: async function (response) {
-            // D. Verify Payment on Backend
-            try {
-                const verifyRes = await fetch(`${API_URL}/api/payment/verify-payment`, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${token}`,
-                    },
-                    body: JSON.stringify({
-                        razorpay_payment_id: response.razorpay_payment_id,
-                        razorpay_order_id: response.razorpay_order_id,
-                        razorpay_signature: response.razorpay_signature,
-                        // Pass order details to save the final order
-                        orderItems: items.map((i) => ({
-                          name: i.name,
-                          qty: i.quantity,
-                          image: i.image,
-                          price: i.price,
-                          product: i._id,
-                          seller: i.seller,
-                        })),
-                        shippingAddress: {
-                          address: selectedAddress.addressLine || selectedAddress.street,
-                          city: selectedAddress.city,
-                          postalCode: selectedAddress.pincode,
-                          country: selectedAddress.country,
-                          phone: selectedAddress.phone,
-                        },
-                        itemsPrice: subtotal,
-                        taxPrice: platformFee,
-                        shippingPrice: deliveryFee,
-                        totalPrice: totalPayable,
-                    })
-                });
-                
-                const verifyData = await verifyRes.json();
-                
-                if(verifyRes.ok && verifyData.success) {
-                    showSuccess("Payment Successful!");
-                    localStorage.removeItem("cart");
-                    window.dispatchEvent(new Event("cartUpdated"));
-                    
-                    // ✅ CRITICAL FIX: Navigate using URL Parameter
-                    // verifyData.order contains the saved order object from your controller
-                    navigate(`/OrderSummary?orderId=${verifyData.order._id}`);
-                    
-                } else {
-                    showError("Payment Verification Failed");
-                }
-            } catch (err) {
-                console.error(err);
-                showError("Payment Verification Error");
-            } finally {
-                setIsProcessing(false);
+          // D. Verify Payment on Backend
+          try {
+            const verifyRes = await fetch(
+              `${API_URL}/api/payment/verify-payment`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_order_id: response.razorpay_order_id,
+                  razorpay_signature: response.razorpay_signature,
+                  // Pass order details to save the final order
+                  orderItems: items.map((i) => ({
+                    name: i.name,
+                    qty: i.quantity,
+                    image: i.image,
+                    price: i.price,
+                    product: i._id,
+                    seller: i.seller,
+                  })),
+                  shippingAddress: {
+                    address:
+                      selectedAddress.addressLine || selectedAddress.street,
+                    city: selectedAddress.city,
+                    postalCode: selectedAddress.pincode,
+                    country: selectedAddress.country,
+                    phone: selectedAddress.phone,
+                  },
+                  itemsPrice: subtotal,
+                  taxPrice: platformFee,
+                  shippingPrice: deliveryFee,
+                  totalPrice: totalPayable,
+                }),
+              }
+            );
+
+            const verifyData = await verifyRes.json();
+
+            if (verifyRes.ok && verifyData.success) {
+              showSuccess("Payment Successful!");
+              localStorage.removeItem("cart");
+              window.dispatchEvent(new Event("cartUpdated"));
+
+              // ✅ CRITICAL FIX: Navigate using URL Parameter
+              // verifyData.order contains the saved order object from your controller
+              navigate(`/OrderSummary?orderId=${verifyData.order._id}`);
+            } else {
+              showError("Payment Verification Failed");
             }
+          } catch (err) {
+            console.error(err);
+            showError("Payment Verification Error");
+          } finally {
+            setIsProcessing(false);
+          }
         },
         prefill: {
-            name: selectedAddress.fullName || newAddress.name,
-            contact: selectedAddress.phone || newAddress.phone,
+          name: selectedAddress.fullName || newAddress.name,
+          contact: selectedAddress.phone || newAddress.phone,
         },
         theme: {
-            color: "#2563eb",
+          color: "#2563eb",
         },
         modal: {
-            ondismiss: function() {
-                setIsProcessing(false); 
-                showError("Payment Cancelled ❌");
-            }
-        }
+          ondismiss: function () {
+            setIsProcessing(false);
+            showError("Payment Cancelled ❌");
+          },
+        },
       };
 
       const rzp = new window.Razorpay(options);
-      rzp.on('payment.failed', function (response){
+      rzp.on("payment.failed", function (response) {
         showError(response.error.description);
         setIsProcessing(false);
       });
       rzp.open();
-
     } catch (e) {
       console.error(e);
       showError(e.message || "Checkout failed");

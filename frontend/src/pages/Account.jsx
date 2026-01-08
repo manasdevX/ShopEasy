@@ -356,13 +356,15 @@ export default function Account() {
     }
   };
 
-  // ================= GEOLOCATION HANDLER =================
+  // ================= GEOLOCATION HANDLER (GOOGLE MAPS API) =================
   const handleUseCurrentLocation = () => {
     if (!navigator.geolocation) {
       showError("Geolocation is not supported by your browser");
       return;
     }
+
     setIsLocating(true);
+    const GOOGLE_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
     const options = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 };
 
     navigator.geolocation.getCurrentPosition(
@@ -370,47 +372,48 @@ export default function Account() {
         const { latitude, longitude } = position.coords;
         try {
           const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`
+            `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${GOOGLE_KEY}`
           );
           const data = await res.json();
 
-          if (data && data.address) {
-            const addr = data.address;
-            const streetComponents = [
-              addr.house_number,
-              addr.building,
-              addr.apartment,
-              addr.residential,
-              addr.hamlet,
-              addr.village,
-              addr.road,
-              addr.street,
-              addr.suburb,
-              addr.neighbourhood,
-              addr.city_district,
-            ].filter((part) => part);
+          if (data.status === "OK" && data.results.length > 0) {
+            const components = data.results[0].address_components;
 
-            const uniqueStreetComponents = [...new Set(streetComponents)];
-            const fullStreet = uniqueStreetComponents.join(", ");
-            const city = addr.city || addr.town || addr.municipality || "";
+            // Helper function to extract specific component types
+            const getComponent = (type) =>
+              components.find((c) => c.types.includes(type))?.long_name || "";
+
+            // Mapping Google Components to your existing state keys
+            const streetNumber = getComponent("street_number");
+            const route = getComponent("route");
+            const sublocality = getComponent("sublocality_level_1");
+            const city =
+              getComponent("locality") ||
+              getComponent("administrative_area_level_2");
 
             setNewAddress((prev) => ({
               ...prev,
-              street: fullStreet || addr.display_name.split(",")[0],
+              street:
+                [streetNumber, route, sublocality].filter(Boolean).join(", ") ||
+                data.results[0].formatted_address.split(",")[0],
               city: city,
-              state: addr.state || "",
-              pincode: addr.postcode || "",
-              country: addr.country || "India",
+              state: getComponent("administrative_area_level_1"),
+              pincode: getComponent("postal_code"),
+              country: getComponent("country") || "India",
             }));
-            showSuccess("Location fetched successfully!");
+
+            showSuccess("Location detected via Google!");
+          } else {
+            throw new Error(data.error_message || "No address found");
           }
         } catch (error) {
+          console.error("Google Geocoding Error:", error);
           showError("Failed to fetch address details");
         } finally {
           setIsLocating(false);
         }
       },
-      () => {
+      (error) => {
         setIsLocating(false);
         showError("Location access denied.");
       },
