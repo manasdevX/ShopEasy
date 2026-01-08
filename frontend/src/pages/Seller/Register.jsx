@@ -152,7 +152,7 @@ export default function SellerRegister() {
     navigate("/Seller/bank-details");
   };
 
-  // ================= GEOLOCATION HANDLER =================
+  // ================= GEOLOCATION HANDLER (GOOGLE MAPS API) =================
   const handleUseCurrentLocation = () => {
     if (!navigator.geolocation) {
       showError("Geolocation is not supported by your browser");
@@ -160,6 +160,7 @@ export default function SellerRegister() {
     }
 
     setIsLocating(true);
+    const GOOGLE_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
     const options = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 };
 
     navigator.geolocation.getCurrentPosition(
@@ -167,22 +168,33 @@ export default function SellerRegister() {
         const { latitude, longitude } = position.coords;
         try {
           const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`
+            `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${GOOGLE_KEY}`
           );
           const data = await res.json();
 
-          if (data && data.address) {
-            const addr = data.address;
-            const cityFallback =
-              addr.city || addr.town || addr.municipality || addr.county || "";
+          if (data.status === "OK" && data.results.length > 0) {
+            const components = data.results[0].address_components;
 
+            // Internal helper to find specific address parts
+            const getComp = (type) =>
+              components.find((c) => c.types.includes(type))?.long_name || "";
+
+            // Extract values
+            const streetNumber = getComp("street_number");
+            const route = getComp("route");
+            const sublocality = getComp("sublocality_level_1");
+            const cityName =
+              getComp("locality") || getComp("administrative_area_level_2");
+
+            // Update form using your existing keys
             setForm((prev) => ({
               ...prev,
               street:
-                addr.road || addr.suburb || addr.display_name.split(",")[0],
-              city: cityFallback,
-              state: addr.state || "",
-              pincode: addr.postcode || "",
+                [streetNumber, route, sublocality].filter(Boolean).join(", ") ||
+                data.results[0].formatted_address.split(",")[0],
+              city: cityName,
+              state: getComp("administrative_area_level_1"),
+              pincode: getComp("postal_code"),
             }));
 
             showSuccess("Location fetched successfully!");
