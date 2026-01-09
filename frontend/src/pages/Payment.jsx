@@ -167,6 +167,21 @@ export default function CheckoutPage() {
       showError("Please fill required fields");
       return;
     }
+
+    // 2. Phone Number Validation (Standard 10-digit check)
+    const phoneRegex = /^[6-9]\d{9}$/;
+    if (!phoneRegex.test(newAddress.phone)) {
+      showError("Please enter a valid 10-digit phone number");
+      return;
+    }
+
+    // 3. Pincode Validation (Standard 6-digit check)
+    const pincodeRegex = /^[1-9][0-9]{5}$/;
+    if (!pincodeRegex.test(newAddress.pincode)) {
+      showError("Please enter a valid 6-digit pincode");
+      return;
+    }
+
     setIsSavingAddress(true);
     try {
       const res = await fetch(`${API_URL}/api/user/address`, {

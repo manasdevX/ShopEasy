@@ -29,6 +29,9 @@ import {
   updateUserEmail,
   updateUserPassword,
   verifyUserPassword,
+  getAiRecommendations, 
+  trackUserInterestRoute,
+  trackSearchIntent
 } from "../controllers/user.controller.js";
 
 // 4. Import Middleware
@@ -88,5 +91,12 @@ router
 router.post("/verify-password", protect, verifyUserPassword);
 router.put("/password", protect, updateUserPassword); // Update Password
 router.put("/update-email", protect, updateUserEmail);
+
+router.get("/recommendations", protect, getAiRecommendations);
+
+// 2. Track clicks/views to update user interest weights
+router.post("/track-interest", protect, trackUserInterestRoute);
+
+router.post("/track-search-intent", protect, trackSearchIntent);
 
 export default router;

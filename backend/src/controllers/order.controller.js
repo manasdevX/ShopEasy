@@ -88,6 +88,7 @@ export const addOrderItems = async (req, res) => {
         qty: orderQty,
         price: realProduct.price,
         seller: realProduct.seller,
+        category: realProduct.category,
         itemStatus: "Processing",
       };
     });
@@ -178,48 +179,72 @@ export const addOrderItems = async (req, res) => {
         }
 
         // Send Email
+        // Define your frontend URL (use an environment variable for production)
+        const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+        const orderHistoryLink = `${frontendUrl}/account?tab=orders`;
+
         const orderItemsHTML = mappedOrderItems
           .map(
             (item) => `
-            <tr>
-              <td style="padding: 10px; border-bottom: 1px solid #eee;">
-                <img src="${item.image}" alt="${
+    <tr>
+      <td style="padding: 10px; border-bottom: 1px solid #eee;">
+        <img src="${item.image}" alt="${
               item.name
             }" width="50" style="border-radius: 5px; display: block;">
-              </td>
-              <td style="padding: 10px; border-bottom: 1px solid #eee; font-size: 14px;">
-                ${item.name} <br>
-                <span style="font-size: 12px; color: #777;">Qty: ${
-                  item.qty
-                }</span>
-              </td>
-              <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: right; font-weight: bold;">
-                ₹${(item.price * item.qty).toLocaleString()}
-              </td>
-            </tr>`
+      </td>
+      <td style="padding: 10px; border-bottom: 1px solid #eee; font-size: 14px;">
+        ${item.name} <br>
+        <span style="font-size: 12px; color: #777;">Qty: ${item.qty}</span>
+      </td>
+      <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: right; font-weight: bold;">
+        ₹${(item.price * item.qty).toLocaleString()}
+      </td>
+    </tr>`
           )
           .join("");
 
         const emailMessage = `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden;">
-            <div style="background-color: #2563eb; padding: 20px; text-align: center;">
-              <h1 style="color: #ffffff; margin: 0; font-size: 24px;">Order Confirmed!</h1>
-            </div>
-            <div style="padding: 20px;">
-              <p>Hi <strong>${req.user.name}</strong>,</p>
-              <p>Thank you for shopping with us! We have received your order.</p>
-              <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                <p style="margin: 5px 0;"><strong>Order ID:</strong> ${
-                  createdOrder._id
-                }</p>
-                <p style="margin: 5px 0;"><strong>Payment Method:</strong> ${paymentMethod}</p>
-                <p style="margin: 5px 0; font-size: 18px; color: #2563eb;"><strong>Total: ₹${totalPrice.toLocaleString()}</strong></p>
-              </div>
-              <table style="width: 100%; border-collapse: collapse; text-align: left;">
-                ${orderItemsHTML}
-              </table>
-            </div>
-          </div>`;
+  <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden;">
+    <div style="background-color: #2563eb; padding: 20px; text-align: center;">
+      <h1 style="color: #ffffff; margin: 0; font-size: 24px;">Order Confirmed!</h1>
+    </div>
+    <div style="padding: 20px;">
+      <p>Hi <strong>${req.user.name}</strong>,</p>
+      <p>Thank you for shopping with us! We have received your order.</p>
+      
+      <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #e2e8f0;">
+        <p style="margin: 5px 0;">
+          <strong>Order ID:</strong> 
+          <a href="${orderHistoryLink}" style="color: #2563eb; text-decoration: none; font-weight: bold;">
+            ${createdOrder._id}
+          </a>
+        </p>
+        <p style="margin: 5px 0;"><strong>Payment Method:</strong> ${paymentMethod}</p>
+        <p style="margin: 5px 0; font-size: 18px; color: #2563eb;"><strong>Total: ₹${totalPrice.toLocaleString()}</strong></p>
+      </div>
+
+      <table style="width: 100%; border-collapse: collapse; text-align: left;">
+        <thead>
+          <tr>
+            <th colspan="2" style="padding: 10px; border-bottom: 2px solid #eee; font-size: 12px; text-transform: uppercase; color: #666;">Product</th>
+            <th style="padding: 10px; border-bottom: 2px solid #eee; font-size: 12px; text-transform: uppercase; color: #666; text-align: right;">Subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${orderItemsHTML}
+        </tbody>
+      </table>
+
+      <div style="margin-top: 25px; text-align: center;">
+        <a href="${orderHistoryLink}" style="background-color: #2563eb; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
+          View Order History
+        </a>
+      </div>
+    </div>
+    <div style="background-color: #f3f4f6; padding: 15px; text-align: center; font-size: 12px; color: #9ca3af;">
+      If you have any questions, please contact our support team.
+    </div>
+  </div>`;
 
         await sendEmail({
           email: req.user.email,

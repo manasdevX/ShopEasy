@@ -1,5 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate, useLocation, Link, useSearchParams } from "react-router-dom";
+import {
+  useNavigate,
+  useLocation,
+  Link,
+  useSearchParams,
+} from "react-router-dom";
 import {
   CheckCircle2,
   Package,
@@ -15,6 +20,7 @@ import {
 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
+import ProductCard from "../components/ProductCard";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -47,9 +53,9 @@ export default function OrderSummary() {
       try {
         const token = localStorage.getItem("token");
         const res = await fetch(`${API_URL}/api/orders/${targetId}`, {
-          headers: { 
+          headers: {
             Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
           },
         });
 
@@ -83,7 +89,9 @@ export default function OrderSummary() {
       <div className="min-h-screen bg-[#030712] text-white flex flex-col items-center justify-center font-sans">
         <ShoppingBag size={64} className="text-slate-700 mb-4" />
         <h2 className="text-2xl font-bold mb-4">No Order Found</h2>
-        <p className="text-slate-400 mb-6">We couldn't retrieve the order details.</p>
+        <p className="text-slate-400 mb-6">
+          We couldn't retrieve the order details.
+        </p>
         <Link
           to="/"
           className="bg-blue-600 px-6 py-3 rounded-xl font-bold hover:bg-blue-500 transition-colors"
@@ -143,7 +151,7 @@ export default function OrderSummary() {
     // 4. Cancelled (Smart Logic for Payment Message)
     if (status === "Cancelled") {
       // Default message for COD or Unpaid orders
-      let cancelSubtext = "No Payment Deducted"; 
+      let cancelSubtext = "No Payment Deducted";
 
       // If the order was Paid Online OR explicitly marked as refunded
       if (order.isRefunded || (order.paymentMethod !== "COD" && order.isPaid)) {
@@ -176,8 +184,7 @@ export default function OrderSummary() {
   return (
     <div className="min-h-screen bg-[#030712] text-white font-sans">
       <Navbar />
-
-      <main className="max-w-4xl mx-auto px-6 py-12 lg:py-20">
+      <main className="max-w-7xl mx-auto px-6 py-12 lg:py-20">
         {/* Header - Dynamic Title based on context */}
         <div className="text-center mb-12 animate-in fade-in zoom-in duration-700">
           <div
@@ -189,7 +196,8 @@ export default function OrderSummary() {
                 : "bg-green-500/10 border-green-500/20"
             }`}
           >
-            {order.status === "Returned" || order.status === "Return Initiated" ? (
+            {order.status === "Returned" ||
+            order.status === "Return Initiated" ? (
               <RotateCcw size={48} className="text-purple-500" />
             ) : order.status === "Cancelled" ? (
               <CheckCircle2 size={48} className="text-red-500" />
@@ -259,7 +267,10 @@ export default function OrderSummary() {
                 </span>
               </div>
               {/* Refund Status Display */}
-              {(order.isRefunded || (order.status === "Cancelled" && order.paymentMethod !== "COD" && order.isPaid)) && (
+              {(order.isRefunded ||
+                (order.status === "Cancelled" &&
+                  order.paymentMethod !== "COD" &&
+                  order.isPaid)) && (
                 <div className="flex justify-between text-sm animate-in fade-in slide-in-from-left-2">
                   <span className="text-slate-500">Refund Status</span>
                   <span className="text-purple-500 font-bold">Processed</span>
@@ -394,9 +405,114 @@ export default function OrderSummary() {
         <p className="text-center text-slate-600 text-[10px] font-bold uppercase tracking-widest mt-16">
           Order Confirmation sent to your registered email
         </p>
-      </main>
 
+        {/* Inside OrderSummary.jsx */}
+        {order && order.orderItems && order.orderItems.length > 0 && (
+          <section className="max-w-7xl mx-auto pb-20 mt-10">
+            <SimilarProducts
+              category={order.orderItems[0].category}
+              // Extract the nested _id and ensure it's a string
+              excludedProductIds={order.orderItems.map((item) =>
+                String(item.product?._id || item.product)
+              )}
+            />
+          </section>
+        )}
+      </main>
       <Footer />
+    </div>
+  );
+}
+
+function SimilarProducts({ category, excludedProductIds }) {
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchSimilar = async () => {
+      if (!category) return;
+
+      try {
+        setLoading(true);
+        const res = await fetch(
+          `${API_URL}/api/products?category=${encodeURIComponent(
+            category
+          )}&limit=20`
+        );
+
+        if (res.ok) {
+          const data = await res.json();
+          const productList = Array.isArray(data) ? data : data.products || [];
+
+          // 1. Create a Set of IDs to exclude for O(1) lookup speed
+          // 2. Ensure everything is a string and trimmed
+          const excludeSet = new Set(
+            excludedProductIds.map((id) => String(id).trim())
+          );
+
+          // 3. Filter out the bought products
+          const filtered = productList.filter((p) => {
+            const productId = String(p._id).trim();
+            return !excludeSet.has(productId);
+          });
+
+          // 4. Take only the top 4
+          setProducts(filtered.slice(0, 4));
+        }
+      } catch (error) {
+        console.error("Error fetching similar products:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSimilar();
+    // Use the length or a joined string to avoid infinite loops with arrays
+  }, [category, excludedProductIds.join(",")]);
+
+  if (loading) {
+    return (
+      <div className="mt-20">
+        <div className="h-8 w-48 bg-slate-800 rounded animate-pulse mb-8" />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+          {[1, 2, 3, 4].map((i) => (
+            <div
+              key={i}
+              className="aspect-[3/4] bg-slate-900/40 rounded-3xl animate-pulse"
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (products.length === 0) return null;
+
+  return (
+    <div className="mt-20 animate-in fade-in slide-in-from-bottom-5 duration-1000">
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h3 className="text-xl font-black uppercase tracking-tighter text-white">
+            You Might Also Like
+          </h3>
+          <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mt-1">
+            Based on your recent purchase
+          </p>
+        </div>
+        <Link
+          to={`/search?q=${encodeURIComponent(category)}`}
+          className="text-blue-500 text-[10px] font-black uppercase tracking-widest hover:underline"
+        >
+          View All Products
+        </Link>
+      </div>
+
+      {/* ✅ RENDERING USING PRODUCTCARD */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+        {products.map((product) => (
+          <ProductCard key={product._id} product={product} />
+        ))}
+      </div>
     </div>
   );
 }

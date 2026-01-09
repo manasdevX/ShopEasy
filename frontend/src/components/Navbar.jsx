@@ -136,9 +136,16 @@ export default function Navbar() {
 
   const handleSearch = (e) => {
     if (e) e.preventDefault();
+    const query = searchTerm.trim();
+    if (!query) return;
+
     setShowDropdown(false);
-    navigate(`/search?q=${encodeURIComponent(searchTerm.trim())}`);
-    
+
+    // 1. Track the intent for the Recommendation System
+    trackSearchIntent(query);
+
+    // 2. Navigate to results
+    navigate(`/search?q=${encodeURIComponent(query)}`);
   };
 
   // ✅ LOGOUT FUNCTION (The Bug Fix)
@@ -162,7 +169,6 @@ export default function Navbar() {
       setTimeout(() => {
         window.location.href = "/";
       }, 1000);
-
     } catch (err) {
       console.error("Logout failed", err);
       // Fallback: Force clear local state even if backend fails
@@ -178,6 +184,27 @@ export default function Navbar() {
       navigate("/cart");
     } else {
       toast("Please login to view your cart", { icon: "🔒" });
+    }
+  };
+
+  const trackSearchIntent = async (query) => {
+    const token = localStorage.getItem("token");
+    if (!token || !query || query.trim().length < 2) return;
+
+    try {
+      // Use axios to send the search term to your high-weight backend logic
+      await axios.post(
+        `${API_URL}/api/user/track-search-intent`,
+        { query: query.trim() },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      // ✅ OPTIONAL: Dispatch a custom event to tell the Home Page to refresh recs
+      window.dispatchEvent(new Event("search-intent-updated"));
+
+      console.log("🎯 AI Search Intent Tracked:", query);
+    } catch (err) {
+      console.debug("Search intent tracking skipped or failed");
     }
   };
 
@@ -221,7 +248,7 @@ export default function Navbar() {
 
           {/* RECOMMENDATIONS DROPDOWN */}
           {showDropdown && suggestions.length > 0 && (
-            <div className="absolute top-full left-0 w-full mt-1 bg-white dark:bg-[#0f172a] rounded-b-2xl shadow-2xl border border-gray-100 dark:border-slate-800 overflow-hidden z-[999]">
+            <div className="absolute top-full ...">
               <div className="py-1">
                 {suggestions.map((suggestion, index) => (
                   <button
@@ -229,22 +256,15 @@ export default function Navbar() {
                     onClick={() => {
                       setSearchTerm(suggestion);
                       setShowDropdown(false);
+
+                      // 🔥 TRACK IMMEDIATELY on suggestion click
+                      trackSearchIntent(suggestion);
+
                       navigate(`/search?q=${encodeURIComponent(suggestion)}`);
                     }}
-                    className="w-full flex items-center gap-4 px-5 py-2.5 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors text-left group"
+                    className="..."
                   >
-                    <Search
-                      size={16}
-                      className="text-slate-400 group-hover:text-orange-500"
-                    />
-                    <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                      <span className="font-normal text-slate-400">
-                        {searchTerm.toLowerCase()}
-                      </span>
-                      {suggestion
-                        .toLowerCase()
-                        .replace(searchTerm.toLowerCase(), "")}
-                    </span>
+                    {/* ... icon and text ... */}
                   </button>
                 ))}
               </div>

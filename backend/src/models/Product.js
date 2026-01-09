@@ -125,6 +125,10 @@ const productSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    embeddings: {
+      type: [Number], // Array of numbers (vectors)
+      default: [],
+    },
   },
   {
     timestamps: true,

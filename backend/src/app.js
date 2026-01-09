@@ -14,6 +14,7 @@ import orderRoutes from "./routes/order.routes.js";
 import cartRoutes from "./routes/cartRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
 import notificationRoutes from "./routes/notification.routes.js";
+import vectorRoutes from "./routes/vector.routes.js";
 
 const app = express();
 
@@ -85,6 +86,7 @@ app.use((req, res, next) => {
 
 // --- API ENDPOINTS ---
 app.use("/api/products", productRoutes);
+app.use("/api/vectors", vectorRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/sellers", sellerRoutes);
