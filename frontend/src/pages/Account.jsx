@@ -474,46 +474,108 @@ export default function Account() {
   };
 
   const handleSaveAddress = async () => {
-    if (
-      !newAddress.name ||
-      !newAddress.phone ||
-      !newAddress.street ||
-      !newAddress.city ||
-      !newAddress.pincode
-    ) {
-      showError("Please fill all required fields");
-      return;
+  const { name, phone, street, city, state, pincode, country, type } = newAddress;
+
+  // 1. Validation Logic
+  if (!name || !phone || !street || !city || !pincode) {
+    showError("Please fill all required fields");
+    return;
+  }
+
+  const phoneRegex = /^[6-9]\d{9}$/;
+  if (!phoneRegex.test(phone)) {
+    showError("Please enter a valid 10-digit phone number");
+    return;
+  }
+
+  const pincodeRegex = /^[1-9][0-9]{5}$/;
+  if (!pincodeRegex.test(pincode)) {
+    showError("Please enter a valid 6-digit pincode");
+    return;
+  }
+
+  setIsAddressSaving(true);
+  try {
+    const token = localStorage.getItem("token");
+    let url = `${API_URL}/api/user/address`;
+    let method = "POST";
+    
+    if (editingAddressId) {
+      url = `${API_URL}/api/user/address/${editingAddressId}`;
+      method = "PUT";
     }
-    setIsAddressSaving(true);
-    try {
-      const token = localStorage.getItem("token");
-      let url = `${API_URL}/api/user/address`;
-      let method = "POST";
-      if (editingAddressId) {
-        url = `${API_URL}/api/user/address/${editingAddressId}`;
-        method = "PUT";
-      }
-      const res = await fetch(url, {
-        method: method,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(newAddress),
-      });
-      const updatedAddresses = await res.json();
-      if (res.ok) {
+
+    const res = await fetch(url, {
+      method: method,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(newAddress),
+    });
+
+    const updatedAddresses = await res.json();
+
+    if (res.ok) {
+      // ✅ CORE FIX: Find the address we just edited/added
+      // We look for the one marked as 'isDefault' to update the Profile Tab
+      const defaultAddr = updatedAddresses.find((a) => a.isDefault) || updatedAddresses[0];
+
+      if (defaultAddr) {
+        // Map Backend keys (fullName, addressLine) to Frontend Profile keys (name, street)
+        const profileMappedAddress = {
+          name: defaultAddr.fullName,
+          phone: defaultAddr.phone,
+          street: defaultAddr.addressLine,
+          city: defaultAddr.city,
+          state: defaultAddr.state,
+          pincode: defaultAddr.pincode,
+          country: defaultAddr.country,
+          type: defaultAddr.type,
+        };
+
+        // Update main User state (affects the view)
+        setUser((prev) => ({
+          ...prev,
+          addresses: updatedAddresses,
+          address: profileMappedAddress,
+        }));
+
+        // Update FormData state (affects the Edit inputs in Profile tab)
+        setFormData((prev) => ({
+          ...prev,
+          address: profileMappedAddress,
+        }));
+      } else {
+        // Fallback if no addresses exist
         setUser((prev) => ({ ...prev, addresses: updatedAddresses }));
-        setShowAddAddress(false);
-        setEditingAddressId(null);
-        showSuccess("Address Saved!");
       }
-    } catch (err) {
-      showError("Network Error");
-    } finally {
-      setIsAddressSaving(false);
+
+      setShowAddAddress(false);
+      setEditingAddressId(null);
+      showSuccess(editingAddressId ? "Address Updated!" : "Address Added!");
+      
+      // Reset the newAddress form
+      setNewAddress({
+        name: user.name,
+        phone: user.phone,
+        street: "",
+        city: "",
+        state: "",
+        pincode: "",
+        country: "India",
+        type: "Home",
+      });
+    } else {
+      showError(updatedAddresses.message || "Failed to save address");
     }
-  };
+  } catch (err) {
+    showError("Network error. Please try again.");
+    console.error("Save Address Error:", err);
+  } finally {
+    setIsAddressSaving(false);
+  }
+};
 
   const handleEditClick = (addr) => {
     setNewAddress({

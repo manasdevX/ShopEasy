@@ -1,6 +1,7 @@
 import User from "../models/User.js";
 import Cart from "../models/Cart.js";
 import redisClient from "../config/redis.js"; // <--- IMPORT REDIS
+import mongoose from "mongoose";
 
 /**
  * Helper: Clear User Profile Cache
@@ -12,6 +13,80 @@ const clearUserCache = async (userId) => {
     console.log(`🧹 Cache Cleared for User: ${userId}`);
   } catch (error) {
     console.error("Cache Clear Error:", error);
+  }
+};
+
+/**
+ * 🟢 NEW EXPORT: Track User Interest (Called by Route)
+ */
+export const trackUserInterestRoute = async (req, res) => {
+  try {
+    const { category, productId } = req.body;
+    const userId = req.user._id;
+
+    if (!category) return res.status(400).json({ message: "Category is required" });
+
+    // Call the logic below
+    await trackUserInterest(userId, category, productId);
+
+    res.status(200).json({ success: true });
+  } catch (error) {
+    res.status(500).json({ message: "Tracking failed" });
+  }
+};
+
+/**
+ * Helper: AI Interest Tracker (Level 1)
+ * MODIFIED: Increased weights and added recency shuffling for instant impact
+ */
+const trackUserInterest = async (userId, category, productId) => {
+  try {
+    const user = await User.findById(userId);
+    if (!user || !category) return;
+
+    if (!user.recentlyViewed) user.recentlyViewed = [];
+    if (!user.interests) user.interests = [];
+
+    // 1. Update Recently Viewed (Limit to 10)
+    if (productId && !user.recentlyViewed.map(id => id.toString()).includes(productId.toString())) {
+      user.recentlyViewed.unshift(productId);
+      if (user.recentlyViewed.length > 10) user.recentlyViewed.pop();
+    }
+
+    // 2. Update Category Weights
+    const interestIndex = user.interests.findIndex(
+      (i) => i.category.toLowerCase() === category.toLowerCase()
+    );
+
+    if (interestIndex > -1) {
+      // ✅ INCREASED WEIGHT: Set to 3.0 for strong impact
+      user.interests[interestIndex].weight += 3.0; 
+      user.interests[interestIndex].lastInteracted = Date.now();
+      
+      // ✅ RECENCY BIAS: Move to the front of the array so getAiRecommendations sees it first
+      const updatedInterest = user.interests.splice(interestIndex, 1)[0];
+      user.interests.unshift(updatedInterest);
+    } else {
+      // ✅ HIGH INITIAL WEIGHT for new discovery
+      user.interests.unshift({ 
+        category, 
+        weight: 3.0, 
+        lastInteracted: Date.now() 
+      });
+    }
+
+    // 3. Keep interests array lean
+    if (user.interests.length > 15) user.interests.pop();
+
+    await user.save();
+    
+    // Invalidate caches
+    await redisClient.del(`user_profile:${userId}`);
+    await redisClient.del(`recommendations:${userId}`); 
+    
+    console.log(`🚀 AI Updated: Boosted category "${category}" for User ${userId}`);
+  } catch (error) {
+    console.error("AI Tracking Error:", error);
   }
 };
 
@@ -336,14 +411,12 @@ export const setDefaultAddress = async (req, res) => {
 
 /* ======================================================
    7. WISHLIST: ADD ITEM
-   Route: POST /api/user/wishlist/:id
 ====================================================== */
 export const addToWishlist = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
     const productId = req.params.id;
 
-    // Check duplicates
     if (user.wishlist.includes(productId)) {
       return res.status(400).json({ message: "Product already in wishlist" });
     }
@@ -351,10 +424,16 @@ export const addToWishlist = async (req, res) => {
     user.wishlist.push(productId);
     await user.save();
 
-    // ✅ INVALIDATE CACHE
+    // 🔥 AI TRIGGER: Track interest based on the product's category
+    // We fetch the product briefly to get its category
+    const Product = mongoose.model("Product");
+    const product = await Product.findById(productId);
+    if (product) {
+      await trackUserInterest(req.user._id, product.category, productId);
+    }
+
     await clearUserCache(user._id);
 
-    // Return populated wishlist for immediate UI update
     const updatedUser = await User.findById(req.user._id).populate({
       path: "wishlist",
       select: "name price thumbnail category stock",
@@ -362,7 +441,6 @@ export const addToWishlist = async (req, res) => {
 
     res.json(updatedUser.wishlist);
   } catch (error) {
-    console.error("ADD WISHLIST ERROR:", error);
     res.status(500).json({ message: "Failed to add to wishlist" });
   }
 };
@@ -539,5 +617,126 @@ export const updateUserEmail = async (req, res) => {
   } catch (error) {
     console.error("UPDATE EMAIL ERROR:", error);
     res.status(500).json({ message: "Server error updating email" });
+  }
+};
+/* ======================================================
+    13. AI RECOMMENDATIONS (Behavioral Only)
+    Route: GET /api/user/recommendations
+====================================================== */
+export const getAiRecommendations = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id); 
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    const Product = mongoose.model("Product");
+
+    // Recency Bias: prioritize what was just viewed or searched
+    const recentCats = user.recentlyViewed?.slice(0, 3).map(p => p.category) || [];
+    const interestCats = user.interests?.sort((a, b) => b.weight - a.weight).map(i => i.category) || [];
+
+    const prioritizedCats = [...new Set([...recentCats, ...interestCats])];
+
+    let finalSelection = [];
+
+    if (prioritizedCats.length > 0) {
+      const remainingSlots = 8;
+      
+      const similarProducts = await Product.find({
+        category: { $in: prioritizedCats },
+        _id: { $nin: user.recentlyViewed || [] },
+        stock: { $gt: 0 }
+      })
+      .sort({ rating: -1 })
+      .limit(remainingSlots + 5);
+
+      const shuffledSimilar = similarProducts.sort(() => 0.5 - Math.random());
+      finalSelection = [...shuffledSimilar].slice(0, 8);
+    }
+
+    if (finalSelection.length < 8) {
+      const currentIds = finalSelection.map(p => p._id);
+      const fallback = await Product.find({
+        _id: { $nin: [...currentIds, ...(user.recentlyViewed || [])] },
+        stock: { $gt: 0 }
+      })
+      .sort({ rating: -1 })
+      .limit(8 - finalSelection.length);
+
+      finalSelection = [...finalSelection, ...fallback];
+    }
+
+    res.json({
+      products: finalSelection.slice(0, 8),
+      personalized: prioritizedCats.length > 0
+    });
+
+  } catch (error) {
+    console.error("Discovery Engine Error:", error);
+    res.status(500).json({ message: "Error fetching recommendations" });
+  }
+};
+
+/* ======================================================
+    14. TRACK SEARCH INTENT (MODIFIED FOR INSTANT IMPACT)
+    Route: POST /api/user/track-search-intent
+====================================================== */
+export const trackSearchIntent = async (req, res) => {
+  try {
+    const { query } = req.body;
+    const userId = req.user._id;
+
+    if (!query || query.trim().length < 2) {
+      return res.status(400).json({ message: "Valid search query required" });
+    }
+
+    const Product = mongoose.model("Product");
+
+    // 1. Find the most relevant category based on the search term
+    const matchingProduct = await Product.findOne({
+      $or: [
+        { category: { $regex: query, $options: "i" } },
+        { name: { $regex: query, $options: "i" } },
+      ],
+    }).select("category");
+
+    if (matchingProduct) {
+      const user = await User.findById(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      const category = matchingProduct.category;
+
+      if (!user.interests) user.interests = [];
+
+      const interestIndex = user.interests.findIndex(
+        (i) => i.category.toLowerCase() === category.toLowerCase()
+      );
+
+      if (interestIndex > -1) {
+        // ✅ INCREASED WEIGHT: Set to 3.0 (same as a click) for instant takeover
+        user.interests[interestIndex].weight += 3.0;
+        user.interests[interestIndex].lastInteracted = Date.now();
+        
+        // ✅ RECENCY SHUFFLE: Move this category to the front
+        const updated = user.interests.splice(interestIndex, 1)[0];
+        user.interests.unshift(updated);
+      } else {
+        // ✅ HIGH STARTING WEIGHT
+        user.interests.unshift({
+          category,
+          weight: 3.0,
+          lastInteracted: Date.now(),
+        });
+      }
+
+      await user.save();
+      
+      // ✅ CLEAR CACHE: Ensure recommendations update immediately
+      await clearUserCache(userId);
+    }
+
+    res.status(200).json({ success: true });
+  } catch (error) {
+    console.error("SEARCH INTENT ERROR:", error);
+    res.status(500).json({ message: "Failed to track search intent" });
   }
 };

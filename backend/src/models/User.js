@@ -137,6 +137,27 @@ const userSchema = new mongoose.Schema(
         ref: "Order",
       },
     ],
+  /* =========================
+       🤖 AI & PERSONALIZATION
+    ========================= */
+    // 1. Recently Viewed 
+    recentlyViewed: {
+      type: [{ type: mongoose.Schema.Types.ObjectId, ref: "Product" }],
+      default: [],
+      // Limit via middleware or controller (as you already do)
+    },
+
+    // 2. Interests
+    interests: {
+      type: [
+        {
+          category: { type: String, required: true },
+          weight: { type: Number, default: 1 }, 
+          lastInteracted: { type: Date, default: Date.now },
+        },
+      ],
+      default: [] 
+    },
   },
   {
     timestamps: true,
@@ -144,6 +165,11 @@ const userSchema = new mongoose.Schema(
     toObject: { virtuals: true },
   }
 );
+
+/* ======================================================
+   6. INDEXES (Optimized for Recommendations)
+====================================================== */
+userSchema.index({ recentlyViewed: 1 });
 
 /* ======================================================
    4. VIRTUALS
@@ -193,6 +219,9 @@ userSchema.methods.changedPasswordAfter = function (JWTTimestamp) {
   }
   return false;
 };
+
+// Optimized searching for recommendations
+userSchema.index({ "interests.category": 1 });
 
 // Check if model exists to prevent overwrite error in HMR environments
 const User = mongoose.models.User || mongoose.model("User", userSchema);

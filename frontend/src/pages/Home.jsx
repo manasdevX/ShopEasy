@@ -7,10 +7,12 @@ import { toast } from "react-hot-toast";
 
 // 1. Swiper Imports
 import { Swiper, SwiperSlide } from "swiper/react";
-import { Autoplay, Pagination, EffectCreative } from "swiper/modules"; // Updated import
+import { Autoplay, Pagination, EffectCreative } from "swiper/modules";
 import "swiper/css";
 import "swiper/css/pagination";
-import "swiper/css/effect-creative"; // Updated import
+import "swiper/css/effect-creative";
+
+import Recommendations from "../components/Recommendations";
 
 // 2. Icon Imports
 import {
@@ -70,8 +72,16 @@ export default function Home() {
   const isLoggedIn = !!localStorage.getItem("token");
 
   useEffect(() => {
-  sessionStorage.removeItem('original_entry_path');
-}, []);
+    window.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: "instant", // Use "smooth" if you want a sliding effect
+    });
+  })
+
+  useEffect(() => {
+    sessionStorage.removeItem("original_entry_path");
+  }, []);
 
   // --- STATE ---
   const [products, setProducts] = useState([]);
@@ -283,6 +293,8 @@ export default function Home() {
           ))}
         </div>
       </section>
+
+      {isLoggedIn && <Recommendations />}
 
       {/* --- REAL CATEGORY GRID --- */}
       <section className="py-20 max-w-7xl mx-auto px-6" id="Categories-section">

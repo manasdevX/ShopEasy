@@ -98,9 +98,11 @@ export default function ProductCard({ product }) {
 
     setWishlisting(true);
     try {
-      // Use POST for toggle logic or follow your specific backend route
+      // ✅ MODIFICATION: Dynamically choose method based on current status
+      const method = isWishlisted ? "DELETE" : "POST";
+      
       const res = await fetch(`${API_URL}/api/user/wishlist/${productId}`, {
-        method: "POST",
+        method: method,
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
@@ -114,10 +116,17 @@ export default function ProductCard({ product }) {
         user.wishlist = data;
         localStorage.setItem("user", JSON.stringify(user));
 
-        setIsWishlisted(true);
-        showSuccess("Added to Wishlist!", { icon: "❤️" });
+        // Update local state
+        setIsWishlisted(!isWishlisted);
+        
+        // Show appropriate toast
+        if (isWishlisted) {
+          showSuccess("Removed from Wishlist");
+        } else {
+          showSuccess("Added to Wishlist!", { icon: "❤️" });
+        }
 
-        // ✅ Notify other instances of ProductCard and Account page
+        // Notify other components
         window.dispatchEvent(new Event("wishlistUpdated"));
       } else {
         showError(data.message || "Failed to update wishlist");
@@ -129,9 +138,45 @@ export default function ProductCard({ product }) {
     }
   };
 
+  // ✅ Optimized Tracking for AI
+  // ✅ AI Tracking: Only triggered when visiting a product
+  const handleTrackInterest = () => {
+    const token = localStorage.getItem("token");
+    
+    // Only track if logged in and category is valid
+    if (!token || !product.category || product.category === "Premium") return;
+
+    const trackData = JSON.stringify({ 
+      category: product.category,
+      productId: productId 
+    });
+
+    const endpoint = `${API_URL}/api/user/track-interest`;
+
+    /**
+     * Logic: We use sendBeacon here because handleTrackInterest is 
+     * attached to a <Link>. sendBeacon ensures the "Visit" is recorded 
+     * even as the browser navigates to the new product page.
+     */
+    if (navigator.sendBeacon) {
+      const blob = new Blob([trackData], { type: 'application/json' });
+      navigator.sendBeacon(endpoint, blob);
+    } else {
+      fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: trackData,
+      }).catch(err => console.debug("AI Visit Tracking failed", err));
+    }
+  };
+
   return (
     <Link
       to={`/product/${productId}`}
+      onClick={handleTrackInterest} // 🔥 Triggered when user clicks the product
       className="bg-white dark:bg-slate-800/50 backdrop-blur-sm rounded-[2rem] p-4 shadow-sm hover:shadow-[0_20px_50px_rgba(0,0,0,0.1)] transition-all duration-500 group border border-slate-100 dark:border-slate-700/50 hover:border-orange-500/30 flex flex-col h-full"
     >
       <div className="relative h-64 rounded-[1.5rem] overflow-hidden mb-5 bg-slate-100 dark:bg-slate-900">

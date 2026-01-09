@@ -5,6 +5,7 @@ import axios from "axios";
 
 // ✅ Import Socket Provider
 import { SocketProvider } from "./context/SocketContext";
+import ChatBot from './components/ChatBot';
 
 // --- USER PAGES ---
 import Home from "./pages/Home";
@@ -138,6 +139,7 @@ export default function App() {
 
       {/* ✅ WRAP ROUTES WITH SOCKET PROVIDER */}
       <SocketProvider>
+        {!location.pathname.startsWith("/Seller") && <ChatBot />}
         <Routes>
           {/* --- User / Customer Routes --- */}
           <Route path="/" element={<Home />} />
