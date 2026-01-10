@@ -134,16 +134,16 @@ export default function Navbar() {
     };
   }, [isLoggedIn, token]);
 
-  const handleSearch = (e) => {
+  const handleSearch = async (e) => {
     if (e) e.preventDefault();
     const query = searchTerm.trim();
 
     setShowDropdown(false);
 
-    // 1. Track the intent for the Recommendation System
-    trackSearchIntent(query);
-
-    // 2. Navigate to results
+    // Only track intent if there is actually a query
+    if (query) {
+      await trackSearchIntent(query);
+    }
     navigate(`/search?q=${encodeURIComponent(query)}`);
   };
 
@@ -187,23 +187,18 @@ export default function Navbar() {
   };
 
   const trackSearchIntent = async (query) => {
-    const token = localStorage.getItem("token");
-    if (!token || !query || query.trim().length < 2) return;
-
+    if (!isLoggedIn || !query || query.trim().length < 2) return;
     try {
-      // Use axios to send the search term to your high-weight backend logic
+      const currentToken = localStorage.getItem("token");
+      // We send a request to the server, we don't process DB logic here
       await axios.post(
         `${API_URL}/api/user/track-search-intent`,
         { query: query.trim() },
-        { headers: { Authorization: `Bearer ${token}` } }
+        { headers: { Authorization: `Bearer ${currentToken}` } }
       );
-
-      // ✅ OPTIONAL: Dispatch a custom event to tell the Home Page to refresh recs
       window.dispatchEvent(new Event("search-intent-updated"));
-
-      console.log("🎯 AI Search Intent Tracked:", query);
     } catch (err) {
-      console.debug("Search intent tracking skipped or failed");
+      console.debug("AI Tracking skipped");
     }
   };
 
@@ -218,7 +213,7 @@ export default function Navbar() {
         </Link>
 
         {/* --- SEARCH BAR WITH RECOMMENDATIONS --- */}
-        <div className="relative flex-1 group" ref={dropdownRef}>
+        <div className="relative flex-1" ref={dropdownRef}>
           <div className="flex bg-gray-100 dark:bg-gray-800/50 border border-transparent dark:border-gray-700 rounded-2xl overflow-hidden focus-within:ring-2 focus-within:ring-orange-500/50 transition-all">
             <input
               type="text"
@@ -246,24 +241,34 @@ export default function Navbar() {
           </div>
 
           {/* RECOMMENDATIONS DROPDOWN */}
+          {/* RECOMMENDATIONS DROPDOWN */}
           {showDropdown && suggestions.length > 0 && (
-            <div className="absolute top-full ...">
+            <div className="absolute top-full left-0 w-full mt-1 bg-white dark:bg-[#0f172a] rounded-b-2xl shadow-2xl border border-gray-100 dark:border-slate-800 overflow-hidden z-[999]">
               <div className="py-1">
                 {suggestions.map((suggestion, index) => (
                   <button
                     key={index}
-                    onClick={() => {
+                    onClick={async () => {
                       setSearchTerm(suggestion);
                       setShowDropdown(false);
-
-                      // 🔥 TRACK IMMEDIATELY on suggestion click
-                      trackSearchIntent(suggestion);
-
+                      await trackSearchIntent(suggestion);
                       navigate(`/search?q=${encodeURIComponent(suggestion)}`);
                     }}
-                    className="..."
+                    // We keep 'group' here so ONLY this row triggers the hover state for its children
+                    className="w-full flex items-center gap-4 px-5 py-2.5 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors text-left group"
                   >
-                    {/* ... icon and text ... */}
+                    <Search
+                      size={16}
+                      className="text-slate-400 group-hover:text-orange-500 transition-colors"
+                    />
+                    <span className="text-sm font-medium text-slate-700 dark:text-slate-200 transition-colors group-hover:text-orange-500 dark:group-hover:text-orange-400">
+                      <span className="font-normal text-slate-400 transition-colors group-hover:text-orange-500/70">
+                        {searchTerm.toLowerCase()}
+                      </span>
+                      {suggestion
+                        .toLowerCase()
+                        .replace(searchTerm.toLowerCase(), "")}
+                    </span>
                   </button>
                 ))}
               </div>
