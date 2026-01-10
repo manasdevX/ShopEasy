@@ -165,34 +165,32 @@ export const checkOtp = async (req, res) => {
 ====================================================== */
 export const registerVerifiedUser = async (req, res) => {
   try {
-    let { name, email, phone, password, googleId } = req.body;
+    const { name, email, phone, password, googleId } = req.body;
+
+    // 1. Check if user exists first (Safety)
+    const exists = await User.findOne({ email: email.toLowerCase() });
+    if (exists) return res.status(400).json({ message: "User already exists" });
+
+    // 2. Create User
     const newUser = await User.create({
       name,
       email: email.toLowerCase().trim(),
       phone,
       password,
-      googleId: googleId || null,
+      googleId: googleId || undefined,
       isEmailVerified: true,
       isMobileVerified: true,
     });
 
     const token = generateToken(newUser._id);
 
-    // 🔴 BLOCK Check during registration
-    try {
-      await checkSessionLimit(Session, "user", newUser._id, 2);
-    } catch (limitError) {
-      return res
-        .status(limitError.statusCode)
-        .json({ message: limitError.message });
-    }
-
+    // 3. Create Session (Skip the limit check for brand new users)
     await Session.create({
       user: newUser._id,
       refreshToken: token,
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      userAgent: req.headers["user-agent"],
-      ipAddress: req.ip,
+      userAgent: req.headers["user-agent"] || "unknown",
+      ipAddress: req.headers['x-forwarded-for'] || req.ip,
     });
 
     res.cookie("accessToken", token, {
@@ -204,7 +202,8 @@ export const registerVerifiedUser = async (req, res) => {
 
     res.status(201).json({ success: true, token, user: newUser });
   } catch (error) {
-    res.status(500).json({ message: "Registration failed" });
+    console.error("CRITICAL REGISTRATION ERROR:", error); // This will show in Render logs
+    res.status(500).json({ message: error.message });
   }
 };
 
