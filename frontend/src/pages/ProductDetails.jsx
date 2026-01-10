@@ -199,6 +199,8 @@ export default function ProductDetails() {
               _id: product._id,
               name: product.name,
               price: product.price,
+              // Inside handleBuyNow, add this line:
+              category: product.category,
               mrp: product.mrp || product.price,
               quantity: quantity,
               seller: product.seller || product.sellerId,
