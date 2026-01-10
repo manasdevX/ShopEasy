@@ -10,7 +10,11 @@ ShopEasy is an enterprise-grade MERN-stack e-commerce ecosystem designed to brid
 
 - Google OAuth login
 
-- Email OTP verification
+- Email and mobile OTP verification
+
+- Ai Chatbot Assistant
+
+- Costomized product recommendations
 
 - Cart management
 
