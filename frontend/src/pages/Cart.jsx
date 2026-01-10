@@ -340,6 +340,7 @@ export default function Cart() {
                     const itemsToCheckout = cartItems.map((item) => ({
                       _id: item.product._id,
                       name: item.product.name,
+                      category: item.product.category,
                       price: item.product.price,
                       mrp: item.product.mrp || item.product.price,
                       quantity: item.quantity,

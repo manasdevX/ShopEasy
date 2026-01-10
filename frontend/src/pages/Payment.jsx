@@ -230,6 +230,7 @@ export default function CheckoutPage() {
               price: i.price,
               product: i._id,
               seller: i.seller,
+              category: i.category,
             })),
             shippingAddress: {
               address: selectedAddress.addressLine || selectedAddress.street,
@@ -321,6 +322,7 @@ export default function CheckoutPage() {
                     price: i.price,
                     product: i._id,
                     seller: i.seller,
+                    category: i.category,
                   })),
                   shippingAddress: {
                     address:
