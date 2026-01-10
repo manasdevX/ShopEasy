@@ -137,7 +137,6 @@ export default function Navbar() {
   const handleSearch = (e) => {
     if (e) e.preventDefault();
     const query = searchTerm.trim();
-    if (!query) return;
 
     setShowDropdown(false);
 

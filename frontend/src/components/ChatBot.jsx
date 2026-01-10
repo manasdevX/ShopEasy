@@ -37,95 +37,70 @@ const ChatBot = () => {
   // ... keep your imports and states
 
 const handleSend = async (forcedText = null) => {
-  const textToSend = forcedText || input;
-  if (!textToSend || !textToSend.trim() || loading) return;
+    const textToSend = forcedText || input;
+    if (!textToSend || !textToSend.trim() || loading) return;
 
-  setInput("");
-  setLoading(true);
-  setMessages((prev) => [...prev, { role: "user", type: "TEXT", message: textToSend }]);
+    setInput("");
+    setLoading(true);
+    setMessages((prev) => [...prev, { role: "user", type: "TEXT", message: textToSend }]);
 
-  try {
-    const res = await axios.post(`${API_URL}/api/vectors/message`, {
-      message: textToSend,
-    });
+    try {
+      const res = await axios.post(`${API_URL}/api/vectors/message`, {
+        message: textToSend,
+      });
 
-    const aiData = res.data;
-    const rawReply = aiData.reply || "";
+      const rawReply = res.data.reply || "";
 
-    // --- NEW ROBUST PARSER ---
-    // This allows the AI to format however it wants (bullets, dashes, or just newlines)
-    if (rawReply.includes("/product/")) {
-      const lines = rawReply.split("\n").map(l => l.trim()).filter(l => l);
-      const extractedProducts = [];
-      
-      // We loop through every line looking for "clusters" of data
-      for (let i = 0; i < lines.length; i++) {
-        const currentLine = lines[i];
+      if (rawReply.includes("/product/")) {
+        const lines = rawReply.split("\n").map(l => l.trim()).filter(l => l);
+        const extractedProducts = [];
         
-        // 1. Check if this line (or immediate context) contains a Product Link
-        const linkMatch = currentLine.match(/\/product\/[a-z0-9]+/);
-        
-        if (linkMatch) {
-          // If we found a link, we look "around" it for the Name and Price
-          // We check the Current Line and the Previous 2 lines
-          const contextLines = [
-             lines[i-2] || "", 
-             lines[i-1] || "", 
-             currentLine
-          ].join(" ");
-
-          const priceMatch = contextLines.match(/₹\s*(\d+)/);
+        for (let i = 0; i < lines.length; i++) {
+          const currentLine = lines[i];
+          const linkMatch = currentLine.match(/\/product\/[a-z0-9]+/);
           
-          // Name extraction: Use text before the price, or fallback to the line before the link
-          let name = "View Product";
-          if (priceMatch) {
-             // Split by price or dash to get the name part
-             const parts = contextLines.split(priceMatch[0]); // Split at "₹500"
-             const rawName = parts[0].split(/•|-|:/).pop(); // Get last chunk after bullet/dash
-             if (rawName && rawName.length > 3) {
-                name = rawName.trim();
-             }
-          } else {
-             // Fallback: If no price found, just use the line before the link
-             const prevLine = lines[i-1] || "";
-             name = prevLine.replace(/•|-|:/g, "").trim() || "Product";
+          if (linkMatch) {
+            // Check current and previous 2 lines for context
+            const contextLines = [
+               lines[i-2] || "", 
+               lines[i-1] || "", 
+               currentLine
+            ].join(" ");
+
+            const priceMatch = contextLines.match(/₹\s*(\d+)/);
+            
+            let name = "View Product";
+            if (priceMatch) {
+                const parts = contextLines.split(priceMatch[0]); 
+                const rawName = parts[0].split(/•|-|:/).pop(); 
+                if (rawName && rawName.length > 3) name = rawName.trim();
+            } else {
+                const prevLine = lines[i-1] || "";
+                name = prevLine.replace(/•|-|:/g, "").trim() || "Product";
+            }
+
+            extractedProducts.push({
+              id: linkMatch[0].split("/").pop(),
+              name: name,
+              price: priceMatch ? priceMatch[1] : "Check Price",
+              link: linkMatch[0],
+            });
           }
-
-          extractedProducts.push({
-            id: linkMatch[0].split("/").pop(),
-            name: name,
-            price: priceMatch ? priceMatch[1] : "Check Price", // Handle missing price gracefully
-            link: linkMatch[0],
-          });
         }
-      }
 
-      // 2. Identify if this is a Category Search
-      // We check if the User's input contains "category" OR if the result has many items
-      const isCategorySearch = 
-        /category|collection|all/i.test(textToSend) || extractedProducts.length > 2;
+        // Detect if this is a category based on keywords or item count
+        const isCategorySearch = 
+          /category|collection|all|show me|latest/i.test(textToSend) || extractedProducts.length > 2;
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          type: "PRODUCT_RECOMMENDATION",
-          products: extractedProducts,
-          summary: isCategorySearch 
-             ? `Found ${extractedProducts.length} items in ${textToSend}` 
-             : `Here is the top result for "${textToSend}"`
-        },
-      ]);
-    } else {
-      // 3. Fallback: If user asks for "Categories" but AI returns just text (no products)
-      // e.g., "We have Cricket, Football, and Tennis."
-      if (/categories/i.test(textToSend)) {
-         setMessages((prev) => [
+        setMessages((prev) => [
           ...prev,
-          { 
-            role: "assistant", 
-            type: "TEXT", 
-            message: rawReply + "\n\n*Tip: Type a category name like 'Cricket' to see products!*" 
+          {
+            role: "assistant",
+            type: "PRODUCT_RECOMMENDATION",
+            products: extractedProducts,
+            summary: isCategorySearch 
+                ? `Browsing: ${textToSend.replace(/show me|category/gi, "").trim()}` 
+                : "Best Match Found"
           },
         ]);
       } else {
@@ -134,17 +109,16 @@ const handleSend = async (forcedText = null) => {
           { role: "assistant", type: "TEXT", message: rawReply },
         ]);
       }
+    } catch (err) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", type: "TEXT", message: "Sorry, I'm having trouble connecting to the store." },
+      ]);
+    } finally {
+      setLoading(false);
     }
-  } catch (err) {
-    console.error("Vector Search Error:", err);
-    setMessages((prev) => [
-      ...prev,
-      { role: "assistant", type: "TEXT", message: "Sorry, I'm having trouble connecting to the store right now." },
-    ]);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
+
   // FIXED: Clear Chat Function
   const clearChat = () => {
     setMessages([INITIAL_MESSAGE]);
