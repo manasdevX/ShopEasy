@@ -291,7 +291,7 @@ export default function OrderSummary() {
                   >
                     <div className="flex items-center gap-3">
                       <Link
-                        to={`/product/${item.product}`}
+                        to={`/product/${item.product?._id || item.product}`}
                         className="w-12 h-12 bg-black rounded-lg overflow-hidden border border-slate-800 hover:border-orange-500 transition-colors shrink-0"
                       >
                         <img
@@ -303,7 +303,7 @@ export default function OrderSummary() {
 
                       <div className="flex flex-col">
                         <Link
-                          to={`/product/${item.product}`}
+                          to={`/product/${item.product?._id || item.product}`}
                           className="text-xs font-bold text-slate-300 hover:text-orange-500 transition-colors line-clamp-1 flex items-center gap-1"
                         >
                           {item.name}{" "}
