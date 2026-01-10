@@ -75,43 +75,41 @@ export const verifyPayment = async (req, res) => {
       totalPrice,
     } = req.body;
 
-    // 1. Signature Verification
-    // Create the expected signature using the order_id and payment_id returned by Razorpay
-    const body = razorpay_order_id + "|" + razorpay_payment_id;
+    // 1. Validate incoming data exists before processing
+    if (!razorpay_signature || !orderItems || !shippingAddress) {
+       return res.status(400).json({ success: false, message: "Missing required order data" });
+    }
 
+    // 2. Signature Verification
+    const body = razorpay_order_id + "|" + razorpay_payment_id;
     const expectedSignature = crypto
       .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
       .update(body.toString())
       .digest("hex");
 
-    const isAuthentic = expectedSignature === razorpay_signature;
-
-    if (!isAuthentic) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid Payment Signature. Fraud detected.",
-      });
+    if (expectedSignature !== razorpay_signature) {
+      return res.status(400).json({ success: false, message: "Invalid Payment Signature" });
     }
 
-    // 2. Database Logic: Save the Order
-    // Since payment is verified, we now commit the order to the database
+    // 3. Database Logic: Save the Order
     const newOrder = new Order({
-      user: req.user._id, // Assumes authMiddleware populates req.user
+      // Ensure user exists from authMiddleware
+      user: req.user?._id, 
 
-      // Safe mapping for Order Items to handle different frontend structures
       orderItems: orderItems.map((item) => ({
         name: item.name,
-        qty: item.qty || item.quantity, // Handles both 'qty' and 'quantity' keys
+        qty: Number(item.qty || item.quantity || 1),
         image: item.image,
-        price: item.price,
-        product: item.product || item._id, // Handles both 'product' (id ref) and '_id' (object)
-        seller: item.seller,
+        category: item.category || "General", // Required field in Schema
+        price: Number(item.price),
+        product: item.product || item._id,
+        seller: item.seller, // Required field in Schema
       })),
 
       shippingAddress: {
         address: shippingAddress.address || shippingAddress.street,
         city: shippingAddress.city,
-        postalCode: shippingAddress.postalCode || shippingAddress.pincode,
+        postalCode: shippingAddress.postalCode || shippingAddress.pincode, // Required
         country: shippingAddress.country || "India",
         phone: shippingAddress.phone,
       },
@@ -121,46 +119,39 @@ export const verifyPayment = async (req, res) => {
         id: razorpay_payment_id,
         status: "Completed",
         update_time: new Date().toISOString(),
-        email_address: req.user.email,
+        email_address: req.user?.email || "customer@shopeasy.com",
       },
 
-      itemsPrice,
-      taxPrice,
-      shippingPrice,
-      totalPrice,
+      itemsPrice: Number(itemsPrice),
+      taxPrice: Number(taxPrice),
+      shippingPrice: Number(shippingPrice),
+      totalPrice: Number(totalPrice),
       
-      // Explicitly mark as paid
       isPaid: true,
       paidAt: Date.now(),
-      status: "Processing", // Default status for paid orders
+      status: "Processing",
     });
 
     const savedOrder = await newOrder.save();
 
-    // 3. Return Success with the Saved Order
-    // Frontend uses 'savedOrder._id' to redirect to Order Summary
     res.status(201).json({
       success: true,
-      message: "Order placed and payment verified successfully",
+      message: "Order placed successfully",
       order: savedOrder,
     });
 
   } catch (error) {
-    console.error("Detailed Order Saving Error:", error);
+    // Log the actual error to your Render/Server console so you can see it!
+    console.error("PAYMENT_VERIFICATION_CRASH:", error);
     
-    // Check for Mongoose validation errors
     if (error.name === "ValidationError") {
        return res.status(400).json({
          success: false,
          message: "Order Validation Failed",
-         error: error.message
+         details: error.message // Tells you exactly which field is missing
        });
     }
 
-    res.status(500).json({
-      success: false,
-      message: "Payment verified but failed to save order.",
-      error: error.message,
-    });
+    res.status(500).json({ success: false, message: "Server error during verification" });
   }
 };
