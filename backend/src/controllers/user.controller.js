@@ -39,54 +39,64 @@ export const trackUserInterestRoute = async (req, res) => {
  * Helper: AI Interest Tracker (Level 1)
  * MODIFIED: Increased weights and added recency shuffling for instant impact
  */
+/**
+ * Helper: AI Interest Tracker
+ * Updates Recently Viewed and Category Weights
+ */
 const trackUserInterest = async (userId, category, productId) => {
   try {
     const user = await User.findById(userId);
     if (!user || !category) return;
 
-    if (!user.recentlyViewed) user.recentlyViewed = [];
-    if (!user.interests) user.interests = [];
+    // 1. UPDATE RECENTLY VIEWED (The specific product)
+    if (productId) {
+      // Logic: If user clicks it again, move it to the end of the array (most recent)
+      user.recentlyViewed = user.recentlyViewed.filter(
+        (id) => id.toString() !== productId.toString()
+      );
+      user.recentlyViewed.push(productId); // .push adds to the end
 
-    // 1. Update Recently Viewed (Limit to 10)
-    if (productId && !user.recentlyViewed.map(id => id.toString()).includes(productId.toString())) {
-      user.recentlyViewed.unshift(productId);
-      if (user.recentlyViewed.length > 10) user.recentlyViewed.pop();
+      // Keep only the last 10 products
+      if (user.recentlyViewed.length > 10) user.recentlyViewed.shift();
     }
 
-    // 2. Update Category Weights
+    // 2. UPDATE CATEGORY WEIGHTS (The general interest)
+    const normalizedCat = category.trim().toLowerCase();
     const interestIndex = user.interests.findIndex(
-      (i) => i.category.toLowerCase() === category.toLowerCase()
+      (i) => i.category.toLowerCase() === normalizedCat
     );
 
     if (interestIndex > -1) {
-      // ✅ INCREASED WEIGHT: Set to 3.0 for strong impact
-      user.interests[interestIndex].weight += 3.0; 
+      // Boost weight for existing category
+      user.interests[interestIndex].weight += 3.0;
       user.interests[interestIndex].lastInteracted = Date.now();
       
-      // ✅ RECENCY BIAS: Move to the front of the array so getAiRecommendations sees it first
+      // Move category to the FRONT of the interests array (Recency Bias)
       const updatedInterest = user.interests.splice(interestIndex, 1)[0];
       user.interests.unshift(updatedInterest);
     } else {
-      // ✅ HIGH INITIAL WEIGHT for new discovery
+      // Add new category to the FRONT
       user.interests.unshift({ 
-        category, 
+        category: normalizedCat, 
         weight: 3.0, 
         lastInteracted: Date.now() 
       });
     }
 
-    // 3. Keep interests array lean
+    // 3. CLEANUP & SAVE
     if (user.interests.length > 15) user.interests.pop();
-
+    
     await user.save();
     
-    // Invalidate caches
-    await redisClient.del(`user_profile:${userId}`);
-    await redisClient.del(`recommendations:${userId}`); 
-    
-    console.log(`🚀 AI Updated: Boosted category "${category}" for User ${userId}`);
+    // 4. CACHE INVALIDATION (Crucial for instant refresh)
+    if (redisClient) {
+      await redisClient.del(`recommendations:${userId}`);
+      await redisClient.del(`user_profile:${userId}`);
+    }
+
+    console.log(`🚀 AI Logic: Category "${normalizedCat}" prioritized for User ${userId}`);
   } catch (error) {
-    console.error("AI Tracking Error:", error);
+    console.error("AI Tracking Internal Error:", error);
   }
 };
 
@@ -625,53 +635,86 @@ export const updateUserEmail = async (req, res) => {
 ====================================================== */
 export const getAiRecommendations = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id); 
+    // 1. Fetch user and populate recentlyViewed
+    const user = await User.findById(req.user._id)
+      .populate("recentlyViewed", "category _id") 
+      .lean();
+
     if (!user) return res.status(404).json({ message: "User not found" });
 
     const Product = mongoose.model("Product");
 
-    // Recency Bias: prioritize what was just viewed or searched
-    const recentCats = user.recentlyViewed?.slice(0, 3).map(p => p.category) || [];
-    const interestCats = user.interests?.sort((a, b) => b.weight - a.weight).map(i => i.category) || [];
+    // 2. Extract Categories from Recently Viewed (HIGH PRIORITY)
+    // We take the categories of the last 3-4 products the user actually clicked
+    const recentCats = (user.recentlyViewed || [])
+      .filter((p) => p && p.category)
+      .map((p) => p.category.trim().toLowerCase())
+      .reverse(); // Reverse so the MOST recent click is at the front
 
-    const prioritizedCats = [...new Set([...recentCats, ...interestCats])];
+    // 3. Extract Categories from Interests (Search Intent)
+    const interestCats = (user.interests || [])
+      .map((i) => i.category?.trim().toLowerCase())
+      .filter(Boolean);
+
+    /**
+     * ✅ THE FIX: INTERLEAVING PRIORITIES
+     * We put Recent Clicks FIRST, then Search Interests.
+     * This ensures if you just clicked a "Laptop", laptops show up immediately.
+     */
+    const prioritizedCats = [...new Set([...recentCats, ...interestCats])].slice(0, 6);
+
+    // Collect IDs of products the user JUST saw to avoid showing them again
+    // BUT: We only exclude the last 4 to allow some variety
+    const viewedProductIds = (user.recentlyViewed || [])
+      .filter(Boolean)
+      .map((p) => p._id.toString())
+      .slice(-4); 
 
     let finalSelection = [];
 
     if (prioritizedCats.length > 0) {
-      const remainingSlots = 8;
-      
+      // 4. Fetch products matching these prioritized categories
       const similarProducts = await Product.find({
-        category: { $in: prioritizedCats },
-        _id: { $nin: user.recentlyViewed || [] },
-        stock: { $gt: 0 }
+        category: { 
+          $in: prioritizedCats.map(cat => new RegExp(`^${cat}$`, "i")) 
+        },
+        _id: { $nin: viewedProductIds }, // Exclude only the ones literally just viewed
+        stock: { $gt: 0 },
+        isBlocked: { $ne: true }
       })
       .sort({ rating: -1 })
-      .limit(remainingSlots + 5);
+      .limit(1000)
+      .lean();
 
-      const shuffledSimilar = similarProducts.sort(() => 0.5 - Math.random());
-      finalSelection = [...shuffledSimilar].slice(0, 8);
+      // Randomize the pool so the user doesn't see the same 8 every time
+      finalSelection = similarProducts
+        .sort(() => 0.5 - Math.random())
+        .slice(0, 8);
     }
 
+    // 5. Fallback if the personalized pool is too small
     if (finalSelection.length < 8) {
-      const currentIds = finalSelection.map(p => p._id);
+      const currentIds = finalSelection.map(p => p._id.toString());
       const fallback = await Product.find({
-        _id: { $nin: [...currentIds, ...(user.recentlyViewed || [])] },
-        stock: { $gt: 0 }
+        _id: { $nin: [...currentIds, ...viewedProductIds] },
+        stock: { $gt: 0 },
+        isBlocked: { $ne: true }
       })
       .sort({ rating: -1 })
-      .limit(8 - finalSelection.length);
+      .limit(8 - finalSelection.length)
+      .lean();
 
       finalSelection = [...finalSelection, ...fallback];
     }
 
     res.json({
-      products: finalSelection.slice(0, 8),
-      personalized: prioritizedCats.length > 0
+      products: finalSelection,
+      personalized: prioritizedCats.length > 0,
+      debug_categories: prioritizedCats // Useful for testing
     });
 
   } catch (error) {
-    console.error("Discovery Engine Error:", error);
+    console.error("❌ Discovery Engine Error:", error);
     res.status(500).json({ message: "Error fetching recommendations" });
   }
 };
@@ -686,57 +729,66 @@ export const trackSearchIntent = async (req, res) => {
     const userId = req.user._id;
 
     if (!query || query.trim().length < 2) {
-      return res.status(400).json({ message: "Valid search query required" });
+      return res.status(400).json({ message: "Query too short" });
     }
 
+    const searchTerm = query.trim();
     const Product = mongoose.model("Product");
 
-    // 1. Find the most relevant category based on the search term
+    // 1. Find a category that matches the search term
+    // We check if the search matches a category name or a product name
     const matchingProduct = await Product.findOne({
       $or: [
-        { category: { $regex: query, $options: "i" } },
-        { name: { $regex: query, $options: "i" } },
+        { category: { $regex: `^${searchTerm}`, $options: "i" } },
+        { name: { $regex: searchTerm, $options: "i" } },
       ],
     }).select("category");
 
     if (matchingProduct) {
+      const category = matchingProduct.category;
+      const normalizedCat = category.trim().toLowerCase();
+      
       const user = await User.findById(userId);
       if (!user) return res.status(404).json({ message: "User not found" });
 
-      const category = matchingProduct.category;
-
-      if (!user.interests) user.interests = [];
-
+      // 2. AI Interest Logic: Find index using normalized comparison
       const interestIndex = user.interests.findIndex(
-        (i) => i.category.toLowerCase() === category.toLowerCase()
+        (i) => i.category.toLowerCase() === normalizedCat
       );
 
       if (interestIndex > -1) {
-        // ✅ INCREASED WEIGHT: Set to 3.0 (same as a click) for instant takeover
+        // UPDATE EXISTING: Boost weight and update timestamp
         user.interests[interestIndex].weight += 3.0;
         user.interests[interestIndex].lastInteracted = Date.now();
         
-        // ✅ RECENCY SHUFFLE: Move this category to the front
-        const updated = user.interests.splice(interestIndex, 1)[0];
-        user.interests.unshift(updated);
+        // RECENCY BIAS: Move to front so getAiRecommendations picks it up first
+        const updatedInterest = user.interests.splice(interestIndex, 1)[0];
+        user.interests.unshift(updatedInterest);
       } else {
-        // ✅ HIGH STARTING WEIGHT
-        user.interests.unshift({
-          category,
-          weight: 3.0,
-          lastInteracted: Date.now(),
+        // ADD NEW: Create fresh interest at the front
+        user.interests.unshift({ 
+          category: normalizedCat, 
+          weight: 3.0, 
+          lastInteracted: Date.now() 
         });
       }
 
+      // 3. Keep interests array lean (limit to 15)
+      if (user.interests.length > 15) user.interests.pop();
+
       await user.save();
+
+      // 4. Invalidate Cache so the next Recommendation fetch gets fresh data
+      if (redisClient) {
+        await redisClient.del(`recommendations:${userId}`);
+      }
       
-      // ✅ CLEAR CACHE: Ensure recommendations update immediately
-      await clearUserCache(userId);
+      console.log(`🎯 Search Intent Captured: "${searchTerm}" -> Category: ${category}`);
     }
 
     res.status(200).json({ success: true });
   } catch (error) {
-    console.error("SEARCH INTENT ERROR:", error);
-    res.status(500).json({ message: "Failed to track search intent" });
+    console.error("❌ Search Intent Tracking Error:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
 };

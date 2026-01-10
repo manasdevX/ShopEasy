@@ -141,37 +141,27 @@ export default function ProductCard({ product }) {
   // ✅ Optimized Tracking for AI
   // ✅ AI Tracking: Only triggered when visiting a product
   const handleTrackInterest = () => {
-    const token = localStorage.getItem("token");
-    
-    // Only track if logged in and category is valid
-    if (!token || !product.category || product.category === "Premium") return;
+  const token = localStorage.getItem("token");
+  if (!token || !product.category) return;
 
-    const trackData = JSON.stringify({ 
+  // Use standard fetch with keepalive to ensure the request 
+  // reaches the server during navigation.
+  fetch(`${API_URL}/api/user/track-interest`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ 
       category: product.category,
       productId: productId 
-    });
+    }),
+    keepalive: true, 
+  });
 
-    const endpoint = `${API_URL}/api/user/track-interest`;
-
-    /**
-     * Logic: We use sendBeacon here because handleTrackInterest is 
-     * attached to a <Link>. sendBeacon ensures the "Visit" is recorded 
-     * even as the browser navigates to the new product page.
-     */
-    if (navigator.sendBeacon) {
-      const blob = new Blob([trackData], { type: 'application/json' });
-      navigator.sendBeacon(endpoint, blob);
-    } else {
-      fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: trackData,
-      }).catch(err => console.debug("AI Visit Tracking failed", err));
-    }
-  };
+  // This tells the Recommendations component to re-fetch NOW
+  window.dispatchEvent(new Event("search-intent-updated"));
+};
 
   return (
     <Link

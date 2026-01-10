@@ -100,7 +100,7 @@ export const verifyPayment = async (req, res) => {
         name: item.name,
         qty: Number(item.qty || item.quantity || 1),
         image: item.image,
-        category: item.category || "General", // Required field in Schema
+        category: item.category , // Required field in Schema
         price: Number(item.price),
         product: item.product || item._id,
         seller: item.seller, // Required field in Schema

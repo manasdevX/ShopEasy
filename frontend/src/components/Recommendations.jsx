@@ -12,46 +12,28 @@ const Recommendations = () => {
 
   // Inside Recommendations.jsx useEffect
   useEffect(() => {
-    const fetchRecs = async () => {
-      /* ... fetch logic ... */
-    };
+  const fetchRecs = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) return setLoading(false);
 
-    fetchRecs();
+      const { data } = await axios.get(`${API_URL}/api/user/recommendations`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setProducts(data.products || []);
+      setIsPersonalized(data.personalized || false);
+    } catch (err) {
+      console.error("Fetch error", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    // Listen for the custom event we dispatched in the Navbar
-    window.addEventListener("search-intent-updated", fetchRecs);
-    return () => window.removeEventListener("search-intent-updated", fetchRecs);
-  }, []);
+  fetchRecs();
 
-  useEffect(() => {
-    const fetchRecs = async () => {
-      try {
-        const token = localStorage.getItem("token");
-        if (!token) {
-          // If no token, we can still fetch "Trending" (Optional fallback)
-          setLoading(false);
-          return;
-        }
-
-        const { data } = await axios.get(
-          `${API_URL}/api/user/recommendations`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
-
-        // Standardize data format from our tiered backend response
-        const finalProducts = data.products || [];
-        setIsPersonalized(data.personalized || false);
-        setProducts(finalProducts);
-      } catch (err) {
-        console.error("AI Recommendation Fetch Error:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchRecs();
-  }, []);
+  window.addEventListener("search-intent-updated", fetchRecs);
+  return () => window.removeEventListener("search-intent-updated", fetchRecs);
+}, []); // No need for isSearching here, the event handles it.
 
   const handleTrackClick = async (product) => {
     try {
