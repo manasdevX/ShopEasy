@@ -469,7 +469,7 @@ export default function SellerOrders() {
 
       {/* --- MODAL (Preserved UI) --- */}
       {selectedOrder && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
           <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 w-full max-w-2xl rounded-[2rem] overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
             <div className="p-8 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-950/50">
               <div>
@@ -528,7 +528,11 @@ export default function SellerOrders() {
                           : "text-orange-500"
                       }`}
                     >
-                      {selectedOrder.isPaid ? "PAID" : "PENDING"}
+                      {selectedOrder.status === "Return Initiated"
+                        ? "RETURN INITIATED"
+                        : selectedOrder.isPaid
+                        ? "PAID"
+                        : "PENDING"}
                     </span>
                   </div>
                 </div>
