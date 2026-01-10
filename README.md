@@ -258,7 +258,7 @@ A seamless shopping interface designed for high performance and easy product dis
 
 | Home Page + Product Search |
 | :---: |
-| ![Home Page](./assets/User-Search.png) |
+| ![Home Page](./assets/User-Home.png) |
 | ![Search Results](./assets/User-Search_results.png) |
 
 **Features:**
