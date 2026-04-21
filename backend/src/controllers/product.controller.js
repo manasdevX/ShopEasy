@@ -107,12 +107,33 @@ export const getAllProducts = async (req, res) => {
 
     const finalQuery = { ...keywordQuery, ...filterQuery };
 
+    // --- Sort Configuration ---
+    let sortOption = { createdAt: -1 }; // Default: newest first
+    if (req.query.sort) {
+      switch (req.query.sort) {
+        case "price_asc":
+          sortOption = { price: 1 };
+          break;
+        case "price_desc":
+          sortOption = { price: -1 };
+          break;
+        case "rating_desc":
+          sortOption = { rating: -1, numReviews: -1 };
+          break;
+        case "newest":
+          sortOption = { createdAt: -1 };
+          break;
+        default:
+          sortOption = { createdAt: -1 };
+      }
+    }
+
     // --- Execute DB Queries ---
     const [products, count, facetsResult] = await Promise.all([
       Product.find(finalQuery)
         .limit(pageSize)
         .skip(pageSize * (page - 1))
-        .sort({ createdAt: -1 }),
+        .sort(sortOption),
       Product.countDocuments(finalQuery),
       Product.aggregate([
         { $match: keywordQuery },

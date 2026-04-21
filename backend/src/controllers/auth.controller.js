@@ -9,6 +9,17 @@ import axios from "axios";
 import sendEmail from "../utils/emailHelper.js";
 import sendSMS from "../utils/sendSMS.js";
 
+const getAuthCookieOptions = (maxAgeMs = 7 * 24 * 60 * 60 * 1000) => {
+  const isProd = process.env.NODE_ENV === "production";
+
+  return {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? "none" : "lax",
+    maxAge: maxAgeMs,
+  };
+};
+
 /**
  * 🟢 SESSION LIMITER HELPER
  * Blocks login if the maximum number of concurrent sessions is reached.
@@ -193,12 +204,7 @@ export const registerVerifiedUser = async (req, res) => {
       ipAddress: req.headers['x-forwarded-for'] || req.ip,
     });
 
-    res.cookie("accessToken", token, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "None",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie("accessToken", token, getAuthCookieOptions());
 
     res.status(201).json({ success: true, token, user: newUser });
   } catch (error) {
@@ -249,12 +255,7 @@ export const loginUser = async (req, res) => {
       ipAddress: req.ip,
     });
 
-    res.cookie("accessToken", token, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "None",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie("accessToken", token, getAuthCookieOptions());
 
     res.status(200).json({ success: true, token, user });
   } catch (error) {
@@ -320,12 +321,7 @@ export const googleAuth = async (req, res) => {
         });
       }
 
-      res.cookie("accessToken", authToken, {
-        httpOnly: true,
-        secure: true,
-        sameSite: "None",
-        maxAge: 7 * 24 * 60 * 60 * 1000,
-      });
+      res.cookie("accessToken", authToken, getAuthCookieOptions());
 
       return res
         .status(200)
@@ -421,16 +417,18 @@ export const logoutUser = async (req, res) => {
       });
     }
 
+    const isProd = process.env.NODE_ENV === "production";
+
     // 3. Clear Cookies
     res.clearCookie("accessToken", {
       httpOnly: true,
-      secure: true,
-      sameSite: "None",
+      secure: isProd,
+      sameSite: isProd ? "none" : "lax",
     });
     res.clearCookie("shopeasy.sid", {
       httpOnly: true,
-      secure: true,
-      sameSite: "None",
+      secure: isProd,
+      sameSite: isProd ? "none" : "lax",
     });
 
     res.status(200).json({ success: true, message: "Logged out" });

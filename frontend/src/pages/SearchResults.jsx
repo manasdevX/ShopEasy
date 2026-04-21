@@ -11,6 +11,7 @@ import {
   IndianRupee,
   Check,
   XCircle,
+  ArrowUpDown,
 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
@@ -38,18 +39,25 @@ export default function SearchResults() {
   const [selectedRating, setSelectedRating] = useState(0);
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
+  const [sortBy, setSortBy] = useState("relevance");
 
   // --- Effects ---
 
   // 1. Reset Page on Filter Change
   useEffect(() => {
     setCurrentPage(1);
-  }, [query, selectedCategory, selectedRating, minPrice, maxPrice]);
+  }, [query, selectedCategory, selectedRating, minPrice, maxPrice, sortBy]);
 
   // 2. Fetch Data
   useEffect(() => {
     const fetchSearchResults = async () => {
       let link = `${API_URL}/api/products?keyword=${query}&pageNumber=${currentPage}`;
+
+      // Sort mapping
+      if (sortBy === "price_low") link += `&sort=price_asc`;
+      else if (sortBy === "price_high") link += `&sort=price_desc`;
+      else if (sortBy === "rating") link += `&sort=rating_desc`;
+      else if (sortBy === "newest") link += `&sort=newest`;
 
       if (minPrice) link += `&minPrice=${minPrice}`;
       if (maxPrice) link += `&maxPrice=${maxPrice}`;
@@ -84,6 +92,7 @@ export default function SearchResults() {
     selectedRating,
     minPrice,
     maxPrice,
+    sortBy,
     currentPage,
   ]);
 
@@ -101,6 +110,7 @@ export default function SearchResults() {
     setMaxPrice("");
     setSelectedRating(0);
     setSelectedCategory("");
+    setSortBy("relevance");
     setCurrentPage(1);
   };
 
@@ -341,6 +351,26 @@ export default function SearchResults() {
                   </span>{" "}
                   products matching your criteria.
                 </p>
+              </div>
+
+              {/* Sort By Dropdown */}
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
+                  <ArrowUpDown size={14} />
+                  <span className="text-xs font-bold uppercase tracking-wider">Sort By</span>
+                </div>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 cursor-pointer transition-all appearance-none pr-8"
+                  style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23f97316' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}
+                >
+                  <option value="relevance">Relevance</option>
+                  <option value="price_low">Price: Low → High</option>
+                  <option value="price_high">Price: High → Low</option>
+                  <option value="rating">Rating</option>
+                  <option value="newest">Newest First</option>
+                </select>
               </div>
             </div>
 

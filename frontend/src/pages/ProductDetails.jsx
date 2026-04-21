@@ -15,6 +15,8 @@ import {
   ThumbsUp,
   ThumbsDown,
   Heart,
+  CalendarCheck,
+  MessageSquarePlus,
 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import Navbar from "../components/Navbar";
@@ -531,6 +533,30 @@ export default function ProductDetails() {
               ))}
             </div>
 
+            {/* Delivery Estimate */}
+            <div className="pt-6 border-t border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-4 bg-emerald-50 dark:bg-emerald-500/5 rounded-2xl p-4 border border-emerald-100 dark:border-emerald-500/10">
+                <div className="w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
+                  <CalendarCheck size={20} />
+                </div>
+                <div>
+                  <h4 className="text-[11px] font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">
+                    Estimated Delivery
+                  </h4>
+                  <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                    {(() => {
+                      const d = new Date();
+                      d.setDate(d.getDate() + (isFreeDelivery ? 4 : 6));
+                      return d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
+                    })()}
+                    {!isFreeDelivery && (
+                      <span className="text-emerald-600 dark:text-emerald-400 text-[10px] ml-1">• Free delivery over ₹{DELIVERY_THRESHOLD}</span>
+                    )}
+                  </p>
+                </div>
+              </div>
+            </div>
+
             <div className="pt-10 border-t border-slate-100 dark:border-slate-800 space-y-6">
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
@@ -641,15 +667,31 @@ export default function ProductDetails() {
                     </div>
                   ))
                 ) : (
-                  <div className="text-center py-6">
-                    <p className="text-slate-400 text-xs font-bold mb-2">
-                      No reviews yet.
+                  <div className="text-center py-10 px-6 bg-slate-50 dark:bg-slate-900/40 rounded-3xl border border-dashed border-slate-200 dark:border-slate-700">
+                    <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-amber-100 to-orange-100 dark:from-amber-500/10 dark:to-orange-500/10 flex items-center justify-center">
+                      <MessageSquarePlus size={28} className="text-amber-500" />
+                    </div>
+                    {product.numReviews > 0 && (
+                      <div className="flex items-center justify-center gap-2 mb-3">
+                        <div className="flex items-center gap-1 bg-green-500 text-white text-xs px-2.5 py-1 rounded-full font-black">
+                          {product.rating?.toFixed(1)} <Star size={10} fill="currentColor" />
+                        </div>
+                        <span className="text-[11px] text-slate-500 font-bold">
+                          based on {product.numReviews} ratings
+                        </span>
+                      </div>
+                    )}
+                    <p className="text-slate-500 dark:text-slate-400 text-sm font-semibold mb-1">
+                      No written reviews yet
+                    </p>
+                    <p className="text-slate-400 dark:text-slate-500 text-xs mb-4">
+                      Share your experience to help other buyers
                     </p>
                     <Link
                       to={`/product/${id}/reviews`}
-                      className="text-orange-500 text-xs font-black uppercase hover:underline"
+                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 text-white text-xs font-black uppercase tracking-wider rounded-xl shadow-lg shadow-orange-500/20 hover:shadow-orange-500/40 transition-all active:scale-95"
                     >
-                      Be the first to write one!
+                      <Star size={14} /> Write a Review
                     </Link>
                   </div>
                 )}

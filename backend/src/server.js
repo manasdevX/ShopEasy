@@ -9,9 +9,6 @@ import "./config/redis.js";
 
 dotenv.config();
 
-// Connect to Database
-connectDB();
-
 const PORT = process.env.PORT || 5000;
 
 // 2. Create HTTP Server using the Express App
@@ -75,22 +72,44 @@ io.on("connection", (socket) => {
   });
 });
 
-// 6. Start the Server
-server.listen(PORT, () => {
-  const env = process.env.NODE_ENV || "development";
-  console.log("==========================================");
-  console.log(`🚀 SERVER RUNNING ON PORT: ${PORT}`);
-  console.log(`📡 SOCKET.IO ENGINE: Initialized`);
-  console.log(`🌍 ENVIRONMENT: ${env.toUpperCase()}`);
-  console.log(`🔒 SESSION SECURITY: Cookie Sync Active`);
-  console.log("==========================================");
-});
+const startServer = async () => {
+  const allowNoDbStart =
+    process.env.NODE_ENV !== "production" &&
+    process.env.ALLOW_START_WITHOUT_DB === "true";
+
+  try {
+    await connectDB();
+  } catch (error) {
+    if (!allowNoDbStart) {
+      console.error("💀 Startup blocked: Database connection failed.");
+      console.error(`➡️ ${error.message}`);
+      process.exit(1);
+    }
+
+    console.error(
+      "⚠️ Starting without database because ALLOW_START_WITHOUT_DB=true (development only)."
+    );
+    console.error(`➡️ ${error.message}`);
+  }
+
+  server.listen(PORT, () => {
+    const env = process.env.NODE_ENV || "development";
+    console.log("==========================================");
+    console.log(`🚀 SERVER RUNNING ON PORT: ${PORT}`);
+    console.log(`📡 SOCKET.IO ENGINE: Initialized`);
+    console.log(`🌍 ENVIRONMENT: ${env.toUpperCase()}`);
+    console.log(`🔒 SESSION SECURITY: Cookie Sync Active`);
+    console.log("==========================================");
+  });
+};
+
+startServer();
 
 // 7. GLOBAL STABILITY HANDLERS
 process.on("unhandledRejection", (err) => {
-  console.log(`🚨 Unhandled Rejection: ${err.message}`);
+  console.error(`🚨 Unhandled Rejection: ${err.message}`);
 });
 
 process.on("uncaughtException", (err) => {
-  console.log(`🚨 Uncaught Exception: ${err.message}`);
+  console.error(`🚨 Uncaught Exception: ${err.message}`);
 });
