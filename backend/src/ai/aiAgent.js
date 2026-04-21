@@ -1,30 +1,15 @@
-// Simple NLP + Rule-based AI Agent
+/**
+ * Legacy adapter — maintains backward compatibility for any
+ * code importing from the old aiAgent module.
+ */
+import {
+  detectIntent,
+  extractPriceBudget,
+  extractSearchQuery,
+} from "../services/chat/intent.service.js";
 
-export const analyzeIntent = (message) => {
-  const text = message.toLowerCase();
-
-  // Greeting
-  if (/^(hi|hello|hey)/.test(text)) {
-    return { type: "GREETING" };
-  }
-
-  // Price intent
-  const priceMatch = text.match(/under\s*(\d+)/);
-  if (priceMatch) {
-    return {
-      type: "PRICE_FILTER",
-      maxPrice: Number(priceMatch[1]),
-    };
-  }
-
-  // Category intent
-  const categories = ["phone", "laptop", "shoe", "electronics", "clothing"];
-  for (const cat of categories) {
-    if (text.includes(cat)) {
-      return { type: "CATEGORY", category: cat };
-    }
-  }
-
-  // Default product search
-  return { type: "SEARCH", query: text };
-};
+export const analyzeIntent = (message = "") => ({
+  type: detectIntent(message),
+  maxPrice: extractPriceBudget(message),
+  query: extractSearchQuery(message),
+});

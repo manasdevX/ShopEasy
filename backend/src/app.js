@@ -3,7 +3,7 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import session from "express-session";
 import MongoStore from "connect-mongo";
-import redisClient from "./config/redis.js";
+import "./config/redis.js";
 
 // --- ROUTES IMPORTS ---
 import productRoutes from "./routes/product.routes.js";
@@ -15,6 +15,7 @@ import cartRoutes from "./routes/cartRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
 import notificationRoutes from "./routes/notification.routes.js";
 import vectorRoutes from "./routes/vector.routes.js";
+import chatRoutes from "./routes/chat.routes.js";
 
 const app = express();
 
@@ -47,26 +48,40 @@ app.use(express.urlencoded({ extended: true, limit: "50mb" }));
  * 🟢 SESSION CONFIGURATION
  * Optimized to stop guest session bloat and ensure persistence.
  */
+const useMongoSessionStore =
+  process.env.NODE_ENV === "production" && Boolean(process.env.MONGO_URI);
+
+if (!useMongoSessionStore) {
+  console.warn(
+    "⚠️ Using in-memory session store in development. Sessions reset on server restart."
+  );
+}
+
+const sessionConfig = {
+  secret: process.env.SESSION_SECRET || "shopeasy_secret_77",
+  resave: false,
+  saveUninitialized: false,
+  proxy: true,
+  name: "shopeasy.sid",
+  cookie: {
+    secure: process.env.NODE_ENV === "production",
+    httpOnly: true,
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    maxAge: 24 * 60 * 60 * 1000,
+  },
+};
+
+if (useMongoSessionStore) {
+  sessionConfig.store = MongoStore.create({
+    mongoUrl: process.env.MONGO_URI,
+    ttl: 24 * 60 * 60,
+    autoRemove: "native",
+    collectionName: "app_sessions",
+  });
+}
+
 app.use(
-  session({
-    secret: process.env.SESSION_SECRET || "shopeasy_secret_77",
-    resave: false,
-    saveUninitialized: false, // Ensures NO document is created until data is added.
-    proxy: true,
-    name: "shopeasy.sid",
-    store: MongoStore.create({
-      mongoUrl: process.env.MONGO_URI,
-      ttl: 24 * 60 * 60, // 1 Day
-      autoRemove: "native",
-      collectionName: "app_sessions",
-    }),
-    cookie: {
-      secure: process.env.NODE_ENV === "production",
-      httpOnly: true,
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-      maxAge: 24 * 60 * 60 * 1000,
-    },
-  })
+  session(sessionConfig)
 );
 
 /**
@@ -94,6 +109,7 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/cart", cartRoutes);
 app.use("/api/payment", paymentRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/chat", chatRoutes);
 
 app.get("/health", (req, res) => {
   res.status(200).json({

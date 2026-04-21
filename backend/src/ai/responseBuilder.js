@@ -1,18 +1,20 @@
-export const buildResponse = (products, intent) => {
-  if (intent.type === "GREETING") {
-    return "👋 Hi! I can help you find products, deals, or categories. What are you looking for?";
+/**
+ * Legacy adapter — maintains backward compatibility for any
+ * code importing from the old responseBuilder module.
+ */
+export const buildResponse = (products = [], intent = {}) => {
+  if (intent.type === "GENERAL") {
+    return "I can help with product recommendations, order tracking, and support questions.";
   }
 
-  if (!products || products.length === 0) {
-    return "😕 I couldn’t find matching products. Try another category or keyword.";
+  if (!products.length) {
+    return "I could not find matching products yet. Try a different keyword or budget.";
   }
 
-  let reply = "Here are some products you might like:\n\n";
+  const preview = products
+    .slice(0, 3)
+    .map((product) => `${product.name} (₹${product.price})`)
+    .join(" | ");
 
-  products.forEach((p) => {
-    reply += `• **${p.name}** – ₹${p.price}\n`;
-    reply += `  👉 /product/${p._id}\n\n`;
-  });
-
-  return reply;
+  return `Top matches: ${preview}`;
 };

@@ -125,6 +125,17 @@ JWT_SECRET=your_jwt_secret_key_here
 GOOGLE_CLIENT_ID=your_google_oauth_client_id_here
 
 # ========================
+# AI CHATBOT (LLM)
+# ========================
+# Preferred provider (Gemini)
+GEMINI_API_KEY=your_gemini_api_key_here
+GEMINI_MODEL=gemini-2.5-flash
+
+# Optional: OpenAI fallback if Gemini key is not set
+OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_MODEL=gpt-4.1-mini
+
+# ========================
 # EMAIL (SMTP / BREVO)
 # ========================
 BREVO_API_KEY=your_brevo_api_key_here

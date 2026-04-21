@@ -1,11 +1,13 @@
 // routes/vector.routes.js
 import express from "express";
 import { syncProductVectors } from "../controllers/vector.controller.js";
-import { handleChat } from "../controllers/ChatController.js";
+import { handleChatMessage } from "../controllers/chat.controller.js";
 
 const router = express.Router();
 
 router.post("/sync", syncProductVectors);
-router.post("/message", handleChat);
+
+// Backward compatibility route for older frontend clients.
+router.post("/message", handleChatMessage);
 
 export default router;
