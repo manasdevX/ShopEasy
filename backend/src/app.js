@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import session from "express-session";
 import MongoStore from "connect-mongo";
@@ -16,6 +17,8 @@ import paymentRoutes from "./routes/paymentRoutes.js";
 import notificationRoutes from "./routes/notification.routes.js";
 import vectorRoutes from "./routes/vector.routes.js";
 import chatRoutes from "./routes/chat.routes.js";
+import { getLlmConfig } from "./services/chat/llmClient.service.js";
+import redisClient from "./config/redis.js";
 
 const app = express();
 
@@ -26,6 +29,11 @@ const app = express();
 app.set("trust proxy", 1);
 
 // --- MIDDLEWARE ---
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" }, // Allow CDN/cloud images
+  contentSecurityPolicy: false, // Managed by frontend framework
+}));
+
 app.use(
   cors({
     origin: ["http://localhost:5173", "https://shop-easy-livid.vercel.app"],
@@ -115,6 +123,20 @@ app.get("/health", (req, res) => {
   res.status(200).json({
     status: "active",
     uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.get("/health/chat", (req, res) => {
+  const llm = getLlmConfig();
+  res.status(200).json({
+    status: "active",
+    llm: {
+      provider: llm.provider || "none",
+      model: llm.model,
+      available: llm.available,
+    },
+    redis: redisClient.isReady ? "connected" : "fallback (in-memory)",
     timestamp: new Date().toISOString(),
   });
 });

@@ -29,6 +29,7 @@ import OrderMessage from "./OrderMessage";
 
 const CHAT_SESSION_KEY = "shopeasy_chat_session_id";
 const CHAT_MESSAGES_KEY = "shopeasy_chat_messages";
+const MAX_MESSAGE_LENGTH = 1000;
 
 // Use proper markdown list syntax (dash + space) for correct rendering
 const INITIAL_MESSAGE = {
@@ -547,6 +548,10 @@ const ChatBot = () => {
   };
 
   const handleKeyDown = (e) => {
+    if (e.key === "Escape") {
+      setIsOpen(false);
+      return;
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -628,6 +633,9 @@ const ChatBot = () => {
             ref={chatContainerRef}
             onScroll={handleScroll}
             className="flex-1 overflow-y-auto px-3 py-4 space-y-4 bg-gradient-to-b from-slate-50 to-white dark:from-[#0b0f1a] dark:to-[#0c1021] relative"
+            role="log"
+            aria-live="polite"
+            aria-label="Chat messages"
           >
             {messages.map((msg) => {
               // Skip empty text messages
@@ -709,6 +717,7 @@ const ChatBot = () => {
                     Quick Actions
                   </p>
                   <div className="grid grid-cols-2 gap-1.5">
+                    {/* eslint-disable-next-line no-unused-vars */}
                     {QUICK_ACTIONS.map(({ label, sub, prompt, icon: Icon, gradient, bg, border, text }) => (
                       <button
                         key={label}
@@ -774,9 +783,11 @@ const ChatBot = () => {
                 ref={inputRef}
                 id="chatbot-input"
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={(e) => setInput(e.target.value.slice(0, MAX_MESSAGE_LENGTH))}
                 onKeyDown={handleKeyDown}
                 placeholder="Search products, track orders..."
+                maxLength={MAX_MESSAGE_LENGTH}
+                aria-label="Type your message"
                 className="w-full pl-3.5 pr-11 py-2.5 bg-slate-100/80 dark:bg-slate-800/60 rounded-xl text-[13px] outline-none dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-orange-500/30 transition-all duration-200 border border-transparent focus:border-orange-500/20"
                 disabled={loading}
               />

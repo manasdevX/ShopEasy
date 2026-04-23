@@ -44,6 +44,7 @@ export const getLlmModelName = () => {
  * we try these in order.
  */
 const FALLBACK_MODELS = ["gemini-2.0-flash", "gemini-2.0-flash-lite"];
+const LLM_REQUEST_TIMEOUT_MS = 20000; // 20 second timeout per LLM call
 
 export const getModelChain = () => {
   const primary = getLlmModelName();
@@ -300,6 +301,10 @@ const createGeminiClientWrapper = () => {
                 model: modelName,
                 contents,
                 config,
+                // Prevent indefinite hangs if Gemini is slow
+                ...(typeof AbortSignal?.timeout === "function"
+                  ? { signal: AbortSignal.timeout(LLM_REQUEST_TIMEOUT_MS) }
+                  : {}),
               });
 
               return convertGeminiResponse(response);

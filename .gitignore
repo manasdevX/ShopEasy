@@ -1,2 +1,10 @@
 # Presentation template
 [EXT] GDG on Campus - TechSprint Slides Template(ShopEasy).pptx
+
+# Environment variables (contains secrets)
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
