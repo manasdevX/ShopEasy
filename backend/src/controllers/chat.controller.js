@@ -102,6 +102,7 @@ export const streamChatMessage = async (req, res) => {
         message,
         history,
         user,
+        intent,
       });
 
       for await (const event of stream) {

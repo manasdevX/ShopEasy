@@ -49,13 +49,17 @@ import {
   CHAT_BRAND_PERSONA,
   CHAT_SUPPORT_FALLBACK,
 } from "../../config/chatKnowledge.js";
+import { semanticProductSearch } from "../../utils/vectorStore.js";
 
 // ── Configuration ──
 
 const MAX_TOOL_ROUNDS = 5;
 const MAX_HISTORY_MESSAGES = 16;
-const LLM_RETRY_DELAY_MS = 1500;
-const LLM_MAX_RETRIES = 1;
+const LLM_RETRY_DELAY_MS = 5000;
+const LLM_MAX_RETRIES = 2;
+
+// Intents that don't need semantic product search (saves 1 embedding API call)
+const SKIP_SEMANTIC_INTENTS = new Set(["GREETING", "FAQ_SUPPORT", "ORDER_TRACKING"]);
 
 /**
  * Retry wrapper for LLM API calls — handles 429 rate limiting
@@ -98,10 +102,13 @@ You have access to these tools to fetch real data:
 - **answer_faq**: Answer policy questions (shipping, returns, payments, etc.)
 - **get_categories**: List available product categories
 
+## Context from Database (RAG)
+{{CONTEXT_PLACEHOLDER}}
+
 ## Response Guidelines
-- ALWAYS use tools to fetch data before making claims about products or orders
+- ALWAYS use tools to fetch data before making claims about products or orders if the Context does not have what you need.
 - For "trending", "popular", "best", "featured" queries → use get_trending_products
-- For specific product searches → use search_products
+- For specific product searches → check Context first, then use search_products if needed
 - If a tool returns no results, suggest alternative searches or categories
 - When showing products, mention the key details: name, price, availability
 - For order queries from unauthenticated users, ask them to sign in
@@ -314,14 +321,30 @@ const buildFallbackReply = async ({ intent, message, user }) => {
 
 // ── LLM Conversation Engine ──
 
-const runLlmConversation = async ({ message, history, user }) => {
+const runLlmConversation = async ({ message, history, user, intent }) => {
   const client = getLlmClient();
   if (!client) return null;
 
   let ui = { products: [], orders: [], faq: null };
 
+  // Only perform semantic search for product-related intents
+  // This saves 1 embedding API call for greetings, FAQs, and order queries
+  let contextText = "No product context needed for this query.";
+  if (!SKIP_SEMANTIC_INTENTS.has(intent)) {
+    const semanticProducts = await semanticProductSearch(message, 3);
+    if (semanticProducts.length > 0) {
+      contextText = "Relevant products from database:\n" + semanticProducts.map(p => 
+        `- ${p.name} (Price: ₹${p.price}, Stock: ${p.stock}, Category: ${p.category}): ${p.description}`
+      ).join("\n");
+    } else {
+      contextText = "No relevant products found in context. Use tools to search.";
+    }
+  }
+
+  const customizedSystemPrompt = SYSTEM_PROMPT.replace("{{CONTEXT_PLACEHOLDER}}", contextText);
+
   const messages = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: customizedSystemPrompt },
     ...history.map((entry) => ({
       role: entry.role,
       content: entry.content,
@@ -422,14 +445,30 @@ export const runStreamingLlmConversation = async function* ({
   message,
   history,
   user,
+  intent,
 }) {
   const client = getStreamingClient();
   if (!client) return;
 
   let ui = { products: [], orders: [], faq: null };
 
+  // Only perform semantic search for product-related intents
+  let contextText = "No product context needed for this query.";
+  if (!SKIP_SEMANTIC_INTENTS.has(intent)) {
+    const semanticProducts = await semanticProductSearch(message, 3);
+    if (semanticProducts.length > 0) {
+      contextText = "Relevant products from database:\n" + semanticProducts.map(p => 
+        `- ${p.name} (Price: ₹${p.price}, Stock: ${p.stock}, Category: ${p.category}): ${p.description}`
+      ).join("\n");
+    } else {
+      contextText = "No relevant products found in context. Use tools to search.";
+    }
+  }
+
+  const customizedSystemPrompt = SYSTEM_PROMPT.replace("{{CONTEXT_PLACEHOLDER}}", contextText);
+
   const messages = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: customizedSystemPrompt },
     ...history.map((entry) => ({
       role: entry.role,
       content: entry.content,
@@ -555,6 +594,7 @@ export const processChatMessage = async ({ message, sessionId, user }) => {
       message: userMessage,
       history,
       user,
+      intent,
     });
   } catch (error) {
     console.error("Chatbot LLM flow failed, using fallback:", error.message);
