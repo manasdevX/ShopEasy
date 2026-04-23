@@ -27,6 +27,36 @@ import { detectIntent } from "../services/chat/intent.service.js";
 import { getLlmModelName, getLlmProviderName } from "../services/chat/llmClient.service.js";
 import { CHAT_SUPPORT_FALLBACK } from "../config/chatKnowledge.js";
 
+// ── Constants ──
+
+const MAX_MESSAGE_LENGTH = 1000;
+const SSE_TIMEOUT_MS = 30000; // 30 seconds hard timeout for streaming
+
+// ── Input Validation ──
+
+const validateChatInput = (body) => {
+  const { message, sessionId } = body || {};
+  const trimmed = String(message || "").trim();
+
+  if (!trimmed) {
+    return { error: "Message is required", status: 400 };
+  }
+
+  if (trimmed.length > MAX_MESSAGE_LENGTH) {
+    return {
+      error: `Message is too long (max ${MAX_MESSAGE_LENGTH} characters)`,
+      status: 400,
+    };
+  }
+
+  // Validate sessionId format if provided (UUID v4 pattern)
+  if (sessionId && !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sessionId)) {
+    return { error: "Invalid session ID format", status: 400 };
+  }
+
+  return { message: trimmed, sessionId: sessionId || null };
+};
+
 // ── SSE Helpers ──
 
 const sendSseEvent = (res, eventName, payload) => {
@@ -39,17 +69,16 @@ const sendSseEvent = (res, eventName, payload) => {
 
 export const handleChatMessage = async (req, res) => {
   try {
-    const { message, sessionId } = req.body;
-
-    if (!message || !String(message).trim()) {
-      return res.status(400).json({ message: "Message is required" });
+    const validated = validateChatInput(req.body);
+    if (validated.error) {
+      return res.status(validated.status).json({ message: validated.error });
     }
 
     const user = await getOptionalChatUser(req);
 
     const result = await processChatMessage({
-      message,
-      sessionId,
+      message: validated.message,
+      sessionId: validated.sessionId,
       user,
     });
 
@@ -73,14 +102,28 @@ export const streamChatMessage = async (req, res) => {
   res.setHeader("Connection", "keep-alive");
   res.setHeader("X-Accel-Buffering", "no"); // Required for nginx proxies
 
-  try {
-    const { message, sessionId } = req.body;
+  // Hard timeout to prevent indefinite open connections
+  const sseTimeout = setTimeout(() => {
+    if (!res.writableEnded) {
+      sendSseEvent(res, "error", { message: "Response timed out. Please try again." });
+      res.end();
+    }
+  }, SSE_TIMEOUT_MS);
 
-    if (!message || !String(message).trim()) {
-      sendSseEvent(res, "error", { message: "Message is required" });
+  // Clean up timeout on client disconnect
+  req.on("close", () => {
+    clearTimeout(sseTimeout);
+  });
+
+  try {
+    const validated = validateChatInput(req.body);
+    if (validated.error) {
+      sendSseEvent(res, "error", { message: validated.error });
+      clearTimeout(sseTimeout);
       return res.end();
     }
 
+    const { message, sessionId } = validated;
     const user = await getOptionalChatUser(req);
     const resolvedSessionId = sessionId || createChatSessionId();
     const history = await loadChatSessionHistory(resolvedSessionId);
@@ -180,6 +223,7 @@ export const streamChatMessage = async (req, res) => {
       },
     });
 
+    clearTimeout(sseTimeout);
     return res.end();
   } catch (error) {
     console.error("Chat stream handler error:", error.message);
@@ -188,6 +232,7 @@ export const streamChatMessage = async (req, res) => {
       detail:
         process.env.NODE_ENV === "production" ? undefined : error.message,
     });
+    clearTimeout(sseTimeout);
     return res.end();
   }
 };
