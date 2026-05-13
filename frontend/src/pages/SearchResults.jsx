@@ -30,6 +30,7 @@ export default function SearchResults() {
   const [loading, setLoading] = useState(true);
   const [totalCount, setTotalCount] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+  const [correctedQuery, setCorrectedQuery] = useState(null);
 
   const currentPage = Math.max(1, Number.parseInt(searchParams.get("page") || "1", 10) || 1);
   const selectedCategory = searchParams.get("category") || "";
@@ -95,6 +96,7 @@ export default function SearchResults() {
           setItems(normalizedItems);
           setTotalCount(data.total || 0);
           setTotalPages(data.totalPages || data.pages || 1);
+          setCorrectedQuery(data.correctedQuery || null);
           if (data.facets) setFacets(data.facets);
         } else {
           throw new Error(data.message || "Failed to fetch");
@@ -378,9 +380,24 @@ export default function SearchResults() {
                 <div className="flex items-center gap-2 text-orange-500 font-bold text-xs uppercase tracking-[0.2em]">
                   <Search size={14} /> Search Discovery
                 </div>
-                <h2 className="text-3xl md:text-4xl font-black text-slate-900 dark:text-white tracking-tight">
-                  Results for <span className="text-orange-500">"{query}"</span>
-                </h2>
+                <div className="text-3xl md:text-4xl font-black text-slate-900 dark:text-white tracking-tight">
+                  {correctedQuery ? (
+                    <div className="flex flex-col gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span>Showing results for</span>
+                        <span className="text-orange-500">"{correctedQuery}"</span>
+                      </div>
+                      <div className="text-sm md:text-base font-semibold text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-2">
+                        <span>Search instead for</span>
+                        <span className="line-through decoration-red-500/50 decoration-2">"{query}"</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      Results for <span className="text-orange-500">"{query}"</span>
+                    </>
+                  )}
+                </div>
                 <p className="text-slate-500 dark:text-slate-400 font-medium">
                   We found{" "}
                   <span className="text-slate-900 dark:text-white font-black text-lg">

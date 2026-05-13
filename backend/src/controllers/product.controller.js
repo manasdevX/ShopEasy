@@ -3,7 +3,7 @@ import cloudinary from "cloudinary";
 import streamifier from "streamifier";
 import dotenv from "dotenv";
 import redisClient from "../config/redis.js"; // <--- 1. IMPORT REDIS CLIENT
-import { buildCatalogRegexTerms, normalizeCatalogQuery } from "../utils/catalogSearch.js";
+import { buildCatalogRegexTerms, normalizeCatalogQuery, buildSmartSearchConditions, scoreProduct } from "../utils/catalogSearch.js";
 
 // Load environment variables
 dotenv.config();
@@ -215,6 +215,8 @@ const clearProductCache = async (productId = null, sellerId = null) => {
 export const getAllProducts = async (req, res) => {
   try {
     const qRaw = (req.query.q || req.query.keyword || "").toString().trim();
+    
+    // 1. Local Normalization (Includes Phonetic & Fuzzy correction natively)
     const q = normalizeCatalogQuery(qRaw).slice(0, 120);
 
     const page = toPositiveInt(req.query.page || req.query.pageNumber, 1);
@@ -275,16 +277,24 @@ export const getAllProducts = async (req, res) => {
 
     if (hasQuery) {
       textQuery.$text = { $search: q };
-      const searchTerms = buildCatalogRegexTerms(qRaw);
-      regexQuery.$or = [
-        ...searchTerms.flatMap((term) => [
-          { name: { $regex: term, $options: "i" } },
-          { brand: { $regex: term, $options: "i" } },
-          { description: { $regex: term, $options: "i" } },
-          { tags: { $regex: term, $options: "i" } },
-          { category: { $regex: term, $options: "i" } },
-        ]),
-      ];
+
+      // Smart word-boundary-aware regex fallback (replaces naive substring matching)
+      const smartConditions = buildSmartSearchConditions(qRaw);
+      if (smartConditions.length > 0) {
+        regexQuery.$or = smartConditions;
+      } else {
+        // Ultimate fallback: use original regex terms if smart conditions produce nothing
+        const searchTerms = buildCatalogRegexTerms(qRaw);
+        regexQuery.$or = [
+          ...searchTerms.flatMap((term) => [
+            { name: { $regex: term, $options: "i" } },
+            { brand: { $regex: term, $options: "i" } },
+            { description: { $regex: term, $options: "i" } },
+            { tags: { $regex: term, $options: "i" } },
+            { category: { $regex: term, $options: "i" } },
+          ]),
+        ];
+      }
     }
 
     const searchQuery = hasQuery ? textQuery : baseFilters;
@@ -304,7 +314,7 @@ export const getAllProducts = async (req, res) => {
       if (!hasQuery) throw primaryError;
 
       console.warn(
-        `Primary search pipeline failed for query "${q}". Falling back to regex search:`,
+        `Primary search pipeline failed for query "${q}". Falling back to smart regex search:`,
         primaryError.message
       );
 
@@ -316,6 +326,17 @@ export const getAllProducts = async (req, res) => {
         limit,
         sort,
       });
+
+      // Re-rank regex fallback results by relevance score
+      if (result.items && result.items.length > 1 && sort === "relevance") {
+        result.items = result.items
+          .map((item) => ({
+            ...item,
+            _relevanceScore: scoreProduct(item, qRaw),
+          }))
+          .sort((a, b) => b._relevanceScore - a._relevanceScore)
+          .map(({ _relevanceScore, ...item }) => item);
+      }
     }
 
     const { count, facetsResult, items } = result;
@@ -328,6 +349,8 @@ export const getAllProducts = async (req, res) => {
       facets: facetsResult[0] || { categories: [], ratings: [] },
       sort,
       query: q,
+      originalQuery: qRaw,
+      correctedQuery: (q !== qRaw.toLowerCase()) ? q : null,
 
       // Backward compatibility fields
       products: items,
