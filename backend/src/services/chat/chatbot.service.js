@@ -106,14 +106,6 @@ const SYSTEM_PROMPT = `${CHAT_BRAND_PERSONA}
 
 ## Available Tools
 You have access to these tools to fetch real data:
-- **search_products**: Search the product catalog by keyword, category, brand, or price range
-- **get_trending_products**: Get trending, popular, featured, bestseller, or new arrival products. Use this when users ask for trending/popular/best/featured items.
-- **get_product_details**: Get detailed info about a specific product
-- **get_user_orders**: Fetch the logged-in user's recent orders
-- **get_order_by_reference**: Look up a specific order by ID
-- **answer_faq**: Answer policy questions (shipping, returns, payments, etc.)
-- **get_categories**: List available product categories
-
 ## Context from Database (RAG)
 {{CONTEXT_PLACEHOLDER}}
 
@@ -695,6 +687,30 @@ export const processChatMessage = async ({ message, sessionId, user }) => {
 
   if (!outcome) {
     try {
+    // Check if user wants to cancel an order
+    const isCancelRequest = /\b(cancel|want to cancel|please cancel|i want to cancel|cancel this|cancel my order|can you cancel|i need to cancel)\b/i.test(message);
+    if (isCancelRequest && orderRef) {
+      const cancelResult = await cancelOrderTool(
+        { orderReference: orderRef },
+        user?._id
+      );
+      
+      if (cancelResult.error) {
+        return {
+          reply: `❌ ${cancelResult.error}`,
+          ui,
+          usedLlm: false,
+        };
+      }
+      
+      if (cancelResult.cancelled) {
+        return {
+          reply: `✅ ${cancelResult.message}`,
+          ui,
+          usedLlm: false,
+        };
+      }
+    }
       outcome = await runLlmConversation({
         message: userMessage,
         history,

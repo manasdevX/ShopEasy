@@ -398,6 +398,31 @@ export const CHAT_TOOL_DEFINITIONS = [
       },
     },
   },
+    {
+      type: "function",
+      function: {
+        name: "cancel_order",
+        description:
+          "Cancel a user's order. Use this when the user explicitly asks to cancel an order. Requires the user to be logged in and the order to be in a cancellable status (e.g., Processing, before shipment).",
+        parameters: {
+          type: "object",
+          properties: {
+            orderReference: {
+              type: "string",
+              description:
+                "The order identifier — can be a full 24-character MongoDB ID or a 6-character short reference like '#A1B2C3'.",
+            },
+            reason: {
+              type: "string",
+              description:
+                "Optional cancellation reason from the user (e.g., 'changed my mind', 'ordered by mistake', 'no longer needed').",
+            },
+          },
+          required: ["orderReference"],
+          additionalProperties: false,
+        },
+      },
+    },
 ];
 
 // ── Tool Implementations ──
@@ -799,6 +824,76 @@ export const getCategoriesList = async () => {
   }
 };
 
+  /**
+   * Cancel a user's order
+   */
+  export const cancelOrderTool = async (args = {}, userId) => {
+    const { orderReference, reason } = args;
+
+    if (!userId) {
+      return {
+        error: "User not authenticated. Please log in to cancel an order.",
+        cancelled: false,
+      };
+    }
+
+    if (!orderReference) {
+      return {
+        error: "Order reference is required. Please provide the order ID or order number.",
+        cancelled: false,
+      };
+    }
+
+    try {
+      // Find order by reference (full ID or short reference)
+      const refLower = String(orderReference).toLowerCase();
+      const query = refLower.match(/^[a-f0-9]{24}$/)
+        ? { _id: refLower, userId }
+        : { _id: new RegExp(`^${refLower}`, "i"), userId };
+
+      const order = await Order.findOne(query);
+
+      if (!order) {
+        return {
+          error: `Order not found. Please check the order ID and try again.`,
+          cancelled: false,
+        };
+      }
+
+      // Check if order is cancellable
+      const cancellableStatuses = ["Processing", "Pending", "Confirmed"];
+      if (!cancellableStatuses.includes(order.status)) {
+        return {
+          error: `This order cannot be cancelled. Current status: ${order.status}. Only ${cancellableStatuses.join(", ")} orders can be cancelled.`,
+          cancelled: false,
+          orderStatus: order.status,
+        };
+      }
+
+      // Cancel the order
+      order.status = "Cancelled";
+      order.cancelledAt = new Date();
+      order.cancellationReason = reason || "Cancelled by user";
+      await order.save();
+
+      return {
+        success: true,
+        cancelled: true,
+        message: `Order #${order._id.toString().slice(-6).toUpperCase()} has been successfully cancelled.`,
+        orderReference: order._id.toString(),
+        orderStatus: "Cancelled",
+        cancellationReason: order.cancellationReason,
+      };
+    } catch (error) {
+      console.error("Cancel order error:", error.message);
+      return {
+        error: "Failed to cancel order. Please try again later.",
+        cancelled: false,
+        detail: process.env.NODE_ENV === "production" ? undefined : error.message,
+      };
+    }
+  };
+
 // ── Tool Execution Router ──
 
 export const executeChatTool = async (toolName, args, { user } = {}) => {
@@ -843,6 +938,13 @@ export const executeChatTool = async (toolName, args, { user } = {}) => {
         ui: {},
       };
     }
+      case "cancel_order": {
+        const result = await cancelOrderTool(args, user?._id);
+        return {
+          result,
+          ui: {},
+        };
+      }
     default:
       return {
         result: { error: `Unknown tool: ${toolName}` },

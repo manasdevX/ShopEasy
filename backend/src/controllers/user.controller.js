@@ -1,62 +1,16 @@
 import User from "../models/User.js";
 import Cart from "../models/Cart.js";
-import redisClient from "../config/redis.js"; // <--- IMPORT REDIS
+import redisClient from "../config/redis.js";
 import mongoose from "mongoose";
 import { normalizeCatalogQuery } from "../utils/catalogSearch.js";
-
-const RECOMMENDATION_CACHE_TTL_SECONDS = 5 * 60;
-
-const getRecommendationCacheKey = (userId) => `recommendations:v2:${userId}`;
-
-const hashSeed = (value = "") => {
-  let hash = 2166136261;
-  for (let i = 0; i < value.length; i += 1) {
-    hash ^= value.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-};
-
-const mulberry32 = (seed) => {
-  let t = seed >>> 0;
-  return () => {
-    t += 0x6d2b79f5;
-    let r = Math.imul(t ^ (t >>> 15), 1 | t);
-    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
-    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
-  };
-};
-
-const deterministicShuffle = (items, seedSource) => {
-  const arr = [...items];
-  const random = mulberry32(hashSeed(seedSource));
-
-  for (let i = arr.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-
-  return arr;
-};
-
-const scoreRecommendation = (product, categoryWeight = 0) => {
-  const rating = Number(product.rating || 0);
-  const reviewSignal = Math.log10(Number(product.numReviews || 0) + 1);
-  const discount = Number(product.discountPercentage || 0) / 100;
-  const stockSignal = Math.min(Number(product.stock || 0), 30) / 30;
-  const featureBoost = product.isFeatured ? 0.08 : 0;
-  const bestsellerBoost = product.isBestSeller ? 0.08 : 0;
-
-  return (
-    rating * 0.35 +
-    reviewSignal * 0.2 +
-    discount * 0.12 +
-    stockSignal * 0.05 +
-    categoryWeight * 0.2 +
-    featureBoost +
-    bestsellerBoost
-  );
-};
+import {
+  generateRecommendations,
+  trackSearchIntent as serviceTrackSearchIntent,
+  trackProductClick as serviceTrackProductClick,
+  createRecommendationLogger,
+  getMetrics,
+} from "../services/recommendation.service.js";
+import { ERROR_CODES } from "../config/recommendation.config.js";
 
 /**
  * Helper: Clear User Profile Cache
@@ -72,89 +26,33 @@ const clearUserCache = async (userId) => {
 };
 
 /**
- * 🟢 NEW EXPORT: Track User Interest (Called by Route)
+ * Track user product click (from recommendations)
+ * @route POST /api/user/track-interest
+ * @access Private
  */
 export const trackUserInterestRoute = async (req, res) => {
   try {
     const { category, productId } = req.body;
     const userId = req.user._id;
+    const logger = createRecommendationLogger("trackUserInterestRoute");
 
-    if (!category) return res.status(400).json({ message: "Category is required" });
+    if (!category) {
+      logger.warn("Missing category", { userId });
+      return res.status(400).json({ code: ERROR_CODES.INVALID_INPUT, message: "Category is required" });
+    }
 
-    // Call the logic below
-    await trackUserInterest(userId, category, productId);
+    await serviceTrackProductClick(userId, category, productId, logger);
 
-    res.status(200).json({ success: true });
+    res.status(200).json({ success: true, message: "Interest tracked" });
   } catch (error) {
-    res.status(500).json({ message: "Tracking failed" });
-  }
-};
+    const logger = createRecommendationLogger("trackUserInterestRoute-error");
+    logger.error("Tracking failed", error);
 
-/**
- * Helper: AI Interest Tracker (Level 1)
- * MODIFIED: Increased weights and added recency shuffling for instant impact
- */
-/**
- * Helper: AI Interest Tracker
- * Updates Recently Viewed and Category Weights
- */
-const trackUserInterest = async (userId, category, productId) => {
-  try {
-    const user = await User.findById(userId);
-    if (!user || !category) return;
-
-    // 1. UPDATE RECENTLY VIEWED (The specific product)
-    if (productId) {
-      // Logic: If user clicks it again, move it to the end of the array (most recent)
-      user.recentlyViewed = user.recentlyViewed.filter(
-        (id) => id.toString() !== productId.toString()
-      );
-      user.recentlyViewed.push(productId); // .push adds to the end
-
-      // Keep only the last 10 products
-      if (user.recentlyViewed.length > 10) user.recentlyViewed.shift();
-    }
-
-    // 2. UPDATE CATEGORY WEIGHTS (The general interest)
-    const normalizedCat = category.trim().toLowerCase();
-    const interestIndex = user.interests.findIndex(
-      (i) => i.category.toLowerCase() === normalizedCat
-    );
-
-    if (interestIndex > -1) {
-      // Boost weight for existing category
-      user.interests[interestIndex].weight += 3.0;
-      user.interests[interestIndex].lastInteracted = Date.now();
-      
-      // Move category to the FRONT of the interests array (Recency Bias)
-      const updatedInterest = user.interests.splice(interestIndex, 1)[0];
-      user.interests.unshift(updatedInterest);
-    } else {
-      // Add new category to the FRONT
-      user.interests.unshift({ 
-        category: normalizedCat, 
-        weight: 3.0, 
-        lastInteracted: Date.now() 
-      });
-    }
-
-    // 3. CLEANUP & SAVE
-    if (user.interests.length > 15) user.interests.pop();
-    
-    await user.save();
-    
-    // 4. CACHE INVALIDATION (Crucial for instant refresh)
-    if (redisClient) {
-      await redisClient.del([
-        `recommendations:${userId}`,
-        getRecommendationCacheKey(userId),
-      ]);
-      await redisClient.del(`user_profile:${userId}`);
-    }
-
-    console.log(`🚀 AI Logic: Category "${normalizedCat}" prioritized for User ${userId}`);
-  } catch (error) {
-    console.error("AI Tracking Internal Error:", error);
+    const statusCode = error.code === ERROR_CODES.INVALID_INPUT ? 400 : 500;
+    res.status(statusCode).json({
+      code: error.code || "TRACKING_ERROR",
+      message: error.message || "Failed to track interest",
+    });
   }
 };
 
@@ -687,245 +585,95 @@ export const updateUserEmail = async (req, res) => {
     res.status(500).json({ message: "Server error updating email" });
   }
 };
-/* ======================================================
-    13. AI RECOMMENDATIONS (Behavioral Only)
-    Route: GET /api/user/recommendations
-====================================================== */
+/**
+ * Get AI-powered product recommendations
+ * @route GET /api/user/recommendations
+ * @access Private
+ * @returns {Object} { products: [], personalized: boolean, timestamp: number }
+ */
 export const getAiRecommendations = async (req, res) => {
+  const logger = createRecommendationLogger("getAiRecommendations");
+  const startTime = Date.now();
+
   try {
-    const userId = req.user._id.toString();
-    const cacheKey = getRecommendationCacheKey(userId);
+    const userId = req.user._id;
 
-    const cached = await redisClient.get(cacheKey);
-    if (cached) {
-      return res.json(JSON.parse(cached));
-    }
+    logger.debug("Fetching recommendations", { userId });
 
-    // 1. Fetch user and populate recentlyViewed
-    const user = await User.findById(req.user._id)
-      .populate("recentlyViewed", "category _id")
-      .lean();
+    const recommendations = await generateRecommendations(userId, logger);
 
-    if (!user) return res.status(404).json({ message: "User not found" });
+    const responseTime = Date.now() - startTime;
+    logger.debug("Recommendations fetched", { responseTime, count: recommendations.products.length });
 
-    const Product = mongoose.model("Product");
-
-    // 2. Extract Categories from Recently Viewed (highest recency signal)
-    const recentCats = (user.recentlyViewed || [])
-      .filter((p) => p && p.category)
-      .map((p) => p.category.trim().toLowerCase())
-      .reverse();
-
-    // 3. Build weighted category preference map.
-    const weightedCategories = new Map();
-
-    recentCats.forEach((cat, idx) => {
-      const recencyBoost = Math.max(0.4, 1 - idx * 0.12);
-      weightedCategories.set(cat, (weightedCategories.get(cat) || 0) + recencyBoost);
-    });
-
-    for (const interest of user.interests || []) {
-      const cat = interest.category?.trim().toLowerCase();
-      if (!cat) continue;
-      const normalizedWeight = Math.min(Math.max(Number(interest.weight || 0), 0), 20) / 20;
-      weightedCategories.set(cat, (weightedCategories.get(cat) || 0) + normalizedWeight);
-    }
-
-    const prioritizedCats = [...weightedCategories.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .map(([cat]) => cat)
-      .slice(0, 6);
-
-    // Collect IDs of products the user JUST saw to avoid showing them again
-    const viewedProductIds = (user.recentlyViewed || [])
-      .filter(Boolean)
-      .map((p) => p._id.toString())
-      .slice(-6);
-
-    let selected = [];
-    const selectedIdSet = new Set();
-
-    if (prioritizedCats.length > 0) {
-      // 4. Candidate generation from prioritized categories.
-      const similarProducts = await Product.find({
-        category: {
-          $in: prioritizedCats.map((cat) => new RegExp(`^${cat}$`, "i")),
-        },
-        _id: { $nin: viewedProductIds },
-        stock: { $gt: 0 },
-        isBlocked: { $ne: true },
-      })
-        .select(
-          "_id name price mrp discountPercentage thumbnail images category subCategory brand stock rating numReviews isFeatured isBestSeller createdAt"
-        )
-        .limit(240)
-        .lean();
-
-      const poolByCategory = new Map();
-      for (const product of similarProducts) {
-        const cat = product.category?.trim().toLowerCase() || "uncategorized";
-        const catWeight = weightedCategories.get(cat) || 0;
-        const scored = {
-          ...product,
-          _recScore: scoreRecommendation(product, catWeight),
-        };
-
-        if (!poolByCategory.has(cat)) poolByCategory.set(cat, []);
-        poolByCategory.get(cat).push(scored);
-      }
-
-      const dayBucket = new Date().toISOString().slice(0, 10);
-      for (const [cat, catItems] of poolByCategory.entries()) {
-        poolByCategory.set(
-          cat,
-          deterministicShuffle(
-            catItems.sort((a, b) => b._recScore - a._recScore),
-            `${userId}:${dayBucket}:${cat}`
-          )
-        );
-      }
-
-      // Deterministic category round-robin for diversity.
-      const orderedCats = deterministicShuffle(
-        prioritizedCats,
-        `${userId}:${dayBucket}:category-order`
-      );
-
-      while (selected.length < 8) {
-        let progressed = false;
-        for (const cat of orderedCats) {
-          if (selected.length >= 8) break;
-          const bucket = poolByCategory.get(cat);
-          if (!bucket || bucket.length === 0) continue;
-
-          const next = bucket.shift();
-          if (!next || selectedIdSet.has(next._id.toString())) continue;
-
-          selected.push(next);
-          selectedIdSet.add(next._id.toString());
-          progressed = true;
-        }
-
-        if (!progressed) break;
-      }
-    }
-
-    // 5. Fallback with globally strong products if personalized pool is small.
-    if (selected.length < 8) {
-      const currentIds = selected.map((p) => p._id.toString());
-      const fallback = await Product.find({
-        _id: { $nin: [...currentIds, ...viewedProductIds] },
-        stock: { $gt: 0 },
-        isBlocked: { $ne: true },
-      })
-        .select(
-          "_id name price mrp discountPercentage thumbnail images category subCategory brand stock rating numReviews isFeatured isBestSeller createdAt"
-        )
-        .sort({ rating: -1, numReviews: -1, createdAt: -1 })
-        .limit(8 - selected.length)
-        .lean();
-
-      selected = [...selected, ...fallback];
-    }
-
-    const normalizedProducts = selected.map((item) => {
-      const { _recScore, ...rest } = item;
-      return rest;
-    });
-
-    const response = {
-      products: normalizedProducts,
-      personalized: prioritizedCats.length > 0,
-    };
-
-    await redisClient.setEx(
-      cacheKey,
-      RECOMMENDATION_CACHE_TTL_SECONDS,
-      JSON.stringify(response)
-    );
-
-    res.json(response);
-
+    // ✅ Add response headers for caching hints
+    res.set("Cache-Control", "private, max-age=300"); // 5 minutes
+    res.json(recommendations);
   } catch (error) {
-    console.error("❌ Discovery Engine Error:", error);
-    res.status(500).json({ message: "Error fetching recommendations" });
+    logger.error("Failed to fetch recommendations", error);
+
+    const statusCode = error.code === ERROR_CODES.USER_NOT_FOUND ? 404 : 500;
+    const message =
+      error.code === ERROR_CODES.USER_NOT_FOUND
+        ? "User not found"
+        : error.code === ERROR_CODES.SERVICE_UNAVAILABLE
+          ? "Recommendations service busy, please try again"
+          : "Failed to generate recommendations";
+
+    res.status(statusCode).json({
+      code: error.code || "RECOMMENDATION_ERROR",
+      message,
+      timestamp: Date.now(),
+    });
   }
 };
 
-/* ======================================================
-    14. TRACK SEARCH INTENT (MODIFIED FOR INSTANT IMPACT)
-    Route: POST /api/user/track-search-intent
-====================================================== */
+/**
+ * Track search query intent
+ * @route POST /api/user/track-search-intent
+ * @access Private
+ * @body { query: string }
+ */
 export const trackSearchIntent = async (req, res) => {
+  const logger = createRecommendationLogger("trackSearchIntent");
+
   try {
     const { query } = req.body;
     const userId = req.user._id;
 
     if (!query || query.trim().length < 2) {
-      return res.status(400).json({ message: "Query too short" });
+      logger.warn("Invalid search query", { query, userId });
+      return res.status(400).json({
+        code: ERROR_CODES.INVALID_INPUT,
+        message: "Search query must be at least 2 characters",
+      });
     }
 
-    const searchTerm = normalizeCatalogQuery(query.trim());
-    const escapedSearchTerm = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const Product = mongoose.model("Product");
+    logger.debug("Tracking search intent", { query: query.substring(0, 50), userId });
 
-    // 1. Find a category that matches the search term
-    // We check if the search matches a category name or a product name
-    const matchingProduct = await Product.findOne({
-      $or: [
-        { category: { $regex: `\\b${escapedSearchTerm}`, $options: "i" } },
-        { name: { $regex: escapedSearchTerm, $options: "i" } },
-      ],
-    }).select("category");
+    await serviceTrackSearchIntent(userId, query, logger);
 
-    if (matchingProduct) {
-      const category = matchingProduct.category;
-      const normalizedCat = category.trim().toLowerCase();
-      
-      const user = await User.findById(userId);
-      if (!user) return res.status(404).json({ message: "User not found" });
-
-      // 2. AI Interest Logic: Find index using normalized comparison
-      const interestIndex = user.interests.findIndex(
-        (i) => i.category.toLowerCase() === normalizedCat
-      );
-
-      if (interestIndex > -1) {
-        // UPDATE EXISTING: Boost weight and update timestamp
-        user.interests[interestIndex].weight += 3.0;
-        user.interests[interestIndex].lastInteracted = Date.now();
-        
-        // RECENCY BIAS: Move to front so getAiRecommendations picks it up first
-        const updatedInterest = user.interests.splice(interestIndex, 1)[0];
-        user.interests.unshift(updatedInterest);
-      } else {
-        // ADD NEW: Create fresh interest at the front
-        user.interests.unshift({ 
-          category: normalizedCat, 
-          weight: 3.0, 
-          lastInteracted: Date.now() 
-        });
-      }
-
-      // 3. Keep interests array lean (limit to 15)
-      if (user.interests.length > 15) user.interests.pop();
-
-      await user.save();
-
-      // 4. Invalidate Cache so the next Recommendation fetch gets fresh data
-      if (redisClient) {
-        await redisClient.del([
-          `recommendations:${userId}`,
-          getRecommendationCacheKey(userId),
-        ]);
-      }
-      
-      console.log(`🎯 Search Intent Captured: "${searchTerm}" -> Category: ${category}`);
-    }
-
-    res.status(200).json({ success: true });
+    res.status(200).json({ success: true, message: "Search tracked" });
   } catch (error) {
-    console.error("❌ Search Intent Tracking Error:", error);
-    res.status(500).json({ message: "Internal server error" });
+    logger.error("Failed to track search intent", error);
+
+    const statusCode = error.code === ERROR_CODES.INVALID_INPUT ? 400 : 500;
+    res.status(statusCode).json({
+      code: error.code || "TRACKING_ERROR",
+      message: error.message || "Failed to track search",
+    });
+  }
+};
+
+/**
+ * Get recommendation engine metrics (for monitoring/debugging)
+ * @route GET /api/user/recommendation-metrics
+ * @access Private
+ */
+export const getRecommendationMetrics = async (req, res) => {
+  try {
+    const metrics = getMetrics();
+    res.json({ metrics, timestamp: Date.now() });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to fetch metrics" });
   }
 };
