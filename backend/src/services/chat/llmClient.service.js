@@ -44,7 +44,7 @@ export const getLlmModelName = () => {
  * Fallback model chain — if the primary model is overloaded (503),
  * we try these in order.
  */
-const FALLBACK_MODELS = ["gemini-2.0-flash", "gemini-2.0-flash-lite"];
+const FALLBACK_MODELS = ["gemini-1.5-flash-8b", "gemini-1.5-pro"];
 const LLM_REQUEST_TIMEOUT_MS = 20000; // 20 second timeout per LLM call
 
 export const getModelChain = () => {
