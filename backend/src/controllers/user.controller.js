@@ -2,6 +2,61 @@ import User from "../models/User.js";
 import Cart from "../models/Cart.js";
 import redisClient from "../config/redis.js"; // <--- IMPORT REDIS
 import mongoose from "mongoose";
+import { normalizeCatalogQuery } from "../utils/catalogSearch.js";
+
+const RECOMMENDATION_CACHE_TTL_SECONDS = 5 * 60;
+
+const getRecommendationCacheKey = (userId) => `recommendations:v2:${userId}`;
+
+const hashSeed = (value = "") => {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+};
+
+const mulberry32 = (seed) => {
+  let t = seed >>> 0;
+  return () => {
+    t += 0x6d2b79f5;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+};
+
+const deterministicShuffle = (items, seedSource) => {
+  const arr = [...items];
+  const random = mulberry32(hashSeed(seedSource));
+
+  for (let i = arr.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+
+  return arr;
+};
+
+const scoreRecommendation = (product, categoryWeight = 0) => {
+  const rating = Number(product.rating || 0);
+  const reviewSignal = Math.log10(Number(product.numReviews || 0) + 1);
+  const discount = Number(product.discountPercentage || 0) / 100;
+  const stockSignal = Math.min(Number(product.stock || 0), 30) / 30;
+  const featureBoost = product.isFeatured ? 0.08 : 0;
+  const bestsellerBoost = product.isBestSeller ? 0.08 : 0;
+
+  return (
+    rating * 0.35 +
+    reviewSignal * 0.2 +
+    discount * 0.12 +
+    stockSignal * 0.05 +
+    categoryWeight * 0.2 +
+    featureBoost +
+    bestsellerBoost
+  );
+};
 
 /**
  * Helper: Clear User Profile Cache
@@ -90,7 +145,10 @@ const trackUserInterest = async (userId, category, productId) => {
     
     // 4. CACHE INVALIDATION (Crucial for instant refresh)
     if (redisClient) {
-      await redisClient.del(`recommendations:${userId}`);
+      await redisClient.del([
+        `recommendations:${userId}`,
+        getRecommendationCacheKey(userId),
+      ]);
       await redisClient.del(`user_profile:${userId}`);
     }
 
@@ -635,83 +693,158 @@ export const updateUserEmail = async (req, res) => {
 ====================================================== */
 export const getAiRecommendations = async (req, res) => {
   try {
+    const userId = req.user._id.toString();
+    const cacheKey = getRecommendationCacheKey(userId);
+
+    const cached = await redisClient.get(cacheKey);
+    if (cached) {
+      return res.json(JSON.parse(cached));
+    }
+
     // 1. Fetch user and populate recentlyViewed
     const user = await User.findById(req.user._id)
-      .populate("recentlyViewed", "category _id") 
+      .populate("recentlyViewed", "category _id")
       .lean();
 
     if (!user) return res.status(404).json({ message: "User not found" });
 
     const Product = mongoose.model("Product");
 
-    // 2. Extract Categories from Recently Viewed (HIGH PRIORITY)
-    // We take the categories of the last 3-4 products the user actually clicked
+    // 2. Extract Categories from Recently Viewed (highest recency signal)
     const recentCats = (user.recentlyViewed || [])
       .filter((p) => p && p.category)
       .map((p) => p.category.trim().toLowerCase())
-      .reverse(); // Reverse so the MOST recent click is at the front
+      .reverse();
 
-    // 3. Extract Categories from Interests (Search Intent)
-    const interestCats = (user.interests || [])
-      .map((i) => i.category?.trim().toLowerCase())
-      .filter(Boolean);
+    // 3. Build weighted category preference map.
+    const weightedCategories = new Map();
 
-    /**
-     * ✅ THE FIX: INTERLEAVING PRIORITIES
-     * We put Recent Clicks FIRST, then Search Interests.
-     * This ensures if you just clicked a "Laptop", laptops show up immediately.
-     */
-    const prioritizedCats = [...new Set([...recentCats, ...interestCats])].slice(0, 6);
+    recentCats.forEach((cat, idx) => {
+      const recencyBoost = Math.max(0.4, 1 - idx * 0.12);
+      weightedCategories.set(cat, (weightedCategories.get(cat) || 0) + recencyBoost);
+    });
+
+    for (const interest of user.interests || []) {
+      const cat = interest.category?.trim().toLowerCase();
+      if (!cat) continue;
+      const normalizedWeight = Math.min(Math.max(Number(interest.weight || 0), 0), 20) / 20;
+      weightedCategories.set(cat, (weightedCategories.get(cat) || 0) + normalizedWeight);
+    }
+
+    const prioritizedCats = [...weightedCategories.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([cat]) => cat)
+      .slice(0, 6);
 
     // Collect IDs of products the user JUST saw to avoid showing them again
-    // BUT: We only exclude the last 4 to allow some variety
     const viewedProductIds = (user.recentlyViewed || [])
       .filter(Boolean)
       .map((p) => p._id.toString())
-      .slice(-4); 
+      .slice(-6);
 
-    let finalSelection = [];
+    let selected = [];
+    const selectedIdSet = new Set();
 
     if (prioritizedCats.length > 0) {
-      // 4. Fetch products matching these prioritized categories
+      // 4. Candidate generation from prioritized categories.
       const similarProducts = await Product.find({
-        category: { 
-          $in: prioritizedCats.map(cat => new RegExp(`^${cat}$`, "i")) 
+        category: {
+          $in: prioritizedCats.map((cat) => new RegExp(`^${cat}$`, "i")),
         },
-        _id: { $nin: viewedProductIds }, // Exclude only the ones literally just viewed
+        _id: { $nin: viewedProductIds },
         stock: { $gt: 0 },
-        isBlocked: { $ne: true }
+        isBlocked: { $ne: true },
       })
-      .sort({ rating: -1 })
-      .limit(1000)
-      .lean();
+        .select(
+          "_id name price mrp discountPercentage thumbnail images category subCategory brand stock rating numReviews isFeatured isBestSeller createdAt"
+        )
+        .limit(240)
+        .lean();
 
-      // Randomize the pool so the user doesn't see the same 8 every time
-      finalSelection = similarProducts
-        .sort(() => 0.5 - Math.random())
-        .slice(0, 8);
+      const poolByCategory = new Map();
+      for (const product of similarProducts) {
+        const cat = product.category?.trim().toLowerCase() || "uncategorized";
+        const catWeight = weightedCategories.get(cat) || 0;
+        const scored = {
+          ...product,
+          _recScore: scoreRecommendation(product, catWeight),
+        };
+
+        if (!poolByCategory.has(cat)) poolByCategory.set(cat, []);
+        poolByCategory.get(cat).push(scored);
+      }
+
+      const dayBucket = new Date().toISOString().slice(0, 10);
+      for (const [cat, catItems] of poolByCategory.entries()) {
+        poolByCategory.set(
+          cat,
+          deterministicShuffle(
+            catItems.sort((a, b) => b._recScore - a._recScore),
+            `${userId}:${dayBucket}:${cat}`
+          )
+        );
+      }
+
+      // Deterministic category round-robin for diversity.
+      const orderedCats = deterministicShuffle(
+        prioritizedCats,
+        `${userId}:${dayBucket}:category-order`
+      );
+
+      while (selected.length < 8) {
+        let progressed = false;
+        for (const cat of orderedCats) {
+          if (selected.length >= 8) break;
+          const bucket = poolByCategory.get(cat);
+          if (!bucket || bucket.length === 0) continue;
+
+          const next = bucket.shift();
+          if (!next || selectedIdSet.has(next._id.toString())) continue;
+
+          selected.push(next);
+          selectedIdSet.add(next._id.toString());
+          progressed = true;
+        }
+
+        if (!progressed) break;
+      }
     }
 
-    // 5. Fallback if the personalized pool is too small
-    if (finalSelection.length < 8) {
-      const currentIds = finalSelection.map(p => p._id.toString());
+    // 5. Fallback with globally strong products if personalized pool is small.
+    if (selected.length < 8) {
+      const currentIds = selected.map((p) => p._id.toString());
       const fallback = await Product.find({
         _id: { $nin: [...currentIds, ...viewedProductIds] },
         stock: { $gt: 0 },
-        isBlocked: { $ne: true }
+        isBlocked: { $ne: true },
       })
-      .sort({ rating: -1 })
-      .limit(8 - finalSelection.length)
-      .lean();
+        .select(
+          "_id name price mrp discountPercentage thumbnail images category subCategory brand stock rating numReviews isFeatured isBestSeller createdAt"
+        )
+        .sort({ rating: -1, numReviews: -1, createdAt: -1 })
+        .limit(8 - selected.length)
+        .lean();
 
-      finalSelection = [...finalSelection, ...fallback];
+      selected = [...selected, ...fallback];
     }
 
-    res.json({
-      products: finalSelection,
-      personalized: prioritizedCats.length > 0,
-      debug_categories: prioritizedCats // Useful for testing
+    const normalizedProducts = selected.map((item) => {
+      const { _recScore, ...rest } = item;
+      return rest;
     });
+
+    const response = {
+      products: normalizedProducts,
+      personalized: prioritizedCats.length > 0,
+    };
+
+    await redisClient.setEx(
+      cacheKey,
+      RECOMMENDATION_CACHE_TTL_SECONDS,
+      JSON.stringify(response)
+    );
+
+    res.json(response);
 
   } catch (error) {
     console.error("❌ Discovery Engine Error:", error);
@@ -732,7 +865,7 @@ export const trackSearchIntent = async (req, res) => {
       return res.status(400).json({ message: "Query too short" });
     }
 
-    const searchTerm = query.trim();
+    const searchTerm = normalizeCatalogQuery(query.trim());
     const Product = mongoose.model("Product");
 
     // 1. Find a category that matches the search term
@@ -780,7 +913,10 @@ export const trackSearchIntent = async (req, res) => {
 
       // 4. Invalidate Cache so the next Recommendation fetch gets fresh data
       if (redisClient) {
-        await redisClient.del(`recommendations:${userId}`);
+        await redisClient.del([
+          `recommendations:${userId}`,
+          getRecommendationCacheKey(userId),
+        ]);
       }
       
       console.log(`🎯 Search Intent Captured: "${searchTerm}" -> Category: ${category}`);

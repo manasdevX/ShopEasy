@@ -3,6 +3,7 @@ import cloudinary from "cloudinary";
 import streamifier from "streamifier";
 import dotenv from "dotenv";
 import redisClient from "../config/redis.js"; // <--- 1. IMPORT REDIS CLIENT
+import { buildCatalogRegexTerms, normalizeCatalogQuery } from "../utils/catalogSearch.js";
 
 // Load environment variables
 dotenv.config();
@@ -29,24 +30,171 @@ const uploadToCloudinary = (buffer) => {
   });
 };
 
+const SEARCH_CACHE_VERSION_KEY = "products:cache:version";
+const SEARCH_CACHE_VERSION_TTL_SECONDS = 30 * 24 * 60 * 60;
+
+const escapeRegex = (value = "") =>
+  String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const toPositiveInt = (value, fallback) => {
+  const num = Number.parseInt(value, 10);
+  return Number.isFinite(num) && num > 0 ? num : fallback;
+};
+
+const toFiniteNumber = (value) => {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+};
+
+const buildFacetPipeline = (matchQuery) => [
+  { $match: matchQuery },
+  {
+    $facet: {
+      categories: [
+        { $group: { _id: "$category", count: { $sum: 1 } } },
+        { $sort: { count: -1, _id: 1 } },
+        { $limit: 20 },
+      ],
+      ratings: [
+        { $project: { rating: { $floor: "$rating" } } },
+        { $group: { _id: "$rating", count: { $sum: 1 } } },
+        { $match: { _id: { $gte: 1 } } },
+        { $sort: { _id: -1 } },
+      ],
+    },
+  },
+];
+
+const buildRankingStages = ({ hasQuery, useTextScore }) =>
+  hasQuery && useTextScore
+    ? [
+        {
+          $addFields: {
+            _textScore: { $meta: "textScore" },
+          },
+        },
+        {
+          $addFields: {
+            _popularityScore: {
+              $add: [
+                { $multiply: [{ $ifNull: ["$rating", 0] }, 0.7] },
+                { $multiply: [{ $ifNull: ["$numReviews", 0] }, 0.02] },
+                { $cond: [{ $eq: ["$isBestSeller", true] }, 0.15, 0] },
+                { $cond: [{ $eq: ["$isFeatured", true] }, 0.08, 0] },
+              ],
+            },
+          },
+        },
+        {
+          $addFields: {
+            _rankScore: {
+              $add: [
+                { $multiply: ["$_textScore", 0.75] },
+                { $multiply: ["$_popularityScore", 0.25] },
+              ],
+            },
+          },
+        },
+      ]
+    : [
+        {
+          $addFields: {
+            _rankScore: {
+              $add: [
+                { $multiply: [{ $ifNull: ["$rating", 0] }, 0.7] },
+                { $multiply: [{ $ifNull: ["$numReviews", 0] }, 0.02] },
+                { $cond: [{ $eq: ["$isFeatured", true] }, 0.08, 0] },
+                { $cond: [{ $eq: ["$isBestSeller", true] }, 0.15, 0] },
+              ],
+            },
+          },
+        },
+      ];
+
+const runSearchPipeline = async ({ matchQuery, hasQuery, useTextScore, page, limit, sort }) => {
+  const sortStage =
+    sort === "price_asc"
+      ? { price: 1, createdAt: -1 }
+      : sort === "price_desc"
+      ? { price: -1, createdAt: -1 }
+      : sort === "rating_desc" || sort === "rating"
+      ? { rating: -1, numReviews: -1, createdAt: -1 }
+      : sort === "newest"
+      ? { createdAt: -1 }
+      : hasQuery
+      ? { _rankScore: -1, createdAt: -1 }
+      : { createdAt: -1 };
+
+  const rankingStages = buildRankingStages({ hasQuery, useTextScore });
+
+  const [count, facetsResult, items] = await Promise.all([
+    Product.countDocuments(matchQuery),
+    Product.aggregate(buildFacetPipeline(matchQuery)),
+    Product.aggregate([
+      { $match: matchQuery },
+      ...rankingStages,
+      { $sort: sortStage },
+      { $skip: limit * (page - 1) },
+      { $limit: limit },
+      {
+        $project: {
+          _id: 1,
+          name: 1,
+          price: 1,
+          mrp: 1,
+          discountPercentage: 1,
+          thumbnail: 1,
+          images: 1,
+          category: 1,
+          subCategory: 1,
+          brand: 1,
+          stock: 1,
+          rating: 1,
+          numReviews: 1,
+          isFeatured: 1,
+          isBestSeller: 1,
+          createdAt: 1,
+        },
+      },
+    ]),
+  ]);
+
+  return { count, facetsResult, items };
+};
+
+const getSearchCacheVersion = async () => {
+  const raw = await redisClient.get(SEARCH_CACHE_VERSION_KEY);
+  const parsed = Number.parseInt(raw || "1", 10);
+
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    await redisClient.setEx(SEARCH_CACHE_VERSION_KEY, SEARCH_CACHE_VERSION_TTL_SECONDS, "1");
+    return 1;
+  }
+
+  return parsed;
+};
+
+const bumpSearchCacheVersion = async () => {
+  const current = await getSearchCacheVersion();
+  const next = String(current + 1);
+  await redisClient.setEx(SEARCH_CACHE_VERSION_KEY, SEARCH_CACHE_VERSION_TTL_SECONDS, next);
+};
+
 /**
  * Helper: Clear Product Caches
  * Clears specific product ID and any list/search caches to ensure data freshness
  */
 const clearProductCache = async (productId = null, sellerId = null) => {
   try {
-    // 1. Clear "All Products" search/filter caches (Pattern Match)
-    const keys = await redisClient.keys("products:*");
-    if (keys.length > 0) {
-      await redisClient.del(keys);
-    }
+    // Invalidate all search/list cache entries using version bump.
+    await bumpSearchCacheVersion();
 
-    // 2. Clear specific product detail cache
+    // Clear specific product detail cache.
     if (productId) {
       await redisClient.del(`product:${productId}`);
     }
 
-    // 3. Clear specific seller's list cache
+    // Clear specific seller list cache.
     if (sellerId) {
       await redisClient.del(`seller_products:${sellerId}`);
     }
@@ -66,8 +214,53 @@ const clearProductCache = async (productId = null, sellerId = null) => {
 // @access  Public
 export const getAllProducts = async (req, res) => {
   try {
-    // 1. Generate Unique Cache Key based on Query Params
-    const cacheKey = `products:${JSON.stringify(req.query)}`;
+    const qRaw = (req.query.q || req.query.keyword || "").toString().trim();
+    const q = normalizeCatalogQuery(qRaw).slice(0, 120);
+
+    const page = toPositiveInt(req.query.page || req.query.pageNumber, 1);
+    const limit = Math.min(
+      toPositiveInt(req.query.limit || req.query.pageSize, 12),
+      50
+    );
+
+    const minPrice = toFiniteNumber(req.query.minPrice);
+    const maxPrice = toFiniteNumber(req.query.maxPrice);
+    const ratingMin = toFiniteNumber(req.query.ratingMin ?? req.query.rating);
+    const category = (req.query.category || "").toString().trim();
+    const sort = (req.query.sort || "relevance").toString().trim();
+
+    const baseFilters = {
+      stock: { $gt: 0 },
+      isAvailable: { $ne: false },
+    };
+
+    if (category) {
+      baseFilters.category = category;
+    }
+
+    if (minPrice != null || maxPrice != null) {
+      baseFilters.price = {};
+      if (minPrice != null) baseFilters.price.$gte = minPrice;
+      if (maxPrice != null) baseFilters.price.$lte = maxPrice;
+    }
+
+    if (ratingMin != null) {
+      baseFilters.rating = { $gte: ratingMin };
+    }
+
+    const normalizedQueryForCache = {
+      q,
+      page,
+      limit,
+      minPrice,
+      maxPrice,
+      ratingMin,
+      category,
+      sort,
+    };
+
+    const cacheVersion = await getSearchCacheVersion();
+    const cacheKey = `products:v${cacheVersion}:${JSON.stringify(normalizedQueryForCache)}`;
 
     // 2. Check Redis
     const cachedResult = await redisClient.get(cacheKey);
@@ -76,93 +269,73 @@ export const getAllProducts = async (req, res) => {
       return res.json(JSON.parse(cachedResult));
     }
 
-    const pageSize = Number(req.query.limit) || 12;
-    const page = Number(req.query.pageNumber) || 1;
+    const hasQuery = q.length > 0;
+    const textQuery = { ...baseFilters };
+    const regexQuery = { ...baseFilters };
 
-    // --- Base Search Query ---
-    let keywordQuery = {};
-    if (req.query.keyword) {
-      keywordQuery.$or = [
-        { name: { $regex: req.query.keyword, $options: "i" } },
-        { brand: { $regex: req.query.keyword, $options: "i" } },
-        { description: { $regex: req.query.keyword, $options: "i" } },
-        { tags: { $regex: req.query.keyword, $options: "i" } },
-        { category: { $regex: req.query.keyword, $options: "i" } },
+    if (hasQuery) {
+      textQuery.$text = { $search: q };
+      const searchTerms = buildCatalogRegexTerms(qRaw);
+      regexQuery.$or = [
+        ...searchTerms.flatMap((term) => [
+          { name: { $regex: term, $options: "i" } },
+          { brand: { $regex: term, $options: "i" } },
+          { description: { $regex: term, $options: "i" } },
+          { tags: { $regex: term, $options: "i" } },
+          { category: { $regex: term, $options: "i" } },
+        ]),
       ];
     }
 
-    // --- Filter Query ---
-    let filterQuery = {};
-    if (req.query.category) filterQuery.category = req.query.category;
-    if (req.query.minPrice || req.query.maxPrice) {
-      filterQuery.price = {};
-      if (req.query.minPrice)
-        filterQuery.price.$gte = Number(req.query.minPrice);
-      if (req.query.maxPrice)
-        filterQuery.price.$lte = Number(req.query.maxPrice);
-    }
-    if (req.query.rating) {
-      filterQuery.rating = { $gte: Number(req.query.rating) };
-    }
+    const searchQuery = hasQuery ? textQuery : baseFilters;
 
-    const finalQuery = { ...keywordQuery, ...filterQuery };
+    let result;
 
-    // --- Sort Configuration ---
-    let sortOption = { createdAt: -1 }; // Default: newest first
-    if (req.query.sort) {
-      switch (req.query.sort) {
-        case "price_asc":
-          sortOption = { price: 1 };
-          break;
-        case "price_desc":
-          sortOption = { price: -1 };
-          break;
-        case "rating_desc":
-          sortOption = { rating: -1, numReviews: -1 };
-          break;
-        case "newest":
-          sortOption = { createdAt: -1 };
-          break;
-        default:
-          sortOption = { createdAt: -1 };
-      }
+    try {
+      result = await runSearchPipeline({
+        matchQuery: searchQuery,
+        hasQuery,
+        useTextScore: hasQuery,
+        page,
+        limit,
+        sort,
+      });
+    } catch (primaryError) {
+      if (!hasQuery) throw primaryError;
+
+      console.warn(
+        `Primary search pipeline failed for query "${q}". Falling back to regex search:`,
+        primaryError.message
+      );
+
+      result = await runSearchPipeline({
+        matchQuery: regexQuery,
+        hasQuery,
+        useTextScore: false,
+        page,
+        limit,
+        sort,
+      });
     }
 
-    // --- Execute DB Queries ---
-    const [products, count, facetsResult] = await Promise.all([
-      Product.find(finalQuery)
-        .limit(pageSize)
-        .skip(pageSize * (page - 1))
-        .sort(sortOption),
-      Product.countDocuments(finalQuery),
-      Product.aggregate([
-        { $match: keywordQuery },
-        {
-          $facet: {
-            categories: [
-              { $group: { _id: "$category", count: { $sum: 1 } } },
-              { $sort: { count: -1 } },
-            ],
-            ratings: [
-              { $project: { rating: { $floor: "$rating" } } },
-              { $group: { _id: "$rating", count: { $sum: 1 } } },
-              { $sort: { _id: -1 } },
-            ],
-          },
-        },
-      ]),
-    ]);
+    const { count, facetsResult, items } = result;
 
     const responseData = {
-      products,
+      items,
       page,
-      pages: Math.ceil(count / pageSize),
+      totalPages: Math.ceil(count / limit),
       total: count,
-      facets: facetsResult[0],
+      facets: facetsResult[0] || { categories: [], ratings: [] },
+      sort,
+      query: q,
+
+      // Backward compatibility fields
+      products: items,
+      pages: Math.ceil(count / limit),
     };
 
     // 3. Save to Redis (TTL: 1 hour)
-    await redisClient.setEx(cacheKey, 3600, JSON.stringify(responseData));
+    await redisClient.setEx(cacheKey, 900, JSON.stringify(responseData));
 
     res.json(responseData);
   } catch (error) {

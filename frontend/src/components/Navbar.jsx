@@ -57,6 +57,8 @@ export default function Navbar() {
 
   // ✅ LIVE SEARCH LOGIC
   useEffect(() => {
+    const controller = new AbortController();
+
     const fetchSuggestions = async () => {
       if (searchTerm.trim().length < 1) {
         setSuggestions([]);
@@ -67,16 +69,20 @@ export default function Navbar() {
       setIsSearching(true);
       try {
         const res = await fetch(
-          `${API_URL}/api/products?keyword=${searchTerm}&pageSize=10`
+          `${API_URL}/api/products?q=${encodeURIComponent(searchTerm)}&limit=10&page=1&sort=relevance`,
+          { signal: controller.signal }
         );
         const data = await res.json();
         if (res.ok) {
-          const products = Array.isArray(data) ? data : data.products || [];
+          const products = Array.isArray(data)
+            ? data
+            : data.items || data.products || [];
           const names = [...new Set(products.map((p) => p.name))];
           setSuggestions(names);
           setShowDropdown(true);
         }
       } catch (err) {
+        if (err?.name === "AbortError") return;
         console.error("Suggestion fetch failed", err);
       } finally {
         setIsSearching(false);
@@ -84,7 +90,10 @@ export default function Navbar() {
     };
 
     const timeoutId = setTimeout(fetchSuggestions, 300);
-    return () => clearTimeout(timeoutId);
+    return () => {
+      clearTimeout(timeoutId);
+      controller.abort();
+    };
   }, [searchTerm]);
 
   // ✅ FETCH CART COUNT
