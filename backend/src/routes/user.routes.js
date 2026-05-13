@@ -31,7 +31,8 @@ import {
   verifyUserPassword,
   getAiRecommendations, 
   trackUserInterestRoute,
-  trackSearchIntent
+  trackSearchIntent,
+  getRecommendationMetrics,
 } from "../controllers/user.controller.js";
 
 // 4. Import Middleware
@@ -98,5 +99,10 @@ router.get("/recommendations", protect, getAiRecommendations);
 router.post("/track-interest", protect, trackUserInterestRoute);
 
 router.post("/track-search-intent", protect, trackSearchIntent);
+
+/* ======================================================
+   F. MONITORING & METRICS (for debugging)
+====================================================== */
+router.get("/recommendation-metrics", protect, getRecommendationMetrics);
 
 export default router;
