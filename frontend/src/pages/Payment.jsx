@@ -43,6 +43,7 @@ export default function CheckoutPage() {
 
   const [paymentMode, setPaymentMode] = useState("upi");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [reservationId, setReservationId] = useState(null);
   const [isLocating, setIsLocating] = useState(false);
 
   // --- ADDRESS STATES ---
@@ -275,6 +276,27 @@ export default function CheckoutPage() {
       }
 
       // B. Create Order on Backend
+      // Reserve items before creating the payment order
+      const reserveRes = await fetch(`${API_URL}/api/payment/reserve`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          orderItems: items.map((i) => ({ product: i._id, qty: i.quantity })),
+        }),
+      });
+
+      const reserveData = await reserveRes.json();
+      if (!reserveRes.ok) {
+        showError(reserveData.message || "Failed to reserve items");
+        setIsProcessing(false);
+        return;
+      }
+
+      setReservationId(reserveData.reservationId);
+
       const res = await fetch(`${API_URL}/api/payment/create-order`, {
         method: "POST",
         headers: {
@@ -315,6 +337,7 @@ export default function CheckoutPage() {
                   razorpay_order_id: response.razorpay_order_id,
                   razorpay_signature: response.razorpay_signature,
                   // Pass order details to save the final order
+                  reservationId,
                   orderItems: items.map((i) => ({
                     name: i.name,
                     qty: i.quantity,
@@ -349,6 +372,7 @@ export default function CheckoutPage() {
 
               // ✅ CRITICAL FIX: Navigate using URL Parameter
               // verifyData.order contains the saved order object from your controller
+              setReservationId(null);
               navigate(`/OrderSummary?orderId=${verifyData.order._id}`);
             } else {
               showError("Payment Verification Failed");
@@ -356,6 +380,17 @@ export default function CheckoutPage() {
           } catch (err) {
             console.error(err);
             showError("Payment Verification Error");
+            // Attempt to cancel reservation on verification error
+            try {
+              if (reservationId) {
+                await fetch(`${API_URL}/api/payment/reserve/${reservationId}`, {
+                  method: "DELETE",
+                  headers: { Authorization: `Bearer ${token}` },
+                });
+              }
+            } catch (e) {
+              console.error("Failed to cancel reservation after verify error", e);
+            }
           } finally {
             setIsProcessing(false);
           }
@@ -368,9 +403,21 @@ export default function CheckoutPage() {
           color: "#2563eb",
         },
         modal: {
-          ondismiss: function () {
+          ondismiss: async function () {
             setIsProcessing(false);
             showError("Payment Cancelled ❌");
+            // Cancel reservation if exists
+            try {
+              if (reservationId) {
+                await fetch(`${API_URL}/api/payment/reserve/${reservationId}`, {
+                  method: "DELETE",
+                  headers: { Authorization: `Bearer ${token}` },
+                });
+                setReservationId(null);
+              }
+            } catch (e) {
+              console.error("Failed to cancel reservation on modal dismiss", e);
+            }
           },
         },
       };

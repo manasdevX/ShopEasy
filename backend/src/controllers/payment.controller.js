@@ -5,6 +5,7 @@ import Order from "../models/Order.js";
 import sendEmail from "../utils/emailHelper.js";
 import redisClient from "../config/redis.js";
 import { createNotification } from "./notification.controller.js";
+import { reserveStock, releaseStock } from "../utils/stockManager.js";
 
 dotenv.config();
 
@@ -59,6 +60,59 @@ export const createOrder = async (req, res) => {
 };
 
 /**
+ * Reserve items before initiating payment. Stores reservation in Redis with TTL.
+ * @route POST /api/payment/reserve
+ */
+export const reserveItemsForPayment = async (req, res) => {
+  try {
+    const { orderItems } = req.body;
+    if (!orderItems || !Array.isArray(orderItems) || orderItems.length === 0) {
+      return res.status(400).json({ success: false, message: "No items to reserve" });
+    }
+
+    const items = orderItems.map((i) => ({ product: i.product || i._id, qty: Number(i.qty || i.quantity || 1) }));
+
+    const reserveResult = await reserveStock(items);
+    if (!reserveResult.success) {
+      return res.status(400).json({ success: false, message: `Insufficient stock for product ${reserveResult.failedProduct}` });
+    }
+
+    const reservationId = crypto.randomUUID();
+    const key = `reservation:${reservationId}`;
+    const payload = JSON.stringify({ items, user: req.user?._id, createdAt: Date.now() });
+    // TTL: 15 minutes
+    await redisClient.setEx(key, 15 * 60, payload);
+
+    res.status(201).json({ success: true, reservationId, ttlSeconds: 15 * 60 });
+  } catch (err) {
+    console.error("Reservation error:", err);
+    res.status(500).json({ success: false, message: "Reservation failed" });
+  }
+};
+
+/**
+ * Cancel reservation and release stock immediately
+ * @route DELETE /api/payment/reserve/:id
+ */
+export const cancelReservation = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const key = `reservation:${id}`;
+    const data = await redisClient.get(key);
+    if (!data) return res.status(404).json({ success: false, message: "Reservation not found" });
+
+    const parsed = JSON.parse(data);
+    await releaseStock(parsed.items || []);
+    await redisClient.del(key);
+
+    res.json({ success: true, message: "Reservation released" });
+  } catch (err) {
+    console.error("Cancel reservation error:", err);
+    res.status(500).json({ success: false, message: "Failed to cancel reservation" });
+  }
+};
+
+/**
  * @desc    Verify Razorpay Payment and Save Order to DB
  * @route   POST /api/payment/verify-payment
  * @access  Private
@@ -97,17 +151,50 @@ export const verifyPayment = async (req, res) => {
         .json({ success: false, message: "Invalid Payment Signature" });
     }
 
-    const mappedOrderItems = orderItems.map((item) => ({
-      name: item.name,
-      qty: Number(item.qty || item.quantity || 1),
-      image: item.image,
-      category: item.category || "General",
-      price: Number(item.price),
-      product: item.product || item._id,
-      seller: item.seller,
-    }));
+    // Determine mapped order items.
+    let mappedOrderItems;
+    let usedReservation = false;
+    if (req.body.reservationId) {
+      const key = `reservation:${req.body.reservationId}`;
+      const data = await redisClient.get(key);
+      if (!data) {
+        return res.status(400).json({ success: false, message: "Reservation expired or invalid" });
+      }
+      const parsed = JSON.parse(data);
+      mappedOrderItems = parsed.items.map((item) => ({
+        name: item.name || "",
+        qty: Number(item.qty || item.quantity || 1),
+        image: item.image || "",
+        category: item.category || "General",
+        price: Number(item.price || 0),
+        product: item.product,
+        seller: item.seller,
+      }));
+      // Finalize reservation: remove key (we've already decremented stock on reserve)
+      await redisClient.del(key);
+      usedReservation = true;
+    } else {
+      mappedOrderItems = orderItems.map((item) => ({
+        name: item.name,
+        qty: Number(item.qty || item.quantity || 1),
+        image: item.image,
+        category: item.category || "General",
+        price: Number(item.price),
+        product: item.product || item._id,
+        seller: item.seller,
+      }));
+    }
 
-    // 3. Database Logic: Save the Order
+    // If there was no reservation, attempt to reserve now.
+    const reserveItems = mappedOrderItems.map((it) => ({ product: it.product, qty: it.qty }));
+    if (!usedReservation) {
+      const reserveResult = await reserveStock(reserveItems);
+      if (!reserveResult.success) {
+        return res.status(400).json({ success: false, message: "Insufficient stock for one or more products" });
+      }
+    }
+
+    // 4. Database Logic: Save the Order
     const newOrder = new Order({
       // Ensure user exists from authMiddleware
       user: req.user?._id,
@@ -140,7 +227,20 @@ export const verifyPayment = async (req, res) => {
       status: "Processing",
     });
 
-    const savedOrder = await newOrder.save();
+    let savedOrder;
+    try {
+      savedOrder = await newOrder.save();
+    } catch (saveErr) {
+      // rollback reserved stock only if we reserved just now (no reservation)
+      if (!usedReservation) {
+        try {
+          await releaseStock(reserveItems);
+        } catch (rbErr) {
+          console.error("Failed to rollback stock after payment save failure:", rbErr?.message || rbErr);
+        }
+      }
+      throw saveErr;
+    }
 
     res.status(201).json({
       success: true,

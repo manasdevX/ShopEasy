@@ -1,5 +1,6 @@
 import Order from "../models/Order.js";
 import Product from "../models/Product.js";
+import { reserveStock, releaseStock } from "../utils/stockManager.js";
 import { createNotification } from "./notification.controller.js";
 import sendEmail from "../utils/emailHelper.js";
 import redisClient from "../config/redis.js";
@@ -61,9 +62,9 @@ export const addOrderItems = async (req, res) => {
     const itemsToUpdate = [];
 
     const mappedOrderItems = orderItems.map((item) => {
-      const productId = item.product || item._id;
-      const realProduct = productMap[productId];
-      const orderQty = item.qty || item.quantity;
+        const productId = item.product || item._id;
+        const realProduct = productMap[productId];
+        const orderQty = item.qty || item.quantity;
 
       if (!realProduct) {
         throw new Error(`Product not found: ${productId}`);
@@ -79,6 +80,12 @@ export const addOrderItems = async (req, res) => {
       calculatedItemsPrice += itemTotal;
 
       itemsToUpdate.push({ product: realProduct, qty: orderQty });
+
+      // Build a simple reserve instruction (product id + qty)
+      // used for atomic reservation before creating the order.
+      // We'll reserve stock using `reserveStock` to avoid race conditions.
+      // Note: keep itemsToUpdate for later rollback/context if needed.
+      // itemsToReserve is created below after mapping completes.
 
       return {
         ...item,
@@ -97,7 +104,20 @@ export const addOrderItems = async (req, res) => {
     const taxPrice = 0;
     const totalPrice = calculatedItemsPrice + taxPrice + shippingPrice;
 
-    // 4. Create Order
+    // 4. Reserve Stock Atomically for all items before creating the order
+    const itemsToReserve = itemsToUpdate.map((it) => ({
+      product: it.product._id || it.product,
+      qty: it.qty,
+    }));
+
+    const reserveResult = await reserveStock(itemsToReserve);
+    if (!reserveResult.success) {
+      return res.status(400).json({
+        message: `Not enough stock for product ${reserveResult.failedProduct}`,
+      });
+    }
+
+    // 5. Create Order
     const order = new Order({
       user: req.user._id,
       orderItems: mappedOrderItems,
@@ -118,14 +138,20 @@ export const addOrderItems = async (req, res) => {
       status: "Processing",
     });
 
-    const createdOrder = await order.save();
+    let createdOrder;
+    try {
+      createdOrder = await order.save();
+    } catch (saveErr) {
+      // Rollback reserved stock if we failed to persist the order
+      try {
+        await releaseStock(itemsToReserve);
+      } catch (rbErr) {
+        console.error("Failed to rollback stock after order save failure:", rbErr?.message || rbErr);
+      }
+      throw saveErr;
+    }
     console.log("📦 [DEBUG] Order Saved to DB:", createdOrder._id);
 
-    // 5. ✅ DEDUCT STOCK (Critical - Must Wait)
-    for (const item of itemsToUpdate) {
-      item.product.stock -= item.qty;
-      await item.product.save();
-    }
 
     // 6. ⚡ REAL-TIME NOTIFICATION (Critical for UI - Do immediately)
     // We do not await this loop to ensure the response is fast,

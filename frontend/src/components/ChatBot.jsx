@@ -31,6 +31,14 @@ import OrderMessage from "./OrderMessage";
 const CHAT_SESSION_KEY = "shopeasy_chat_session_id";
 const CHAT_MESSAGES_KEY = "shopeasy_chat_messages";
 const MAX_MESSAGE_LENGTH = 1000;
+const CHAT_REQUEST_TIMEOUT_MS = 30000;
+
+const FAILURE_RETRY_SUGGESTIONS = [
+  { label: "Show trending products", prompt: "Show me trending products" },
+  { label: "Best deals under 1000", prompt: "Show me best deals under 1000" },
+  { label: "Track my latest order", prompt: "Track my most recent order" },
+  { label: "Shipping policy", prompt: "What is your shipping policy?" },
+];
 
 // Use proper markdown list syntax (dash + space) for correct rendering
 const INITIAL_MESSAGE = {
@@ -123,15 +131,47 @@ const FOLLOW_UP_SUGGESTIONS = [
 const createId = () =>
   `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const retryOperation = async (operation, { retries = 1, delayMs = 600 } = {}) => {
+  let lastError;
+
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      if (attempt < retries) {
+        await sleep(delayMs * (attempt + 1));
+      }
+    }
+  }
+
+  throw lastError;
+};
+
 /**
  * Get auth headers for API requests.
  * NOTE: httpOnly cookies are automatically sent by the browser.
- * This function can still be used for Bearer tokens if needed.
+ * We also send Bearer token as a fallback because some deployments
+ * rely on header auth for user-scoped chat capabilities.
  */
 const getAuthHeaders = () => {
-  // Try to get token from localStorage as fallback
   const token = localStorage.getItem("token");
   return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
+const safeUrlTransform = (url) => {
+  if (!url) return "";
+  if (url.startsWith("#") || url.startsWith("/")) return url;
+
+  try {
+    const parsed = new URL(url, window.location.origin);
+    const allowedProtocols = new Set(["http:", "https:", "mailto:", "tel:"]);
+    return allowedProtocols.has(parsed.protocol) ? parsed.href : "";
+  } catch {
+    return "";
+  }
 };
 
 const toProductPayload = (products = []) =>
@@ -380,18 +420,30 @@ const ChatBot = () => {
     assistantMessageId,
     activeSessionId
   ) => {
-    const response = await fetch(`${API_URL}/api/chat/stream`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...getAuthHeaders(),
-      },
-      credentials: "include", // Ensure httpOnly cookies are sent
-      body: JSON.stringify({
-        message: text,
-        sessionId: activeSessionId,
-      }),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(
+      () => controller.abort(),
+      CHAT_REQUEST_TIMEOUT_MS
+    );
+
+    let response;
+    try {
+      response = await fetch(`${API_URL}/api/chat/stream`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders(),
+        },
+        credentials: "include", // Ensure httpOnly cookies are sent
+        signal: controller.signal,
+        body: JSON.stringify({
+          message: text,
+          sessionId: activeSessionId,
+        }),
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!response.ok || !response.body) {
       throw new Error("Streaming unavailable");
@@ -468,6 +520,7 @@ const ChatBot = () => {
       {
         headers: { ...getAuthHeaders() },
         withCredentials: true, // Ensure httpOnly cookies are sent
+        timeout: CHAT_REQUEST_TIMEOUT_MS,
       }
     );
     return data;
@@ -513,23 +566,39 @@ const ChatBot = () => {
           activeSessionId
         );
       } catch {
-        payload = await sendFallbackMessage(textToSend, activeSessionId);
+        payload = await retryOperation(
+          () => sendFallbackMessage(textToSend, activeSessionId),
+          { retries: 1, delayMs: 700 }
+        );
       }
 
       if (!payload) {
-        payload = await sendFallbackMessage(textToSend, activeSessionId);
+        payload = await retryOperation(
+          () => sendFallbackMessage(textToSend, activeSessionId),
+          { retries: 1, delayMs: 700 }
+        );
       }
 
       applyChatPayload(assistantMessageId, payload);
     } catch (error) {
       console.error("Chat error:", error);
-      setMessages((prev) =>
-        appendAssistantText(
+      setMessages((prev) => {
+        const updated = appendAssistantText(
           prev,
           assistantMessageId,
-          "I'm having trouble connecting right now. Please try again in a moment. 🔄"
-        )
-      );
+          "I'm having trouble connecting right now. You can retry, or try one of these quick prompts."
+        );
+
+        return [
+          ...updated,
+          {
+            id: createId(),
+            role: "assistant",
+            type: "SUGGESTION_CHIPS",
+            suggestions: FAILURE_RETRY_SUGGESTIONS,
+          },
+        ];
+      });
     } finally {
       setLoading(false);
       setToolStatus(null);
@@ -538,7 +607,7 @@ const ChatBot = () => {
 
   // ── Clear ──
 
-  const clearChat = () => {
+  const clearChat = useCallback(() => {
     const active = sessionId;
     setMessages([INITIAL_MESSAGE]);
     setInput("");
@@ -552,7 +621,21 @@ const ChatBot = () => {
         withCredentials: true, // Ensure httpOnly cookies are sent
       })
       .catch(() => {});
-  };
+  }, [sessionId, API_URL]);
+
+  // Listen for global chat-clear events (e.g., logout)
+  useEffect(() => {
+    const handler = () => {
+      try {
+        clearChat();
+      } catch (e) {
+        /* ignore */
+      }
+    };
+
+    window.addEventListener("chat-cleared", handler);
+    return () => window.removeEventListener("chat-cleared", handler);
+  }, [clearChat]);
 
   const handleKeyDown = (e) => {
     if (e.key === "Escape") {
@@ -696,6 +779,7 @@ const ChatBot = () => {
                           <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-headings:my-1.5 [&>p:first-child]:mt-0 [&>p:last-child]:mb-0 prose-strong:text-inherit">
                             <ReactMarkdown
                               rehypePlugins={[rehypeSanitize]}
+                              urlTransform={safeUrlTransform}
                               allowedElements={[
                                 "p", "br", "strong", "em", "code", "pre",
                                 "ul", "ol", "li", "h1", "h2", "h3", "h4", "h5", "h6",
@@ -704,6 +788,16 @@ const ChatBot = () => {
                               ]}
                               allowedAttributes={{
                                 "a": ["href", "title"]
+                              }}
+                              components={{
+                                a: ({ href, ...props }) => (
+                                  <a
+                                    {...props}
+                                    href={href}
+                                    target={href?.startsWith("/") ? undefined : "_blank"}
+                                    rel={href?.startsWith("/") ? undefined : "noopener noreferrer nofollow"}
+                                  />
+                                ),
                               }}
                             >
                               {msg.message}
@@ -722,6 +816,25 @@ const ChatBot = () => {
 
                     {msg.type === "ORDER_SUMMARY" && (
                       <OrderMessage data={msg} />
+                    )}
+
+                    {msg.type === "SUGGESTION_CHIPS" && (
+                      <div className="space-y-2">
+                        <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                          Try these prompts
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {(msg.suggestions || []).map((item) => (
+                            <button
+                              key={`${msg.id}-${item.label}`}
+                              onClick={() => handleSend(item.prompt)}
+                              className="px-2 py-1 rounded-md text-[10px] font-medium border border-slate-200/80 dark:border-slate-700/80 bg-white/80 dark:bg-slate-800/40 hover:bg-orange-50 dark:hover:bg-orange-500/10 hover:border-orange-300/60 text-slate-500 dark:text-slate-400 hover:text-orange-600 transition-all duration-150 active:scale-95"
+                            >
+                              {item.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     )}
                   </div>
                 </div>

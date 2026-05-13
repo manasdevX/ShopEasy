@@ -158,8 +158,37 @@ export default function Navbar() {
       );
 
       // 2. Clear Local State
+      // Clear auth & user
       localStorage.removeItem("token");
       localStorage.removeItem("user");
+
+      // Clear chat session + messages
+      try {
+        const CHAT_SESSION_KEY = "shopeasy_chat_session_id";
+        const CHAT_MESSAGES_KEY = "shopeasy_chat_messages";
+        const sessionId = localStorage.getItem(CHAT_SESSION_KEY);
+        if (sessionId) {
+          // best-effort delete server session
+          try {
+            await axios.delete(`${API_URL}/api/chat/session/${sessionId}`, {
+              withCredentials: true,
+            });
+          } catch (e) {
+            // ignore server delete errors
+          }
+        }
+        localStorage.removeItem(CHAT_SESSION_KEY);
+        sessionStorage.removeItem(CHAT_MESSAGES_KEY);
+        // Notify other components (e.g., ChatBot) to clear state immediately
+        try {
+          window.dispatchEvent(new Event("chat-cleared"));
+        } catch (e) {
+          // ignore
+        }
+      } catch (e) {
+        // ignore
+      }
+
       setCartCount(0);
       setUser(null);
 
@@ -300,7 +329,17 @@ export default function Navbar() {
                     <img
                       src={user.profilePicture}
                       alt="User"
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-cover rounded-full"
+                      onError={(e) => {
+                        try {
+                          const fallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                            user?.name || "User"
+                          )}&background=random&color=fff`;
+                          if (e?.target) e.target.src = fallback;
+                        } catch (err) {
+                          // ignore
+                        }
+                      }}
                     />
                   ) : (
                     user?.name?.charAt(0) || "U"
