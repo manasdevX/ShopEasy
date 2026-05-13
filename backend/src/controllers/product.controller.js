@@ -65,101 +65,55 @@ const buildFacetPipeline = (matchQuery) => [
   },
 ];
 
-const buildRankingStages = ({ hasQuery, useTextScore }) =>
-  hasQuery && useTextScore
-    ? [
-        {
-          $addFields: {
-            _textScore: { $meta: "textScore" },
-          },
-        },
-        {
-          $addFields: {
-            _popularityScore: {
-              $add: [
-                { $multiply: [{ $ifNull: ["$rating", 0] }, 0.7] },
-                { $multiply: [{ $ifNull: ["$numReviews", 0] }, 0.02] },
-                { $cond: [{ $eq: ["$isBestSeller", true] }, 0.15, 0] },
-                { $cond: [{ $eq: ["$isFeatured", true] }, 0.08, 0] },
-              ],
-            },
-          },
-        },
-        {
-          $addFields: {
-            _rankScore: {
-              $add: [
-                { $multiply: ["$_textScore", 0.75] },
-                { $multiply: ["$_popularityScore", 0.25] },
-              ],
-            },
-          },
-        },
-      ]
-    : [
-        {
-          $addFields: {
-            _rankScore: {
-              $add: [
-                { $multiply: [{ $ifNull: ["$rating", 0] }, 0.7] },
-                { $multiply: [{ $ifNull: ["$numReviews", 0] }, 0.02] },
-                { $cond: [{ $eq: ["$isFeatured", true] }, 0.08, 0] },
-                { $cond: [{ $eq: ["$isBestSeller", true] }, 0.15, 0] },
-              ],
-            },
-          },
-        },
-      ];
-
-const runSearchPipeline = async ({ matchQuery, hasQuery, useTextScore, page, limit, sort }) => {
-  const sortStage =
-    sort === "price_asc"
-      ? { price: 1, createdAt: -1 }
-      : sort === "price_desc"
-      ? { price: -1, createdAt: -1 }
-      : sort === "rating_desc" || sort === "rating"
-      ? { rating: -1, numReviews: -1, createdAt: -1 }
-      : sort === "newest"
-      ? { createdAt: -1 }
-      : hasQuery
-      ? { _rankScore: -1, createdAt: -1 }
-      : { createdAt: -1 };
-
-  const rankingStages = buildRankingStages({ hasQuery, useTextScore });
-
-  const [count, facetsResult, items] = await Promise.all([
+// Layer 1: Database Retrieval & Layer 2: Application Ranking
+const runTwoLayerSearchPipeline = async ({ matchQuery, hasQuery, page, limit, sort, qRaw }) => {
+  // Layer 1: Candidate Retrieval (Lightweight, bounded DB fetch)
+  const [count, facetsResult, rawCandidates] = await Promise.all([
     Product.countDocuments(matchQuery),
     Product.aggregate(buildFacetPipeline(matchQuery)),
-    Product.aggregate([
-      { $match: matchQuery },
-      ...rankingStages,
-      { $sort: sortStage },
-      { $skip: limit * (page - 1) },
-      { $limit: limit },
-      {
-        $project: {
-          _id: 1,
-          name: 1,
-          price: 1,
-          mrp: 1,
-          discountPercentage: 1,
-          thumbnail: 1,
-          images: 1,
-          category: 1,
-          subCategory: 1,
-          brand: 1,
-          stock: 1,
-          rating: 1,
-          numReviews: 1,
-          isFeatured: 1,
-          isBestSeller: 1,
-          createdAt: 1,
-        },
-      },
-    ]),
+    Product.find(matchQuery, {
+      name: 1, price: 1, mrp: 1, discountPercentage: 1, thumbnail: 1, images: 1,
+      category: 1, subCategory: 1, brand: 1, stock: 1, rating: 1, numReviews: 1,
+      isFeatured: 1, isBestSeller: 1, createdAt: 1, description: 1, tags: 1
+    }).limit(1000).lean() // Limit DB retrieval to prevent OOM
   ]);
 
-  return { count, facetsResult, items };
+  let items = rawCandidates;
+
+  // Layer 2: Application-Level Logic-Based Ranking
+  if (hasQuery && sort === "relevance") {
+    items = items.map(item => ({
+      ...item,
+      _relevanceScore: scoreProduct(item, qRaw),
+    }));
+    
+    // Sort primarily by computed relevance, tie-breaker by newest
+    items.sort((a, b) => {
+      if (b._relevanceScore !== a._relevanceScore) {
+        return b._relevanceScore - a._relevanceScore;
+      }
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    });
+  } else {
+    // Standard explicit sorts (price, rating, newest)
+    items.sort((a, b) => {
+      if (sort === "price_asc") return a.price - b.price || new Date(b.createdAt) - new Date(a.createdAt);
+      if (sort === "price_desc") return b.price - a.price || new Date(b.createdAt) - new Date(a.createdAt);
+      if (sort === "rating_desc" || sort === "rating") {
+        return (b.rating || 0) - (a.rating || 0) || (b.numReviews || 0) - (a.numReviews || 0);
+      }
+      return new Date(b.createdAt) - new Date(a.createdAt); // default: newest
+    });
+  }
+
+  // Application-level pagination
+  const startIndex = (page - 1) * limit;
+  const paginatedItems = items.slice(startIndex, startIndex + limit);
+
+  // Clean up internal metadata fields
+  const finalItems = paginatedItems.map(({ description, tags, _relevanceScore, ...rest }) => rest);
+
+  return { count, facetsResult, items: finalItems };
 };
 
 const getSearchCacheVersion = async () => {
@@ -272,71 +226,41 @@ export const getAllProducts = async (req, res) => {
     }
 
     const hasQuery = q.length > 0;
-    const textQuery = { ...baseFilters };
     const regexQuery = { ...baseFilters };
 
     if (hasQuery) {
-      textQuery.$text = { $search: q };
-
-      // Smart word-boundary-aware regex fallback (replaces naive substring matching)
+      // LAYER 1: Retrieve broad candidates using lightweight regex OR conditions
       const smartConditions = buildSmartSearchConditions(qRaw);
       if (smartConditions.length > 0) {
         regexQuery.$or = smartConditions;
       } else {
-        // Ultimate fallback: use original regex terms if smart conditions produce nothing
         const searchTerms = buildCatalogRegexTerms(qRaw);
-        regexQuery.$or = [
-          ...searchTerms.flatMap((term) => [
-            { name: { $regex: term, $options: "i" } },
-            { brand: { $regex: term, $options: "i" } },
-            { description: { $regex: term, $options: "i" } },
-            { tags: { $regex: term, $options: "i" } },
-            { category: { $regex: term, $options: "i" } },
-          ]),
-        ];
+        regexQuery.$or = searchTerms.flatMap((term) => [
+          { name: { $regex: term, $options: "i" } },
+          { brand: { $regex: term, $options: "i" } },
+          { description: { $regex: term, $options: "i" } },
+          { tags: { $regex: term, $options: "i" } },
+          { category: { $regex: term, $options: "i" } },
+        ]);
       }
     }
 
-    const searchQuery = hasQuery ? textQuery : baseFilters;
+    const searchQuery = hasQuery ? regexQuery : baseFilters;
 
     let result;
 
     try {
-      result = await runSearchPipeline({
+      result = await runTwoLayerSearchPipeline({
         matchQuery: searchQuery,
         hasQuery,
-        useTextScore: hasQuery,
         page,
         limit,
         sort,
+        qRaw,
       });
     } catch (primaryError) {
-      if (!hasQuery) throw primaryError;
-
-      console.warn(
-        `Primary search pipeline failed for query "${q}". Falling back to smart regex search:`,
-        primaryError.message
-      );
-
-      result = await runSearchPipeline({
-        matchQuery: regexQuery,
-        hasQuery,
-        useTextScore: false,
-        page,
-        limit,
-        sort,
-      });
-
-      // Re-rank regex fallback results by relevance score
-      if (result.items && result.items.length > 1 && sort === "relevance") {
-        result.items = result.items
-          .map((item) => ({
-            ...item,
-            _relevanceScore: scoreProduct(item, qRaw),
-          }))
-          .sort((a, b) => b._relevanceScore - a._relevanceScore)
-          .map(({ _relevanceScore, ...item }) => item);
-      }
+      console.error("Two-Layer Search Pipeline Failed:", primaryError.message);
+      throw primaryError;
     }
 
     const { count, facetsResult, items } = result;
