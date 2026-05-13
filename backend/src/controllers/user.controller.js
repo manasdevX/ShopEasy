@@ -866,14 +866,15 @@ export const trackSearchIntent = async (req, res) => {
     }
 
     const searchTerm = normalizeCatalogQuery(query.trim());
+    const escapedSearchTerm = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const Product = mongoose.model("Product");
 
     // 1. Find a category that matches the search term
     // We check if the search matches a category name or a product name
     const matchingProduct = await Product.findOne({
       $or: [
-        { category: { $regex: `^${searchTerm}`, $options: "i" } },
-        { name: { $regex: searchTerm, $options: "i" } },
+        { category: { $regex: `\\b${escapedSearchTerm}`, $options: "i" } },
+        { name: { $regex: escapedSearchTerm, $options: "i" } },
       ],
     }).select("category");
 

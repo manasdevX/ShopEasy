@@ -41,6 +41,7 @@ export default function SearchResults() {
 
   const updateParams = (patch, { resetPage = false } = {}) => {
     const next = new URLSearchParams(searchParams);
+    const patchHasQuery = Object.prototype.hasOwnProperty.call(patch, "q");
 
     Object.entries(patch).forEach(([key, value]) => {
       if (value === "" || value === null || value === undefined || value === 0) {
@@ -54,7 +55,9 @@ export default function SearchResults() {
       next.set("page", "1");
     }
 
-    next.set("q", query);
+    if (!patchHasQuery) {
+      next.set("q", query);
+    }
     setSearchParams(next, { replace: true });
   };
 
@@ -381,23 +384,23 @@ export default function SearchResults() {
                   <Search size={14} /> Search Discovery
                 </div>
                 <div className="text-3xl md:text-4xl font-black text-slate-900 dark:text-white tracking-tight">
-                  {correctedQuery ? (
-                    <div className="flex flex-col gap-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span>Showing results for</span>
-                        <span className="text-orange-500">"{correctedQuery}"</span>
-                      </div>
-                      <div className="text-sm md:text-base font-semibold text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-2">
-                        <span>Search instead for</span>
-                        <span className="line-through decoration-red-500/50 decoration-2">"{query}"</span>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      Results for <span className="text-orange-500">"{query}"</span>
-                    </>
-                  )}
+                  <>
+                    Results for <span className="text-orange-500">"{query}"</span>
+                  </>
                 </div>
+                {correctedQuery && correctedQuery !== query && (
+                  <div className="text-sm md:text-base font-semibold text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-2">
+                    <span>Did you mean</span>
+                    <button
+                      type="button"
+                      onClick={() => updateParams({ q: correctedQuery }, { resetPage: true })}
+                      className="text-orange-500 hover:text-orange-600 underline underline-offset-2"
+                    >
+                      "{correctedQuery}"
+                    </button>
+                    <span>?</span>
+                  </div>
+                )}
                 <p className="text-slate-500 dark:text-slate-400 font-medium">
                   We found{" "}
                   <span className="text-slate-900 dark:text-white font-black text-lg">
