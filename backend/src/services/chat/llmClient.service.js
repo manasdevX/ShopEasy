@@ -41,10 +41,11 @@ export const getLlmModelName = () => {
 };
 
 /**
- * Fallback model chain — if the primary model is overloaded (503),
- * we try these in order.
+ * Fallback model chain — tried in order when the primary model is
+ * overloaded (503) or quota-exhausted (429).
+ * Each model has its own independent quota bucket.
  */
-const FALLBACK_MODELS = ["gemini-1.5-flash-8b", "gemini-1.5-pro"];
+const FALLBACK_MODELS = ["gemini-2.5-flash-lite", "gemini-flash-lite-latest"];
 const LLM_REQUEST_TIMEOUT_MS = 20000; // 20 second timeout per LLM call
 
 export const getModelChain = () => {
@@ -317,9 +318,12 @@ const createGeminiClientWrapper = () => {
                 err?.status === 429 || err?.message?.includes("429");
 
               if (is429) {
-                // Rate limit — record and throw immediately
                 recordLlmRateLimit(err);
-                throw err;
+                // Try next model — each model has its own separate quota
+                console.warn(
+                  `⚠️ Model ${modelName} rate limited (429), trying next...`
+                );
+                continue;
               }
 
               if (is503) {

@@ -20,6 +20,7 @@
 import mongoose from "mongoose";
 import Product from "../../models/Product.js";
 import Order from "../../models/Order.js";
+import Cart from "../../models/Cart.js";
 import {
   CHAT_FAQ_KNOWLEDGE_BASE,
   CHAT_SUPPORT_FALLBACK,
@@ -398,31 +399,70 @@ export const CHAT_TOOL_DEFINITIONS = [
       },
     },
   },
-    {
-      type: "function",
-      function: {
-        name: "cancel_order",
-        description:
-          "Cancel a user's order. Use this when the user explicitly asks to cancel an order. Requires the user to be logged in and the order to be in a cancellable status (e.g., Processing, before shipment).",
-        parameters: {
-          type: "object",
-          properties: {
-            orderReference: {
-              type: "string",
-              description:
-                "The order identifier — can be a full 24-character MongoDB ID or a 6-character short reference like '#A1B2C3'.",
-            },
-            reason: {
-              type: "string",
-              description:
-                "Optional cancellation reason from the user (e.g., 'changed my mind', 'ordered by mistake', 'no longer needed').",
-            },
-          },
-          required: ["orderReference"],
-          additionalProperties: false,
-        },
+  {
+    type: "function",
+    function: {
+      name: "get_cart",
+      description:
+        "Get the current user's shopping cart. Use when the user asks about their cart, what's in their cart, or their cart total. Requires the user to be logged in.",
+      parameters: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
       },
     },
+  },
+  {
+    type: "function",
+    function: {
+      name: "add_to_cart",
+      description:
+        "Add a specific product to the user's shopping cart. Use only when the user explicitly asks to add a product to their cart and you have a productId from a previous search result. Requires the user to be logged in.",
+      parameters: {
+        type: "object",
+        properties: {
+          productId: {
+            type: "string",
+            description:
+              "The MongoDB product ID from a previous search_products or get_product_details result.",
+          },
+          quantity: {
+            type: "integer",
+            minimum: 1,
+            maximum: 10,
+            description: "Quantity to add (default: 1, max: 10).",
+          },
+        },
+        required: ["productId"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "cancel_order",
+      description:
+        "Cancel a user's order. Use this when the user explicitly asks to cancel an order. Requires the user to be logged in and the order to be in a cancellable status (e.g., Processing, before shipment).",
+      parameters: {
+        type: "object",
+        properties: {
+          orderReference: {
+            type: "string",
+            description:
+              "The order identifier — can be a full 24-character MongoDB ID or a 6-character short reference like '#A1B2C3'.",
+          },
+          reason: {
+            type: "string",
+            description:
+              "Optional cancellation reason from the user (e.g., 'changed my mind', 'ordered by mistake', 'no longer needed').",
+          },
+        },
+        required: ["orderReference"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 // ── Tool Implementations ──
@@ -824,75 +864,208 @@ export const getCategoriesList = async () => {
   }
 };
 
-  /**
-   * Cancel a user's order
-   */
-  export const cancelOrderTool = async (args = {}, userId) => {
-    const { orderReference, reason } = args;
+export const cancelOrderTool = async (args = {}, userId) => {
+  const { orderReference, reason } = args;
 
-    if (!userId) {
+  if (!userId) {
+    return {
+      error: "User not authenticated. Please log in to cancel an order.",
+      cancelled: false,
+    };
+  }
+
+  if (!orderReference) {
+    return {
+      error: "Order reference is required. Please provide the order ID or order number.",
+      cancelled: false,
+    };
+  }
+
+  try {
+    const reference = String(orderReference).toLowerCase().replace(/^#/, "");
+    let order = null;
+
+    if (reference.length === 24 && mongoose.Types.ObjectId.isValid(reference)) {
+      order = await Order.findOne({ _id: reference, user: userId });
+    }
+
+    if (!order) {
+      const candidates = await Order.find({ user: userId })
+        .sort({ createdAt: -1 })
+        .limit(50);
+
+      order =
+        candidates.find((o) => o._id.toString().toLowerCase() === reference) ||
+        candidates.find(
+          (o) => o._id.toString().slice(-6).toLowerCase() === reference
+        );
+    }
+
+    if (!order) {
       return {
-        error: "User not authenticated. Please log in to cancel an order.",
+        error: "Order not found. Please check the order ID and try again.",
         cancelled: false,
       };
     }
 
-    if (!orderReference) {
+    const cancellableStatuses = ["Processing", "Pending", "Confirmed"];
+    if (!cancellableStatuses.includes(order.status)) {
       return {
-        error: "Order reference is required. Please provide the order ID or order number.",
+        error: `This order cannot be cancelled. Current status: ${order.status}. Only ${cancellableStatuses.join(", ")} orders can be cancelled.`,
         cancelled: false,
+        orderStatus: order.status,
       };
     }
 
-    try {
-      // Find order by reference (full ID or short reference)
-      const refLower = String(orderReference).toLowerCase();
-      const query = refLower.match(/^[a-f0-9]{24}$/)
-        ? { _id: refLower, userId }
-        : { _id: new RegExp(`^${refLower}`, "i"), userId };
-
-      const order = await Order.findOne(query);
-
-      if (!order) {
-        return {
-          error: `Order not found. Please check the order ID and try again.`,
-          cancelled: false,
-        };
-      }
-
-      // Check if order is cancellable
-      const cancellableStatuses = ["Processing", "Pending", "Confirmed"];
-      if (!cancellableStatuses.includes(order.status)) {
-        return {
-          error: `This order cannot be cancelled. Current status: ${order.status}. Only ${cancellableStatuses.join(", ")} orders can be cancelled.`,
-          cancelled: false,
-          orderStatus: order.status,
-        };
-      }
-
-      // Cancel the order
-      order.status = "Cancelled";
-      order.cancelledAt = new Date();
-      order.cancellationReason = reason || "Cancelled by user";
-      await order.save();
-
-      return {
-        success: true,
-        cancelled: true,
-        message: `Order #${order._id.toString().slice(-6).toUpperCase()} has been successfully cancelled.`,
-        orderReference: order._id.toString(),
-        orderStatus: "Cancelled",
-        cancellationReason: order.cancellationReason,
-      };
-    } catch (error) {
-      console.error("Cancel order error:", error.message);
-      return {
-        error: "Failed to cancel order. Please try again later.",
-        cancelled: false,
-        detail: process.env.NODE_ENV === "production" ? undefined : error.message,
-      };
+    // Restore stock for each item
+    for (const item of order.orderItems) {
+      await Product.findByIdAndUpdate(item.product, {
+        $inc: { stock: item.qty },
+      }).catch(() => {});
     }
+
+    order.status = "Cancelled";
+    order.cancelledAt = new Date();
+    order.cancellationReason = reason || "Cancelled by user via chat";
+    if (order.isPaid) {
+      order.isRefunded = true;
+    }
+    await order.save();
+
+    const refundNote = order.isPaid ? " A refund has been initiated." : "";
+    return {
+      success: true,
+      cancelled: true,
+      message: `Order #${order._id.toString().slice(-6).toUpperCase()} has been successfully cancelled.${refundNote}`,
+      orderReference: order._id.toString(),
+      orderStatus: "Cancelled",
+      cancellationReason: order.cancellationReason,
+      refundInitiated: Boolean(order.isPaid),
+    };
+  } catch (error) {
+    console.error("Cancel order error:", error.message);
+    return {
+      error: "Failed to cancel order. Please try again later.",
+      cancelled: false,
+      detail: process.env.NODE_ENV === "production" ? undefined : error.message,
+    };
+  }
+};
+
+export const getCartTool = async (userId) => {
+  if (!userId) {
+    return {
+      requiresAuth: true,
+      message: "Please sign in to view your cart.",
+      items: [],
+      total: 0,
+    };
+  }
+
+  const cart = await Cart.findOne({ user: userId })
+    .populate(
+      "items.product",
+      "name price mrp stock isAvailable thumbnail category brand discountPercentage"
+    )
+    .lean();
+
+  if (!cart || !cart.items?.length) {
+    return {
+      requiresAuth: false,
+      items: [],
+      itemCount: 0,
+      total: 0,
+      message: "Your cart is empty.",
+    };
+  }
+
+  const items = cart.items
+    .filter((item) => item.product)
+    .map((item) => ({
+      productId: item.product._id.toString(),
+      name: item.product.name,
+      price: item.product.price,
+      mrp: item.product.mrp,
+      discountPercentage: item.product.discountPercentage,
+      thumbnail: item.product.thumbnail,
+      category: item.product.category,
+      brand: item.product.brand,
+      quantity: item.quantity,
+      availability:
+        item.product.isAvailable && item.product.stock > 0
+          ? "In Stock"
+          : "Out of Stock",
+      subtotal: item.product.price * item.quantity,
+    }));
+
+  const total = items.reduce((sum, item) => sum + item.subtotal, 0);
+
+  return {
+    requiresAuth: false,
+    items,
+    itemCount: items.length,
+    total,
   };
+};
+
+export const addToCartTool = async (args = {}, userId) => {
+  const { productId, quantity = 1 } = args;
+
+  if (!userId) {
+    return {
+      requiresAuth: true,
+      message: "Please sign in to add items to your cart.",
+      added: false,
+    };
+  }
+
+  if (!productId || !mongoose.Types.ObjectId.isValid(productId)) {
+    return { error: "Valid product ID is required.", added: false };
+  }
+
+  const qty = Math.min(Math.max(Number(quantity) || 1, 1), 10);
+
+  const product = await Product.findById(productId)
+    .select("name price stock isAvailable")
+    .lean();
+
+  if (!product) {
+    return { error: "Product not found.", added: false };
+  }
+
+  if (!product.isAvailable || product.stock < qty) {
+    return {
+      error: `Sorry, "${product.name}" is currently out of stock.`,
+      added: false,
+    };
+  }
+
+  let cart = await Cart.findOne({ user: userId });
+  if (!cart) {
+    cart = new Cart({ user: userId, items: [] });
+  }
+
+  const existing = cart.items.find(
+    (item) => item.product.toString() === productId
+  );
+
+  if (existing) {
+    existing.quantity = Math.min(existing.quantity + qty, 10);
+  } else {
+    cart.items.push({ product: productId, quantity: qty });
+  }
+
+  await cart.save();
+
+  return {
+    success: true,
+    added: true,
+    message: `"${product.name}" has been added to your cart!`,
+    productName: product.name,
+    quantity: qty,
+    cartLink: "/cart",
+  };
+};
 
 // ── Tool Execution Router ──
 
@@ -938,13 +1111,18 @@ export const executeChatTool = async (toolName, args, { user } = {}) => {
         ui: {},
       };
     }
-      case "cancel_order": {
-        const result = await cancelOrderTool(args, user?._id);
-        return {
-          result,
-          ui: {},
-        };
-      }
+    case "cancel_order": {
+      const result = await cancelOrderTool(args, user?._id);
+      return { result, ui: {} };
+    }
+    case "get_cart": {
+      const result = await getCartTool(user?._id);
+      return { result, ui: {} };
+    }
+    case "add_to_cart": {
+      const result = await addToCartTool(args, user?._id);
+      return { result, ui: {} };
+    }
     default:
       return {
         result: { error: `Unknown tool: ${toolName}` },

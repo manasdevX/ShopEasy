@@ -391,11 +391,11 @@ export const addToWishlist = async (req, res) => {
     await user.save();
 
     // 🔥 AI TRIGGER: Track interest based on the product's category
-    // We fetch the product briefly to get its category
     const Product = mongoose.model("Product");
-    const product = await Product.findById(productId);
-    if (product) {
-      await trackUserInterest(req.user._id, product.category, productId);
+    const product = await Product.findById(productId).select("category").lean();
+    if (product?.category) {
+      const logger = createRecommendationLogger("addToWishlist");
+      await serviceTrackProductClick(req.user._id, product.category, productId, logger).catch(() => {});
     }
 
     await clearUserCache(user._id);
@@ -605,8 +605,9 @@ export const getAiRecommendations = async (req, res) => {
     const responseTime = Date.now() - startTime;
     logger.debug("Recommendations fetched", { responseTime, count: recommendations.products.length });
 
-    // ✅ Add response headers for caching hints
-    res.set("Cache-Control", "private, max-age=300"); // 5 minutes
+    // Redis handles server-side caching; tell the browser never to cache this
+    // so that post-search invalidation always delivers fresh results.
+    res.set("Cache-Control", "no-store");
     res.json(recommendations);
   } catch (error) {
     logger.error("Failed to fetch recommendations", error);

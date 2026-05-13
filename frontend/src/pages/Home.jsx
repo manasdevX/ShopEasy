@@ -72,12 +72,8 @@ export default function Home() {
   const isLoggedIn = !!localStorage.getItem("token");
 
   useEffect(() => {
-    window.scrollTo({
-      top: 0,
-      left: 0,
-      behavior: "instant", // Use "smooth" if you want a sliding effect
-    });
-  })
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }, [])
 
   useEffect(() => {
     sessionStorage.removeItem("original_entry_path");

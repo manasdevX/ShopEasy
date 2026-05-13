@@ -7,7 +7,8 @@ import User from "../models/User.js";
 import mongoose from "mongoose";
 import Product from "../models/Product.js";
 import redisClient from "../config/redis.js";
-import { normalizeCatalogQuery } from "../utils/catalogSearch.js";
+import { normalizeCatalogQuery, buildSmartSearchConditions } from "../utils/catalogSearch.js";
+import { semanticProductSearch } from "../utils/vectorStore.js";
 import { RECOMMENDATION_CONFIG, FEATURE_FLAGS, ERROR_CODES } from "../config/recommendation.config.js";
 
 /**
@@ -244,14 +245,16 @@ const buildWeightedCategories = (user) => {
     weightedCategories.set(cat, (weightedCategories.get(cat) || 0) + recencyBoost);
   });
 
-  // 2. Factor in interests with decay
+  // 2. Factor in explicit search/click interests — use raw weight so one search
+  // (weight=3.0) outweighs a single passive view (recencyBoost≈1.0), giving
+  // search intent the dominant signal it deserves.
   for (const interest of user.interests || []) {
     const cat = interest.category?.trim().toLowerCase();
     if (!cat) continue;
 
     const { CATEGORY_WEIGHT_CAP } = RECOMMENDATION_CONFIG.SCORING;
-    const normalizedWeight = Math.min(Math.max(Number(interest.weight || 0), 0), CATEGORY_WEIGHT_CAP) / CATEGORY_WEIGHT_CAP;
-    weightedCategories.set(cat, (weightedCategories.get(cat) || 0) + normalizedWeight);
+    const weight = Math.min(Math.max(Number(interest.weight || 0), 0), CATEGORY_WEIGHT_CAP);
+    weightedCategories.set(cat, (weightedCategories.get(cat) || 0) + weight);
   }
 
   return weightedCategories;
@@ -465,7 +468,6 @@ export const trackSearchIntent = async (userId, query, logger) => {
 
   try {
     const searchTerm = normalizeCatalogQuery(query.trim());
-    const escapedSearchTerm = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const Product = mongoose.model("Product");
 
     // Find a relevant product/category using broad lexical matching first.

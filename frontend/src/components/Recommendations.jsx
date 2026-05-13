@@ -41,6 +41,7 @@ const Recommendations = () => {
   const abortControllerRef = useRef(null);
   const retryTimeoutRef = useRef(null);
   const fetchLockRef = useRef(false); // Prevent concurrent fetches
+  const searchRefreshTimeoutRef = useRef(null); // Debounce search-intent refreshes
 
   /**
    * Fetch recommendations with exponential backoff retry logic
@@ -71,9 +72,11 @@ const Recommendations = () => {
       const { data } = await axios.get(
         `${API_URL}/api/user/recommendations`,
         {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
           signal: abortControllerRef.current.signal,
-          timeout: 10000, // 10 second timeout
+          timeout: 10000,
         }
       );
 
@@ -94,8 +97,9 @@ const Recommendations = () => {
         `[Recommendations] Fetched ${data.products.length} products in ${fetchTime.toFixed(0)}ms`
       );
     } catch (err) {
-      // Don't retry if request was cancelled
+      // Don't retry if request was cancelled — but always free the lock
       if (axios.isCancel(err)) {
+        fetchLockRef.current = false;
         return;
       }
 
@@ -200,8 +204,14 @@ const Recommendations = () => {
     fetchRecs();
 
     const handleSearchIntentUpdated = () => {
-      console.log("[Recommendations] Search intent updated, refreshing...");
-      fetchRecs();
+      // Debounce: wait 400ms after the last search event before re-fetching,
+      // so rapid sequential searches only trigger one recommendation refresh.
+      if (searchRefreshTimeoutRef.current) {
+        clearTimeout(searchRefreshTimeoutRef.current);
+      }
+      searchRefreshTimeoutRef.current = setTimeout(() => {
+        fetchRecs();
+      }, 400);
     };
 
     window.addEventListener("search-intent-updated", handleSearchIntentUpdated);
@@ -217,6 +227,9 @@ const Recommendations = () => {
       }
       if (retryTimeoutRef.current) {
         clearTimeout(retryTimeoutRef.current);
+      }
+      if (searchRefreshTimeoutRef.current) {
+        clearTimeout(searchRefreshTimeoutRef.current);
       }
     };
   }, []);

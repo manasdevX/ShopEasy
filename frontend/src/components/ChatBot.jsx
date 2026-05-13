@@ -286,7 +286,7 @@ const ChatBot = () => {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState(() => {
     try {
-      const saved = sessionStorage.getItem(CHAT_MESSAGES_KEY);
+      const saved = localStorage.getItem(CHAT_MESSAGES_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -324,10 +324,13 @@ const ChatBot = () => {
     }
   }, [sessionId]);
 
-  // Persist messages
+  // Persist messages (localStorage — survives page refresh, capped at 50)
   useEffect(() => {
     try {
-      sessionStorage.setItem(CHAT_MESSAGES_KEY, JSON.stringify(messages));
+      localStorage.setItem(
+        CHAT_MESSAGES_KEY,
+        JSON.stringify(messages.slice(-50))
+      );
     } catch {
       /* ignore */
     }
@@ -612,7 +615,7 @@ const ChatBot = () => {
     setMessages([INITIAL_MESSAGE]);
     setInput("");
     setSessionId(null);
-    sessionStorage.removeItem(CHAT_MESSAGES_KEY);
+    localStorage.removeItem(CHAT_MESSAGES_KEY);
 
     if (!active) return;
     axios
