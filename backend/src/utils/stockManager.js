@@ -14,7 +14,11 @@ export const reserveStock = async (items) => {
 
       const updated = await Product.findOneAndUpdate(
         { _id: prodId, stock: { $gte: qty } },
-        { $inc: { stock: -qty } },
+        [
+          { $set: { stock: { $subtract: ["$stock", qty] } } },
+          // After stage 1, $stock is already the new value — set isAvailable false when it reaches 0
+          { $set: { isAvailable: { $gt: ["$stock", 0] } } },
+        ],
         { new: true }
       );
 
@@ -53,7 +57,10 @@ export const releaseStock = async (items) => {
     const prodId = it.product?._id || it.product;
     const qty = Number(it.qty || it.quantity || 0);
     try {
-      await Product.findByIdAndUpdate(prodId, { $inc: { stock: qty } });
+      await Product.findByIdAndUpdate(prodId, [
+        { $set: { stock: { $add: ["$stock", qty] } } },
+        { $set: { isAvailable: { $gt: ["$stock", 0] } } },
+      ]);
     } catch (err) {
       console.error("Failed to release stock for", prodId, err?.message || err);
     }

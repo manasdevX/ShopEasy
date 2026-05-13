@@ -372,13 +372,9 @@ export const cancelOrder = async (req, res) => {
       order.refundedAt = Date.now();
     }
 
-    for (const item of order.orderItems) {
-      const product = await Product.findById(item.product);
-      if (product) {
-        product.stock += item.qty;
-        await product.save();
-      }
-    }
+    await releaseStock(
+      order.orderItems.map((item) => ({ product: item.product, qty: item.qty }))
+    );
 
     await order.save();
 
@@ -443,13 +439,9 @@ export const requestReturn = async (req, res) => {
     order.status = "Return Initiated";
     order.orderItems.forEach((item) => (item.itemStatus = "Return Initiated"));
 
-    for (const item of order.orderItems) {
-      const product = await Product.findById(item.product);
-      if (product) {
-        product.stock += item.qty;
-        await product.save();
-      }
-    }
+    await releaseStock(
+      order.orderItems.map((item) => ({ product: item.product, qty: item.qty }))
+    );
 
     if (order.isPaid && !order.isRefunded) {
       order.isRefunded = true;
