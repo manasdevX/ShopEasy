@@ -60,10 +60,12 @@ export const createSession = async (userId, refreshToken, userType = "user") => 
 export const validateSession = async (userId, refreshToken, userType = "user") => {
   const sessionModel = userType === "seller" ? SellerSession : Session;
   const userField = userType === "seller" ? "seller" : "user";
+  const now = new Date();
 
   const session = await sessionModel.findOne({
     [userField]: userId,
     refreshToken,
+    expiresAt: { $gt: now },
   });
 
   return session ? true : false;
@@ -140,8 +142,12 @@ export const revokeAllUserSessions = async (userId, userType = "user") => {
 export const getActiveSessions = async (userId, userType = "user") => {
   const sessionModel = userType === "seller" ? SellerSession : Session;
   const userField = userType === "seller" ? "seller" : "user";
+  const now = new Date();
 
-  const count = await sessionModel.countDocuments({ [userField]: userId });
+  const count = await sessionModel.countDocuments({
+    [userField]: userId,
+    expiresAt: { $gt: now },
+  });
   return count;
 };
 
@@ -151,9 +157,10 @@ export const getActiveSessions = async (userId, userType = "user") => {
 export const listUserSessions = async (userId, userType = "user") => {
   const sessionModel = userType === "seller" ? SellerSession : Session;
   const userField = userType === "seller" ? "seller" : "user";
+  const now = new Date();
 
   const sessions = await sessionModel
-    .find({ [userField]: userId })
+    .find({ [userField]: userId, expiresAt: { $gt: now } })
     .select("createdAt lastRotatedAt")
     .sort({ createdAt: -1 })
     .lean();
@@ -166,10 +173,10 @@ export const listUserSessions = async (userId, userType = "user") => {
  * Run this periodically via a cron job
  */
 export const cleanupStaleSessions = async () => {
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const now = new Date();
 
-  const userSessions = await Session.deleteMany({ createdAt: { $lt: thirtyDaysAgo } });
-  const sellerSessions = await SellerSession.deleteMany({ createdAt: { $lt: thirtyDaysAgo } });
+  const userSessions = await Session.deleteMany({ expiresAt: { $lte: now } });
+  const sellerSessions = await SellerSession.deleteMany({ expiresAt: { $lte: now } });
 
   const totalDeleted = userSessions.deletedCount + sellerSessions.deletedCount;
 
@@ -185,13 +192,16 @@ export const cleanupStaleSessions = async () => {
 export const enforceSessionLimits = async (userId, userType = "user") => {
   const sessionModel = userType === "seller" ? SellerSession : Session;
   const userField = userType === "seller" ? "seller" : "user";
+  const now = new Date();
   const maxSessions =
     userType === "seller"
       ? MAX_CONCURRENT_SESSIONS_SELLER
       : MAX_CONCURRENT_SESSIONS_USER;
 
+  await sessionModel.deleteMany({ [userField]: userId, expiresAt: { $lte: now } });
+
   const allSessions = await sessionModel
-    .find({ [userField]: userId })
+    .find({ [userField]: userId, expiresAt: { $gt: now } })
     .sort({ createdAt: -1 })
     .lean();
 

@@ -3,8 +3,9 @@ import cloudinary from "cloudinary";
 import streamifier from "streamifier";
 import dotenv from "dotenv";
 import redisClient from "../config/redis.js"; // <--- 1. IMPORT REDIS CLIENT
-import { buildCatalogRegexTerms, normalizeCatalogQuery, buildSmartSearchConditions, scoreProduct } from "../utils/catalogSearch.js";
+import { buildCatalogRegexTerms, normalizeCatalogQuery, buildSmartSearchConditions, scoreProduct , hasDirectQueryHit, hasMeaningfulLexicalMatch, normalizeCatalogQuery, suggestQueryCorrection,} from "../utils/catalogSearch.js";
 import { validateProductImageAndTitle } from "../utils/aiValidation.js";
+import { semanticProductSearch } from "../utils/vectorStore.js";
 
 // Load environment variables
 dotenv.config();
@@ -33,9 +34,6 @@ const uploadToCloudinary = (buffer) => {
 
 const SEARCH_CACHE_VERSION_KEY = "products:cache:version";
 const SEARCH_CACHE_VERSION_TTL_SECONDS = 30 * 24 * 60 * 60;
-
-const escapeRegex = (value = "") =>
-  String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const toPositiveInt = (value, fallback) => {
   const num = Number.parseInt(value, 10);
@@ -66,28 +64,157 @@ const buildFacetPipeline = (matchQuery) => [
   },
 ];
 
+const buildFacetSummaryFromItems = (items = []) => {
+  const categoryCounts = new Map();
+  const ratingCounts = new Map();
+
+  for (const item of items) {
+    const category = item?.category;
+    if (category) {
+      categoryCounts.set(category, (categoryCounts.get(category) || 0) + 1);
+    }
+
+    const rating = Math.floor(Number(item?.rating || 0));
+    if (rating >= 1) {
+      ratingCounts.set(rating, (ratingCounts.get(rating) || 0) + 1);
+    }
+  }
+
+  return [{
+    categories: [...categoryCounts.entries()]
+      .map(([key, count]) => ({ _id: key, count }))
+      .sort((a, b) => b.count - a.count || a._id.localeCompare(b._id))
+      .slice(0, 20),
+    ratings: [...ratingCounts.entries()]
+      .map(([key, count]) => ({ _id: key, count }))
+      .sort((a, b) => b._id - a._id),
+  }];
+};
+
+const APPAREL_QUERY_PATTERN = /\b(clothes|apparel|fashion|outfit|garment|wear|clothing|dress|shirt|pants|jacket|shoe|footwear|attire)\b/i;
+const BROAD_APPAREL_QUERY_PATTERN = /\b(clothes|apparel|fashion|outfit|garment|wear|clothing)\b/i;
+const STRICT_SHIRT_QUERY_PATTERN = /\b(shirt|shirts|tshirt|tshirts|tee|tees)\b/i;
+
 // Layer 1: Database Retrieval & Layer 2: Application Ranking
-const runTwoLayerSearchPipeline = async ({ matchQuery, hasQuery, page, limit, sort, qRaw }) => {
-  // Layer 1: Candidate Retrieval (Lightweight, bounded DB fetch)
-  const [count, facetsResult, rawCandidates] = await Promise.all([
+const runTwoLayerSearchPipeline = async ({
+  matchQuery,
+  baseFilters,
+  hasQuery,
+  page,
+  limit,
+  sort,
+  qRaw,
+}) => {
+  const candidateLimit = Math.min(2500, Math.max(600, page * limit * 12));
+
+  const semanticPromise = hasQuery
+    ? semanticProductSearch(qRaw, candidateLimit).catch(() => [])
+    : Promise.resolve([]);
+
+  // Layer 1: Candidate Retrieval (text index + smart field matching + semantic fallback)
+  const [count, facetsResult, rawCandidates, textCandidates, semanticCandidates] = await Promise.all([
     Product.countDocuments(matchQuery),
     Product.aggregate(buildFacetPipeline(matchQuery)),
     Product.find(matchQuery, {
       name: 1, price: 1, mrp: 1, discountPercentage: 1, thumbnail: 1, images: 1,
       category: 1, subCategory: 1, brand: 1, stock: 1, rating: 1, numReviews: 1,
       isFeatured: 1, isBestSeller: 1, createdAt: 1, description: 1, tags: 1
-    }).limit(1000).lean() // Limit DB retrieval to prevent OOM
+    })
+      .limit(candidateLimit)
+      .lean(),
+    hasQuery
+      ? Product.find(
+          {
+            ...baseFilters,
+            $text: { $search: qRaw },
+          },
+          {
+            name: 1,
+            price: 1,
+            mrp: 1,
+            discountPercentage: 1,
+            thumbnail: 1,
+            images: 1,
+            category: 1,
+            subCategory: 1,
+            brand: 1,
+            stock: 1,
+            rating: 1,
+            numReviews: 1,
+            isFeatured: 1,
+            isBestSeller: 1,
+            createdAt: 1,
+            description: 1,
+            tags: 1,
+            _textScore: { $meta: "textScore" },
+          }
+        )
+          .sort({ _textScore: { $meta: "textScore" } })
+          .limit(candidateLimit)
+          .lean()
+          .catch(() => [])
+      : [],
+    semanticPromise,
   ]);
 
-  let items = rawCandidates;
+  const mergedById = new Map();
+  const mergeCandidate = (candidate, { fromText = false, fromSemantic = false, semanticRank = 0 } = {}) => {
+    const key = String(candidate._id);
+    const existing = mergedById.get(key);
+
+    const textScore = Number(candidate._textScore || 0);
+    const semanticScore = Number(candidate._semanticScore || 0);
+    const semanticBoost = fromSemantic
+      ? Math.max(0, Math.round(Math.max(0, semanticScore - 0.5) * 260))
+      : 0;
+    const merged = {
+      ...(existing || {}),
+      ...candidate,
+      _textScore: Math.max(existing?._textScore || 0, textScore),
+      _semanticScore: Math.max(existing?._semanticScore || 0, semanticScore),
+      _sourceBoost: Math.max(existing?._sourceBoost || 0, fromText ? 1 : 0),
+      _semanticBoost: Math.max(existing?._semanticBoost || 0, semanticBoost),
+    };
+
+    mergedById.set(key, merged);
+  };
+
+  rawCandidates.forEach((item) => mergeCandidate(item, { fromText: false }));
+  textCandidates.forEach((item) => mergeCandidate(item, { fromText: true }));
+  semanticCandidates.forEach((item, index) => mergeCandidate(item, { fromSemantic: true, semanticRank: index + 1 }));
+
+  let items = [...mergedById.values()];
+
+  const hasApparelIntent = APPAREL_QUERY_PATTERN.test(qRaw);
+  const isSingleTokenQuery = qRaw.trim().split(/[\s\-_/.,+]+/).filter(Boolean).length === 1;
+  const isBroadApparelQuery = BROAD_APPAREL_QUERY_PATTERN.test(qRaw);
+  const isStrictShirtQuery = STRICT_SHIRT_QUERY_PATTERN.test(qRaw);
+  const hasStrongLexicalAnchor = items.some((item) => hasMeaningfulLexicalMatch(item, qRaw));
+
+  if (hasQuery && isSingleTokenQuery && !isBroadApparelQuery && isStrictShirtQuery) {
+    items = items.filter((item) => hasDirectQueryHit(item, qRaw));
+  }
+
+  if (hasQuery && !hasApparelIntent && !hasStrongLexicalAnchor) {
+    items = items.filter(
+      (item) => {
+        const semanticScore = Number(item._semanticScore || 0);
+        return hasMeaningfulLexicalMatch(item, qRaw) || semanticScore >= 0.62;
+      }
+    );
+  }
 
   // Layer 2: Application-Level Logic-Based Ranking
   if (hasQuery && sort === "relevance") {
-    items = items.map(item => ({
+    items = items.map((item) => ({
       ...item,
-      _relevanceScore: scoreProduct(item, qRaw),
+      _relevanceScore:
+        scoreProduct(item, qRaw) +
+        Math.round((item._textScore || 0) * 80) +
+        (item._sourceBoost ? 120 : 0) +
+        (item._semanticBoost || 0),
     }));
-    
+
     // Sort primarily by computed relevance, tie-breaker by newest
     items.sort((a, b) => {
       if (b._relevanceScore !== a._relevanceScore) {
@@ -107,14 +234,19 @@ const runTwoLayerSearchPipeline = async ({ matchQuery, hasQuery, page, limit, so
     });
   }
 
+  const fallbackFacets = count > 0 ? facetsResult : buildFacetSummaryFromItems(items);
+
   // Application-level pagination
   const startIndex = (page - 1) * limit;
   const paginatedItems = items.slice(startIndex, startIndex + limit);
+  const correctedQuery = hasQuery ? suggestQueryCorrection(qRaw, items.slice(0, 50)) : null;
 
   // Clean up internal metadata fields
-  const finalItems = paginatedItems.map(({ description, tags, _relevanceScore, ...rest }) => rest);
+  const finalItems = paginatedItems.map(
+    ({ description, tags, _relevanceScore, _textScore, _sourceBoost, _semanticScore, _semanticBoost, _semanticRank, ...rest }) => rest
+  );
 
-  return { count, facetsResult, items: finalItems };
+  return { count: hasQuery ? items.length : count, facetsResult: fallbackFacets, items: finalItems, correctedQuery };
 };
 
 const getSearchCacheVersion = async () => {
@@ -171,7 +303,7 @@ export const getAllProducts = async (req, res) => {
   try {
     const qRaw = (req.query.q || req.query.keyword || "").toString().trim();
     
-    // 1. Local Normalization (Includes Phonetic & Fuzzy correction natively)
+    // 1. Normalize user query without changing search intent.
     const q = normalizeCatalogQuery(qRaw).slice(0, 120);
 
     const page = toPositiveInt(req.query.page || req.query.pageNumber, 1);
@@ -253,6 +385,7 @@ export const getAllProducts = async (req, res) => {
     try {
       result = await runTwoLayerSearchPipeline({
         matchQuery: searchQuery,
+        baseFilters,
         hasQuery,
         page,
         limit,
@@ -264,7 +397,7 @@ export const getAllProducts = async (req, res) => {
       throw primaryError;
     }
 
-    const { count, facetsResult, items } = result;
+    const { count, facetsResult, items, correctedQuery } = result;
 
     const responseData = {
       items,
@@ -275,7 +408,7 @@ export const getAllProducts = async (req, res) => {
       sort,
       query: q,
       originalQuery: qRaw,
-      correctedQuery: (q !== qRaw.toLowerCase()) ? q : null,
+      correctedQuery,
 
       // Backward compatibility fields
       products: items,

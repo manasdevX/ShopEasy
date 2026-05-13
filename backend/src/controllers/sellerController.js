@@ -15,19 +15,70 @@ const generateToken = (id) => {
   });
 };
 
+const normalizeClientIp = (value) => {
+  const rawIp = String(value || "").trim();
+  if (!rawIp) return "unknown";
+  if (rawIp === "::1" || rawIp === "::ffff:127.0.0.1") return "127.0.0.1";
+  return rawIp;
+};
+
+const getClientSessionMeta = (req) => {
+  const userAgent = req.headers["user-agent"] || "unknown";
+  const forwardedFor = req.headers["x-forwarded-for"];
+  const rawIpAddress = (Array.isArray(forwardedFor)
+    ? forwardedFor[0]
+    : forwardedFor?.split(",")[0]) || req.ip;
+  const ipAddress = normalizeClientIp(rawIpAddress);
+  const ipCandidates = [...new Set([ipAddress, String(rawIpAddress || "").trim()])].filter(Boolean);
+
+  if (ipAddress === "127.0.0.1") {
+    ipCandidates.push("::1", "::ffff:127.0.0.1");
+  }
+
+  return {
+    userAgent,
+    ipAddress,
+    ipCandidates: [...new Set(ipCandidates)],
+  };
+};
+
+const clearSameDeviceSession = async (Model, queryKey, id, req) => {
+  const { userAgent, ipAddress, ipCandidates } = getClientSessionMeta(req);
+
+  await Model.deleteMany({
+    [queryKey]: id,
+    userAgent,
+    ipAddress: { $in: ipCandidates },
+  });
+
+  return { userAgent, ipAddress };
+};
+
 /**
  * 🟢 SESSION LIMITER HELPER
  * Blocks login if the maximum number of concurrent sessions is reached.
  */
 const checkSessionLimit = async (Model, queryKey, id, limit = 2) => {
-  const sessionCount = await Model.countDocuments({ [queryKey]: id });
+  const now = new Date();
 
-  if (sessionCount >= limit) {
-    const error = new Error(
-      `Maximum of ${limit} active sessions reached. Please logout from another device first.`
-    );
-    error.statusCode = 403; // Forbidden
-    throw error;
+  // Remove stale sessions first so limits are enforced on currently active devices only.
+  await Model.deleteMany({
+    [queryKey]: id,
+    expiresAt: { $lte: now },
+  });
+
+  const activeSessions = await Model.find({
+    [queryKey]: id,
+    expiresAt: { $gt: now },
+  })
+    .sort({ createdAt: -1 })
+    .select("_id")
+    .lean();
+
+  // Keep the newest (limit - 1) sessions so the current login can become the latest one.
+  if (activeSessions.length >= limit) {
+    const sessionsToDelete = activeSessions.slice(limit - 1).map((s) => s._id);
+    await Model.deleteMany({ _id: { $in: sessionsToDelete } });
   }
 };
 
@@ -98,23 +149,23 @@ export const registerSeller = async (req, res) => {
 
     if (seller) {
       const token = generateToken(seller._id);
+      const { userAgent, ipAddress } = await clearSameDeviceSession(
+        SellerSession,
+        "seller",
+        seller._id,
+        req
+      );
 
       // ... (Rest of your session logic remains exactly the same) ...
 
-      try {
-        await checkSessionLimit(SellerSession, "seller", seller._id, 2);
-      } catch (limitError) {
-        return res
-          .status(limitError.statusCode)
-          .json({ message: limitError.message });
-      }
+      await checkSessionLimit(SellerSession, "seller", seller._id, 2);
 
       await SellerSession.create({
         seller: seller._id,
         refreshToken: token,
         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-        ipAddress: req.ip,
-        userAgent: req.headers["user-agent"],
+        ipAddress,
+        userAgent,
       });
 
       req.session.sellerId = seller._id;
@@ -175,14 +226,15 @@ export const loginSeller = async (req, res) => {
     seller.isOnline = true;
     await seller.save(); // Save status to DB
 
-    // 🟢 1. HARD BLOCK: Check if seller already has 2 active sessions
-    try {
-      await checkSessionLimit(SellerSession, "seller", seller._id, 2);
-    } catch (limitError) {
-      return res
-        .status(limitError.statusCode)
-        .json({ message: limitError.message });
-    }
+    const { userAgent, ipAddress } = await clearSameDeviceSession(
+      SellerSession,
+      "seller",
+      seller._id,
+      req
+    );
+
+    // Keep max 2 active sessions by pruning oldest entries before this login session.
+    await checkSessionLimit(SellerSession, "seller", seller._id, 2);
 
     const token = generateToken(seller._id);
 
@@ -191,8 +243,8 @@ export const loginSeller = async (req, res) => {
       seller: seller._id,
       refreshToken: token,
       expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 Days
-      ipAddress: req.ip,
-      userAgent: req.headers["user-agent"],
+      ipAddress,
+      userAgent,
     });
 
     // ✅ 3. Link Express Session
