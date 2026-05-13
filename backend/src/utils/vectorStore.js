@@ -95,7 +95,7 @@ export const semanticProductSearch = async (queryText, limit = 5) => {
       stock: { $gt: 0 },
     })
       .select(
-        "_id name price mrp stock isAvailable description thumbnail category brand rating numReviews discountPercentage isFeatured isBestSeller embeddings"
+        "_id name price mrp stock isAvailable description thumbnail category subCategory brand tags rating numReviews discountPercentage isFeatured isBestSeller createdAt embeddings"
       )
       .lean();
 
@@ -104,24 +104,96 @@ export const semanticProductSearch = async (queryText, limit = 5) => {
       return [];
     }
 
-    // Score each product by cosine similarity
-    const scored = products.map((product) => ({
-      product,
-      score: cosineSimilarity(queryVector, product.embeddings),
-    }));
+    // Detect apparel-intent queries to adjust scoring weights
+    const APPAREL_KEYWORDS = /\b(clothes|apparel|fashion|outfit|garment|wear|clothing|dress|shirt|pants|jacket|shoe|footwear|attire)\b/i;
+    const isApparelIntent = APPAREL_KEYWORDS.test(queryText);
+
+    // Apparel categories for boosting
+    const APPAREL_CATEGORIES = new Set([
+      "womens-dresses",
+      "mens-shirts",
+      "tops",
+      "bottoms",
+      "mens-shoes",
+      "womens-shoes",
+      "activewear",
+      "formal-wear",
+      "casual-wear",
+      "accessories",
+      "outerwear",
+      "innerwear",
+      "footwear",
+      "sunglasses",
+      "womens-watches",
+      "mens-watches",
+    ]);
+
+    const categoryCentroids = new Map();
+    const categoryCounts = new Map();
+
+    for (const product of products) {
+      const categoryKey = String(product.category || "uncategorized").toLowerCase();
+      const existing = categoryCentroids.get(categoryKey) || [];
+      if (existing.length === 0) {
+        categoryCentroids.set(categoryKey, [...product.embeddings]);
+      } else {
+        for (let i = 0; i < product.embeddings.length; i++) {
+          existing[i] = (existing[i] || 0) + product.embeddings[i];
+        }
+        categoryCentroids.set(categoryKey, existing);
+      }
+      categoryCounts.set(categoryKey, (categoryCounts.get(categoryKey) || 0) + 1);
+    }
+
+    for (const [categoryKey, centroid] of categoryCentroids.entries()) {
+      const count = categoryCounts.get(categoryKey) || 1;
+      categoryCentroids.set(
+        categoryKey,
+        centroid.map((value) => value / count)
+      );
+    }
+
+    // Adjust weights based on intent: apparel queries use heavier category weighting
+    const PRODUCT_WEIGHT = isApparelIntent ? 0.5 : 0.7;
+    const CATEGORY_WEIGHT = isApparelIntent ? 0.5 : 0.3;
+
+    // Score each product by a blend of product similarity and category affinity
+    const scored = products.map((product) => {
+      const productScore = cosineSimilarity(queryVector, product.embeddings);
+      const categoryKey = String(product.category || "uncategorized").toLowerCase();
+      const categoryScore = cosineSimilarity(
+        queryVector,
+        categoryCentroids.get(categoryKey) || product.embeddings
+      );
+
+      // For apparel-intent queries, apply category boost multiplier
+      let finalScore = (productScore * PRODUCT_WEIGHT) + (categoryScore * CATEGORY_WEIGHT);
+      if (isApparelIntent && APPAREL_CATEGORIES.has(categoryKey)) {
+        finalScore *= 1.3; // 30% boost for apparel categories during apparel-intent queries
+      }
+
+      return {
+        product,
+        score: finalScore,
+      };
+    });
 
     // Sort descending by score
     scored.sort((a, b) => b.score - a.score);
 
     // Return top-K products above the similarity threshold
-    const SIMILARITY_THRESHOLD = 0.35;
+    const SIMILARITY_THRESHOLD = isApparelIntent ? 0.46 : 0.56;
     const results = scored
       .filter((s) => s.score > SIMILARITY_THRESHOLD)
       .slice(0, limit)
-      .map((s) => {
+      .map((s, index) => {
         // Strip embeddings from the returned object to keep payloads small
         const { embeddings, ...productWithoutEmbeddings } = s.product;
-        return productWithoutEmbeddings;
+        return {
+          ...productWithoutEmbeddings,
+          _semanticScore: s.score,
+          _semanticRank: index + 1,
+        };
       });
 
     console.log(

@@ -61,7 +61,7 @@ app.use(createRateLimitMiddleware(1000, 10));
 
 app.use(
   cors({
-    origin: ["http://localhost:5173", "https://shop-easy-livid.vercel.app"],
+    origin: ["http://localhost:5173", "http://localhost:5174", "https://shop-easy-livid.vercel.app"],
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: [
