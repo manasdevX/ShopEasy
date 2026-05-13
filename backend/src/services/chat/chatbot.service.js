@@ -76,18 +76,18 @@ const retryLlmCall = async (callFn, label = "LLM") => {
       return await callFn();
     } catch (error) {
       const is429 = error?.status === 429 || error?.message?.includes("429");
-      if (is429 && attempt < LLM_MAX_RETRIES) {
+      // 429s are handled by the model fallback chain in llmClient — don't retry here
+      if (is429) {
+        console.warn(`${label}: All models quota-exhausted (429), using fallback.`);
+        throw error;
+      }
+      if (attempt < LLM_MAX_RETRIES) {
         const delay = LLM_RETRY_DELAY_MS * (attempt + 1);
-        console.warn(`${label}: Rate limited (429), retrying in ${delay}ms...`);
+        console.warn(`${label}: Error, retrying in ${delay}ms (attempt ${attempt + 1}/${LLM_MAX_RETRIES})`);
         await new Promise((r) => setTimeout(r, delay));
         continue;
       }
-      // Only log non-429 errors or final retry failures
-      if (!is429) {
-        console.error(`${label} failed:`, error.message);
-      } else {
-        console.warn(`${label}: Rate limited after ${attempt + 1} attempts, using fallback.`);
-      }
+      console.error(`${label} failed after ${attempt + 1} attempts:`, error.message);
       throw error;
     }
   }
@@ -423,7 +423,7 @@ const runLlmConversation = async ({ message, history, user, intent }) => {
         () => client.chat.completions.create({
           model: getLlmModelName(),
           temperature: 0.3,
-          max_tokens: 1024,
+          max_tokens: 2048,
           messages,
           tools: CHAT_TOOL_DEFINITIONS,
           tool_choice: "auto",
@@ -519,12 +519,6 @@ export const runStreamingLlmConversation = async function* ({
   user,
   intent,
 }) {
-  // Order tracking should stay deterministic and auth-aware.
-  // Returning here lets the controller use deterministic fallback flow.
-  if (intent === "ORDER_TRACKING") {
-    return;
-  }
-
   const client = getStreamingClient();
   if (!client) return;
 
@@ -561,7 +555,7 @@ export const runStreamingLlmConversation = async function* ({
         () => client.chat.completions.create({
           model: getLlmModelName(),
           temperature: 0.3,
-          max_tokens: 1024,
+          max_tokens: 2048,
           messages,
           tools: CHAT_TOOL_DEFINITIONS,
           tool_choice: "auto",
@@ -675,51 +669,16 @@ export const processChatMessage = async ({ message, sessionId, user }) => {
 
   let outcome;
 
-  // Keep order tracking deterministic so auth state is checked via tools
-  // and we avoid inconsistent LLM-only responses.
-  if (intent === "ORDER_TRACKING") {
-    outcome = await buildFallbackReply({
-      intent,
+  // Try LLM first — tools handle auth checking and all action-based intents
+  try {
+    outcome = await runLlmConversation({
       message: userMessage,
+      history,
       user,
+      intent,
     });
-  }
-
-  if (!outcome) {
-    try {
-    // Check if user wants to cancel an order
-    const isCancelRequest = /\b(cancel|want to cancel|please cancel|i want to cancel|cancel this|cancel my order|can you cancel|i need to cancel)\b/i.test(message);
-    if (isCancelRequest && orderRef) {
-      const cancelResult = await cancelOrderTool(
-        { orderReference: orderRef },
-        user?._id
-      );
-      
-      if (cancelResult.error) {
-        return {
-          reply: `❌ ${cancelResult.error}`,
-          ui,
-          usedLlm: false,
-        };
-      }
-      
-      if (cancelResult.cancelled) {
-        return {
-          reply: `✅ ${cancelResult.message}`,
-          ui,
-          usedLlm: false,
-        };
-      }
-    }
-      outcome = await runLlmConversation({
-        message: userMessage,
-        history,
-        user,
-        intent,
-      });
-    } catch (error) {
-      console.error("Chatbot LLM flow failed, using fallback:", error.message);
-    }
+  } catch (error) {
+    console.error("Chatbot LLM flow failed, using fallback:", error.message);
   }
 
   if (!outcome) {

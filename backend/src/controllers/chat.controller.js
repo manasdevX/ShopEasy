@@ -166,6 +166,7 @@ export const streamChatMessage = async (req, res) => {
     let fullReply = "";
     let finalUi = { products: [], orders: [], faq: null };
     let usedLlm = false;
+    let historySavedByFallback = false;
 
     try {
       // Try streaming LLM conversation
@@ -206,6 +207,7 @@ export const streamChatMessage = async (req, res) => {
     }
 
     // If streaming didn't produce a reply, fall back to standard processing
+    // processChatMessage saves history internally — skip duplicate save below
     if (!fullReply) {
       try {
         const fallbackResult = await processChatMessage({
@@ -216,8 +218,8 @@ export const streamChatMessage = async (req, res) => {
 
         fullReply = fallbackResult.reply;
         finalUi = fallbackResult.ui || finalUi;
+        historySavedByFallback = true;
 
-        // Send the full reply as a single chunk
         if (fullReply) {
           sendSseEvent(res, "chunk", { text: fullReply });
         }
@@ -227,14 +229,16 @@ export const streamChatMessage = async (req, res) => {
       }
     }
 
-    // Save to session history
-    const nextHistory = [
-      ...history,
-      { role: "user", content: String(message).trim() },
-      { role: "assistant", content: fullReply },
-    ].slice(-20);
+    // Save to session history — skip if processChatMessage already saved
+    if (!historySavedByFallback) {
+      const nextHistory = [
+        ...history,
+        { role: "user", content: String(message).trim() },
+        { role: "assistant", content: fullReply },
+      ].slice(-20);
 
-    await saveChatSessionHistory(resolvedSessionId, nextHistory);
+      await saveChatSessionHistory(resolvedSessionId, nextHistory);
+    }
 
     // Send final done event with complete payload
     sendSseEvent(res, "done", {
