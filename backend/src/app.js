@@ -6,6 +6,16 @@ import session from "express-session";
 import MongoStore from "connect-mongo";
 import "./config/redis.js";
 
+// --- SECURITY & MONITORING IMPORTS ---
+import {
+  cspMiddleware,
+  securityHeadersMiddleware,
+  inputSanitizationMiddleware,
+  csrfProtectionMiddleware,
+  createRateLimitMiddleware,
+} from "./middlewares/security.middleware.js";
+import { setupMonitoring, getHealthStatus } from "./services/monitoring.service.js";
+
 // --- ROUTES IMPORTS ---
 import productRoutes from "./routes/product.routes.js";
 import authRoutes from "./routes/auth.routes.js";
@@ -28,11 +38,26 @@ const app = express();
  */
 app.set("trust proxy", 1);
 
-// --- MIDDLEWARE ---
+// --- SECURITY MIDDLEWARE ---
+// Setup monitoring for LLM, Redis, MongoDB
+setupMonitoring();
+
+// Apply security headers
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" }, // Allow CDN/cloud images
-  contentSecurityPolicy: false, // Managed by frontend framework
+  contentSecurityPolicy: false, // Managed by our cspMiddleware
 }));
+
+// Apply additional security headers (CSP, X-Frame-Options, etc.)
+app.use(securityHeadersMiddleware);
+app.use(cspMiddleware);
+
+// Input sanitization and CSRF protection
+app.use(inputSanitizationMiddleware);
+app.use(csrfProtectionMiddleware);
+
+// Global rate limiting (10 requests per second per IP)
+app.use(createRateLimitMiddleware(1000, 10));
 
 app.use(
   cors({
@@ -139,6 +164,21 @@ app.get("/health/chat", (req, res) => {
     redis: redisClient.isReady ? "connected" : "fallback (in-memory)",
     timestamp: new Date().toISOString(),
   });
+});
+
+// Enhanced health check with full system status
+app.get("/health/full", async (req, res) => {
+  try {
+    const healthStatus = await getHealthStatus();
+    const statusCode = healthStatus.status === "healthy" ? 200 : 503;
+    res.status(statusCode).json(healthStatus);
+  } catch (error) {
+    res.status(500).json({
+      status: "error",
+      error: error.message,
+      timestamp: new Date().toISOString(),
+    });
+  }
 });
 
 // --- 404 HANDLER ---

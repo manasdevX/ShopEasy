@@ -1,4 +1,9 @@
 {
+  "scripts": {
+    "start": "npm --prefix backend start",
+    "dev": "npm --prefix backend run dev",
+    "frontend": "npm --prefix frontend run dev"
+  },
   "dependencies": {
     "@react-google-maps/api": "^2.20.8",
     "@sendgrid/mail": "^8.1.6",

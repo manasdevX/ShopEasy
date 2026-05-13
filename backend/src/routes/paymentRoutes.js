@@ -2,6 +2,8 @@ import express from "express";
 import {
   createOrder,
   verifyPayment,
+  reserveItemsForPayment,
+  cancelReservation,
 } from "../controllers/payment.controller.js";
 import { protect } from "../middlewares/auth.middleware.js";
 
@@ -22,6 +24,9 @@ router.get("/ping", (req, res) =>
  * @access  Private
  */
 router.post("/create-order", protect, createOrder);
+
+router.post("/reserve", protect, reserveItemsForPayment);
+router.delete("/reserve/:id", protect, cancelReservation);
 
 /**
  * @route   POST /api/payment/verify-payment

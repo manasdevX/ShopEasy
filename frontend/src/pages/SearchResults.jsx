@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useSearchParams, Link } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import {
   Search,
   Loader2,
@@ -21,71 +21,95 @@ import ProductCard from "../components/ProductCard";
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export default function SearchResults() {
-  const [searchParams] = useSearchParams();
-  const query = searchParams.get("q") || "";
+  const [searchParams, setSearchParams] = useSearchParams();
+  const query = (searchParams.get("q") || searchParams.get("keyword") || "").trim();
 
   // --- States ---
-  const [products, setProducts] = useState([]);
+  const [items, setItems] = useState([]);
   const [facets, setFacets] = useState({ categories: [], ratings: [] });
   const [loading, setLoading] = useState(true);
   const [totalCount, setTotalCount] = useState(0);
-
-  // Pagination
-  const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
-  // Filters
-  const [selectedCategory, setSelectedCategory] = useState("");
-  const [selectedRating, setSelectedRating] = useState(0);
-  const [minPrice, setMinPrice] = useState("");
-  const [maxPrice, setMaxPrice] = useState("");
-  const [sortBy, setSortBy] = useState("relevance");
+  const currentPage = Math.max(1, Number.parseInt(searchParams.get("page") || "1", 10) || 1);
+  const selectedCategory = searchParams.get("category") || "";
+  const selectedRating = Number.parseInt(searchParams.get("ratingMin") || "0", 10) || 0;
+  const minPrice = searchParams.get("minPrice") || "";
+  const maxPrice = searchParams.get("maxPrice") || "";
+  const sortBy = searchParams.get("sort") || "relevance";
+
+  const updateParams = (patch, { resetPage = false } = {}) => {
+    const next = new URLSearchParams(searchParams);
+
+    Object.entries(patch).forEach(([key, value]) => {
+      if (value === "" || value === null || value === undefined || value === 0) {
+        next.delete(key);
+      } else {
+        next.set(key, String(value));
+      }
+    });
+
+    if (resetPage) {
+      next.set("page", "1");
+    }
+
+    next.set("q", query);
+    setSearchParams(next, { replace: true });
+  };
 
   // --- Effects ---
 
-  // 1. Reset Page on Filter Change
+  // Fetch Data
   useEffect(() => {
-    setCurrentPage(1);
-  }, [query, selectedCategory, selectedRating, minPrice, maxPrice, sortBy]);
+    const controller = new AbortController();
 
-  // 2. Fetch Data
-  useEffect(() => {
     const fetchSearchResults = async () => {
-      let link = `${API_URL}/api/products?keyword=${query}&pageNumber=${currentPage}`;
+      const params = new URLSearchParams();
+      params.set("q", query);
+      params.set("page", String(currentPage));
+      params.set("limit", "12");
 
-      // Sort mapping
-      if (sortBy === "price_low") link += `&sort=price_asc`;
-      else if (sortBy === "price_high") link += `&sort=price_desc`;
-      else if (sortBy === "rating") link += `&sort=rating_desc`;
-      else if (sortBy === "newest") link += `&sort=newest`;
+      if (sortBy === "price_low") params.set("sort", "price_asc");
+      else if (sortBy === "price_high") params.set("sort", "price_desc");
+      else if (sortBy === "rating") params.set("sort", "rating_desc");
+      else if (sortBy === "newest") params.set("sort", "newest");
+      else params.set("sort", "relevance");
 
-      if (minPrice) link += `&minPrice=${minPrice}`;
-      if (maxPrice) link += `&maxPrice=${maxPrice}`;
-      if (selectedRating > 0) link += `&rating=${selectedRating}`;
-      if (selectedCategory) link += `&category=${selectedCategory}`;
+      if (minPrice) params.set("minPrice", minPrice);
+      if (maxPrice) params.set("maxPrice", maxPrice);
+      if (selectedRating > 0) params.set("ratingMin", String(selectedRating));
+      if (selectedCategory) params.set("category", selectedCategory);
 
       setLoading(true);
       try {
-        const res = await fetch(link);
+        const res = await fetch(`${API_URL}/api/products?${params.toString()}`, {
+          signal: controller.signal,
+        });
         const data = await res.json();
 
         if (res.ok) {
-          setProducts(Array.isArray(data) ? data : data.products || []);
+          const normalizedItems = Array.isArray(data)
+            ? data
+            : data.items || data.products || [];
+
+          setItems(normalizedItems);
           setTotalCount(data.total || 0);
-          setTotalPages(data.pages || 1);
+          setTotalPages(data.totalPages || data.pages || 1);
           if (data.facets) setFacets(data.facets);
         } else {
           throw new Error(data.message || "Failed to fetch");
         }
       } catch (err) {
+        if (err?.name === "AbortError") return;
         showError("Search failed. Please try again.");
       } finally {
         setLoading(false);
       }
     };
 
-    const timeoutId = setTimeout(fetchSearchResults, 300);
-    return () => clearTimeout(timeoutId);
+    fetchSearchResults();
+
+    return () => controller.abort();
   }, [
     query,
     selectedCategory,
@@ -100,23 +124,32 @@ export default function SearchResults() {
     window.scrollTo({
       top: 0,
       left: 0,
-      behavior: "instant", // Use "smooth" if you want a sliding effect
+      behavior: "instant",
     });
-  }, []);
+  }, [currentPage]);
+
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      updateParams({ page: totalPages }, { resetPage: false });
+    }
+  }, [currentPage, totalPages]);
 
   // --- Handlers ---
   const clearFilters = () => {
-    setMinPrice("");
-    setMaxPrice("");
-    setSelectedRating(0);
-    setSelectedCategory("");
-    setSortBy("relevance");
-    setCurrentPage(1);
+    const next = new URLSearchParams(searchParams);
+    next.delete("category");
+    next.delete("ratingMin");
+    next.delete("minPrice");
+    next.delete("maxPrice");
+    next.delete("sort");
+    next.set("page", "1");
+    next.set("q", query);
+    setSearchParams(next, { replace: true });
   };
 
   const handlePageChange = (newPage) => {
     if (newPage >= 1 && newPage <= totalPages) {
-      setCurrentPage(newPage);
+      updateParams({ page: newPage }, { resetPage: false });
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
@@ -163,11 +196,10 @@ export default function SearchResults() {
                     {facets.categories.map((cat) => (
                       <button
                         key={cat._id}
-                        onClick={() =>
-                          setSelectedCategory(
-                            selectedCategory === cat._id ? "" : cat._id
-                          )
-                        }
+                        onClick={() => {
+                          const nextCategory = selectedCategory === cat._id ? "" : cat._id;
+                          updateParams({ category: nextCategory }, { resetPage: true });
+                        }}
                         className={`w-full flex items-center justify-between group py-2 px-3 rounded-xl transition-all border ${
                           selectedCategory === cat._id
                             ? "bg-orange-50 border-orange-200 dark:bg-orange-500/10 dark:border-orange-500/20"
@@ -230,7 +262,9 @@ export default function SearchResults() {
                       type="number"
                       placeholder="Min"
                       value={minPrice}
-                      onChange={(e) => setMinPrice(e.target.value)}
+                      onChange={(e) =>
+                        updateParams({ minPrice: e.target.value }, { resetPage: true })
+                      }
                       className="w-full pl-8 pr-3 py-2.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all placeholder:text-slate-400"
                     />
                   </div>
@@ -242,7 +276,9 @@ export default function SearchResults() {
                       type="number"
                       placeholder="Max"
                       value={maxPrice}
-                      onChange={(e) => setMaxPrice(e.target.value)}
+                      onChange={(e) =>
+                        updateParams({ maxPrice: e.target.value }, { resetPage: true })
+                      }
                       className="w-full pl-8 pr-3 py-2.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all placeholder:text-slate-400"
                     />
                   </div>
@@ -265,9 +301,10 @@ export default function SearchResults() {
                     return (
                       <button
                         key={star}
-                        onClick={() =>
-                          setSelectedRating(selectedRating === star ? 0 : star)
-                        }
+                        onClick={() => {
+                          const nextRating = selectedRating === star ? 0 : star;
+                          updateParams({ ratingMin: nextRating }, { resetPage: true });
+                        }}
                         className={`w-full flex items-center justify-between group py-1.5 px-2 -mx-2 rounded-lg transition-all ${
                           selectedRating === star
                             ? "bg-slate-50 dark:bg-slate-800/60"
@@ -361,7 +398,9 @@ export default function SearchResults() {
                 </div>
                 <select
                   value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
+                  onChange={(e) =>
+                    updateParams({ sort: e.target.value }, { resetPage: true })
+                  }
                   className="px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 cursor-pointer transition-all appearance-none pr-8"
                   style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23f97316' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}
                 >
@@ -381,7 +420,7 @@ export default function SearchResults() {
                   size={48}
                 />
               </div>
-            ) : products.length === 0 ? (
+            ) : items.length === 0 ? (
               <div className="text-center py-24 bg-white dark:bg-slate-900/50 rounded-[3rem] border border-dashed border-slate-200 dark:border-slate-800">
                 <PackageSearch
                   className="text-slate-300 dark:text-slate-600 mx-auto mb-6"
@@ -400,7 +439,7 @@ export default function SearchResults() {
             ) : (
               <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                  {products.map((product) => (
+                  {items.map((product) => (
                     <ProductCard key={product._id} product={product} />
                   ))}
                 </div>

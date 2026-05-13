@@ -795,9 +795,25 @@ export default function Account() {
                   }`}
                 >
                   <img
-                    src={formData.avatar || user.avatar}
-                    className="w-full h-full object-cover"
+                    src={
+                      formData.avatar ||
+                      user.avatar ||
+                      `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                        user.name || "User"
+                      )}&background=random&color=fff`
+                    }
+                    className="w-full h-full object-cover rounded-full"
                     alt="Profile"
+                    onError={(e) => {
+                      try {
+                        const fallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                          user?.name || "User"
+                        )}&background=random&color=fff`;
+                        if (e?.target) e.target.src = fallback;
+                      } catch (err) {
+                        // ignore
+                      }
+                    }}
                   />
                 </div>
                 {isEditing && (

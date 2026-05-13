@@ -25,18 +25,30 @@ import {
 } from "../services/chat/sessionStore.service.js";
 import { detectIntent } from "../services/chat/intent.service.js";
 import { getLlmModelName, getLlmProviderName } from "../services/chat/llmClient.service.js";
+import {
+  getChatAnalyticsDashboard,
+  recordChatAnalytics,
+} from "../services/chat/chatAnalytics.service.js";
 import { CHAT_SUPPORT_FALLBACK } from "../config/chatKnowledge.js";
 
 // ── Constants ──
 
 const MAX_MESSAGE_LENGTH = 1000;
 const SSE_TIMEOUT_MS = 30000; // 30 seconds hard timeout for streaming
+const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const normalizeMessage = (message) =>
+  String(message || "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/\s{10,}/g, " ")
+    .trim();
 
 // ── Input Validation ──
 
 const validateChatInput = (body) => {
   const { message, sessionId } = body || {};
-  const trimmed = String(message || "").trim();
+  const trimmed = normalizeMessage(message);
 
   if (!trimmed) {
     return { error: "Message is required", status: 400 };
@@ -50,7 +62,7 @@ const validateChatInput = (body) => {
   }
 
   // Validate sessionId format if provided (UUID v4 pattern)
-  if (sessionId && !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sessionId)) {
+  if (sessionId && !UUID_V4_REGEX.test(sessionId)) {
     return { error: "Invalid session ID format", status: 400 };
   }
 
@@ -68,6 +80,7 @@ const sendSseEvent = (res, eventName, payload) => {
 // ── Standard Message Handler ──
 
 export const handleChatMessage = async (req, res) => {
+  const startedAt = Date.now();
   try {
     const validated = validateChatInput(req.body);
     if (validated.error) {
@@ -82,9 +95,23 @@ export const handleChatMessage = async (req, res) => {
       user,
     });
 
+    recordChatAnalytics({
+      intent: result.intent,
+      usedFallback: Boolean(result.meta?.usedFallback),
+      isStreaming: false,
+      durationMs: Date.now() - startedAt,
+    });
+
     return res.status(200).json(result);
   } catch (error) {
     console.error("Chat message handler error:", error.message);
+    recordChatAnalytics({
+      intent: "ERROR",
+      usedFallback: true,
+      isStreaming: false,
+      hadError: true,
+      durationMs: Date.now() - startedAt,
+    });
     return res.status(500).json({
       message: "Chat service temporarily unavailable",
       detail:
@@ -96,6 +123,7 @@ export const handleChatMessage = async (req, res) => {
 // ── Streaming (SSE) Message Handler ──
 
 export const streamChatMessage = async (req, res) => {
+  const startedAt = Date.now();
   // Configure SSE headers
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
@@ -223,10 +251,24 @@ export const streamChatMessage = async (req, res) => {
       },
     });
 
+    recordChatAnalytics({
+      intent,
+      usedFallback: !usedLlm,
+      isStreaming: true,
+      durationMs: Date.now() - startedAt,
+    });
+
     clearTimeout(sseTimeout);
     return res.end();
   } catch (error) {
     console.error("Chat stream handler error:", error.message);
+    recordChatAnalytics({
+      intent: "ERROR",
+      usedFallback: true,
+      isStreaming: true,
+      hadError: true,
+      durationMs: Date.now() - startedAt,
+    });
     sendSseEvent(res, "error", {
       message: "Streaming service temporarily unavailable",
       detail:
@@ -247,10 +289,24 @@ export const clearChatSession = async (req, res) => {
       return res.status(400).json({ message: "sessionId is required" });
     }
 
+    if (!UUID_V4_REGEX.test(sessionId)) {
+      return res.status(400).json({ message: "Invalid session ID format" });
+    }
+
     await clearChatSessionHistory(sessionId);
     return res.status(200).json({ success: true, sessionId });
   } catch (error) {
     console.error("Chat session clear error:", error.message);
     return res.status(500).json({ message: "Could not clear chat session" });
+  }
+};
+
+export const getChatAnalytics = async (req, res) => {
+  try {
+    const dashboard = getChatAnalyticsDashboard();
+    return res.status(200).json(dashboard);
+  } catch (error) {
+    console.error("Chat analytics error:", error.message);
+    return res.status(500).json({ message: "Could not load chat analytics" });
   }
 };

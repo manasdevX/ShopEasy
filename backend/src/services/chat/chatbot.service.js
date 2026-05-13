@@ -45,6 +45,7 @@ import {
   getLlmProviderName,
   getStreamingClient,
 } from "./llmClient.service.js";
+import { recordToolAnalytics } from "./chatAnalytics.service.js";
 import {
   CHAT_BRAND_PERSONA,
   CHAT_SUPPORT_FALLBACK,
@@ -55,6 +56,10 @@ import { semanticProductSearch } from "../../utils/vectorStore.js";
 
 const MAX_TOOL_ROUNDS = 5;
 const MAX_HISTORY_MESSAGES = 16;
+const SUMMARY_TRIGGER_MESSAGES = 10;
+const SUMMARY_KEEP_RECENT_MESSAGES = 6;
+const SUMMARY_MAX_POINTS = 6;
+const SUMMARY_POINT_MAX_LENGTH = 180;
 const LLM_RETRY_DELAY_MS = 5000;
 const LLM_MAX_RETRIES = 2;
 
@@ -161,6 +166,50 @@ const textFromAssistantContent = (content) => {
 };
 
 const trimHistory = (history = []) => history.slice(-MAX_HISTORY_MESSAGES);
+
+const compactText = (text, maxLen = SUMMARY_POINT_MAX_LENGTH) =>
+  String(text || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLen);
+
+const buildHistorySummary = (history = []) => {
+  if (!Array.isArray(history) || history.length <= SUMMARY_TRIGGER_MESSAGES) {
+    return { recentHistory: trimHistory(history), summary: null };
+  }
+
+  const recentHistory = trimHistory(history).slice(-SUMMARY_KEEP_RECENT_MESSAGES);
+  const olderHistory = history.slice(0, -SUMMARY_KEEP_RECENT_MESSAGES);
+
+  const importantUserTurns = olderHistory
+    .filter((entry) => entry.role === "user" && entry.content)
+    .slice(-SUMMARY_MAX_POINTS)
+    .map((entry, index) => `${index + 1}. User asked: ${compactText(entry.content)}`);
+
+  const importantAssistantTurns = olderHistory
+    .filter((entry) => entry.role === "assistant" && entry.content)
+    .slice(-Math.max(2, Math.floor(SUMMARY_MAX_POINTS / 2)))
+    .map((entry, index) => `${index + 1}. Assistant answered: ${compactText(entry.content)}`);
+
+  const summaryPoints = [...importantUserTurns, ...importantAssistantTurns];
+  if (!summaryPoints.length) {
+    return { recentHistory, summary: null };
+  }
+
+  return {
+    recentHistory,
+    summary: `Conversation summary from earlier turns:\n${summaryPoints.join("\n")}`,
+  };
+};
+
+const historyToLlmMessages = (history = []) =>
+  history.map((entry) => ({
+    role: entry.role,
+    content: entry.content,
+    ...(entry.tool_calls ? { tool_calls: entry.tool_calls } : {}),
+    ...(entry.tool_call_id ? { tool_call_id: entry.tool_call_id } : {}),
+    ...(entry.name ? { name: entry.name } : {}),
+  }));
 
 const formatPrice = (price) => {
   if (!price) return "₹0";
@@ -366,15 +415,12 @@ const runLlmConversation = async ({ message, history, user, intent }) => {
 
   const customizedSystemPrompt = SYSTEM_PROMPT.replace("{{CONTEXT_PLACEHOLDER}}", contextText);
 
+  const { recentHistory, summary } = buildHistorySummary(history);
+
   const messages = [
     { role: "system", content: customizedSystemPrompt },
-    ...history.map((entry) => ({
-      role: entry.role,
-      content: entry.content,
-      ...(entry.tool_calls ? { tool_calls: entry.tool_calls } : {}),
-      ...(entry.tool_call_id ? { tool_call_id: entry.tool_call_id } : {}),
-      ...(entry.name ? { name: entry.name } : {}),
-    })),
+    ...(summary ? [{ role: "system", content: summary }] : []),
+    ...historyToLlmMessages(recentHistory),
     { role: "user", content: message },
   ];
 
@@ -408,6 +454,7 @@ const runLlmConversation = async ({ message, history, user, intent }) => {
 
       for (const toolCall of assistantMessage.tool_calls) {
         const toolName = toolCall.function?.name;
+        const toolStart = Date.now();
         let args = {};
 
         try {
@@ -423,6 +470,11 @@ const runLlmConversation = async ({ message, history, user, intent }) => {
         try {
           const toolResponse = await executeChatTool(toolName, args, { user });
           ui = mergeToolUiPayload(ui, toolResponse.ui);
+          recordToolAnalytics({
+            toolName,
+            success: true,
+            durationMs: Date.now() - toolStart,
+          });
 
           messages.push({
             role: "tool",
@@ -432,6 +484,11 @@ const runLlmConversation = async ({ message, history, user, intent }) => {
           });
         } catch (toolError) {
           console.error(`Tool execution failed (${toolName}):`, toolError.message);
+          recordToolAnalytics({
+            toolName,
+            success: false,
+            durationMs: Date.now() - toolStart,
+          });
           messages.push({
             role: "tool",
             tool_call_id: toolCall.id,
@@ -470,6 +527,12 @@ export const runStreamingLlmConversation = async function* ({
   user,
   intent,
 }) {
+  // Order tracking should stay deterministic and auth-aware.
+  // Returning here lets the controller use deterministic fallback flow.
+  if (intent === "ORDER_TRACKING") {
+    return;
+  }
+
   const client = getStreamingClient();
   if (!client) return;
 
@@ -490,15 +553,12 @@ export const runStreamingLlmConversation = async function* ({
 
   const customizedSystemPrompt = SYSTEM_PROMPT.replace("{{CONTEXT_PLACEHOLDER}}", contextText);
 
+  const { recentHistory, summary } = buildHistorySummary(history);
+
   const messages = [
     { role: "system", content: customizedSystemPrompt },
-    ...history.map((entry) => ({
-      role: entry.role,
-      content: entry.content,
-      ...(entry.tool_calls ? { tool_calls: entry.tool_calls } : {}),
-      ...(entry.tool_call_id ? { tool_call_id: entry.tool_call_id } : {}),
-      ...(entry.name ? { name: entry.name } : {}),
-    })),
+    ...(summary ? [{ role: "system", content: summary }] : []),
+    ...historyToLlmMessages(recentHistory),
     { role: "user", content: message },
   ];
 
@@ -537,6 +597,7 @@ export const runStreamingLlmConversation = async function* ({
 
       for (const toolCall of assistantMessage.tool_calls) {
         const toolName = toolCall.function?.name;
+        const toolStart = Date.now();
         let args = {};
 
         try {
@@ -548,6 +609,11 @@ export const runStreamingLlmConversation = async function* ({
         try {
           const toolResponse = await executeChatTool(toolName, args, { user });
           ui = mergeToolUiPayload(ui, toolResponse.ui);
+          recordToolAnalytics({
+            toolName,
+            success: true,
+            durationMs: Date.now() - toolStart,
+          });
 
           messages.push({
             role: "tool",
@@ -556,6 +622,11 @@ export const runStreamingLlmConversation = async function* ({
             content: JSON.stringify(toolResponse.result),
           });
         } catch (toolError) {
+          recordToolAnalytics({
+            toolName,
+            success: false,
+            durationMs: Date.now() - toolStart,
+          });
           messages.push({
             role: "tool",
             tool_call_id: toolCall.id,
@@ -612,15 +683,27 @@ export const processChatMessage = async ({ message, sessionId, user }) => {
 
   let outcome;
 
-  try {
-    outcome = await runLlmConversation({
-      message: userMessage,
-      history,
-      user,
+  // Keep order tracking deterministic so auth state is checked via tools
+  // and we avoid inconsistent LLM-only responses.
+  if (intent === "ORDER_TRACKING") {
+    outcome = await buildFallbackReply({
       intent,
+      message: userMessage,
+      user,
     });
-  } catch (error) {
-    console.error("Chatbot LLM flow failed, using fallback:", error.message);
+  }
+
+  if (!outcome) {
+    try {
+      outcome = await runLlmConversation({
+        message: userMessage,
+        history,
+        user,
+        intent,
+      });
+    } catch (error) {
+      console.error("Chatbot LLM flow failed, using fallback:", error.message);
+    }
   }
 
   if (!outcome) {

@@ -2,9 +2,11 @@ import express from "express";
 import rateLimit from "express-rate-limit";
 import {
   clearChatSession,
+  getChatAnalytics,
   handleChatMessage,
   streamChatMessage,
 } from "../controllers/chat.controller.js";
+import { admin, protect } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
@@ -34,5 +36,6 @@ const chatStreamLimiter = rateLimit({
 router.post("/message", chatMessageLimiter, handleChatMessage);
 router.post("/stream", chatStreamLimiter, streamChatMessage);
 router.delete("/session/:sessionId", clearChatSession);
+router.get("/analytics", protect, admin, getChatAnalytics);
 
 export default router;
