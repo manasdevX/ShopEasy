@@ -4,6 +4,7 @@ import streamifier from "streamifier";
 import dotenv from "dotenv";
 import redisClient from "../config/redis.js"; // <--- 1. IMPORT REDIS CLIENT
 import { buildCatalogRegexTerms, normalizeCatalogQuery, buildSmartSearchConditions, scoreProduct } from "../utils/catalogSearch.js";
+import { validateProductImageAndTitle } from "../utils/aiValidation.js";
 
 // Load environment variables
 dotenv.config();
@@ -373,9 +374,39 @@ export const createProduct = async (req, res) => {
       isBestSeller,
     } = req.body;
 
+    let parsedTags = [];
+    if (tags) {
+      try {
+        parsedTags = JSON.parse(tags);
+      } catch (e) {
+        parsedTags = tags.split(",").map((t) => t.trim());
+      }
+    }
+
     let thumbnail = "";
+    let aiGeneratedTags = [];
+
     if (req.files && req.files.thumbnail) {
-      thumbnail = await uploadToCloudinary(req.files.thumbnail[0].buffer);
+      const thumbnailFile = req.files.thumbnail[0];
+      
+      // AI VALIDATION & TAG GENERATION
+      const aiResult = await validateProductImageAndTitle(
+        thumbnailFile.buffer,
+        thumbnailFile.mimetype,
+        name,
+        category,
+        parsedTags,
+        description
+      );
+
+      if (!aiResult.isValid) {
+        return res.status(400).json({ 
+          message: aiResult.reason || "Uploaded images do not appear to match the product details." 
+        });
+      }
+      
+      aiGeneratedTags = aiResult.generatedTags;
+      thumbnail = await uploadToCloudinary(thumbnailFile.buffer);
     }
 
     let galleryImages = [];
@@ -387,14 +418,13 @@ export const createProduct = async (req, res) => {
     }
 
     const allImages = [thumbnail, ...galleryImages].filter(Boolean);
-
-    let parsedTags = [];
-    if (tags) {
-      try {
-        parsedTags = JSON.parse(tags);
-      } catch (e) {
-        parsedTags = tags.split(",").map((t) => t.trim());
-      }
+    if (aiGeneratedTags && aiGeneratedTags.length > 0) {
+      const existingTagsSet = new Set(parsedTags.map(t => t.toLowerCase()));
+      aiGeneratedTags.forEach(tag => {
+        if (!existingTagsSet.has(tag.toLowerCase())) {
+          parsedTags.push(tag);
+        }
+      });
     }
 
     const product = await Product.create({
