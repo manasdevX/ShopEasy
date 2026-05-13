@@ -12,6 +12,7 @@
  */
 
 import { GoogleGenAI } from "@google/genai";
+import { recordLlmError, recordLlmRateLimit } from "../monitoring.service.js";
 
 let cachedGenAI = null;
 
@@ -316,8 +317,8 @@ const createGeminiClientWrapper = () => {
                 err?.status === 429 || err?.message?.includes("429");
 
               if (is429) {
-                // Rate limit is per-key, not per-model — trying another model won't help.
-                // Throw immediately so the retry wrapper in chatbot.service can handle backoff.
+                // Rate limit — record and throw immediately
+                recordLlmRateLimit(err);
                 throw err;
               }
 
@@ -329,12 +330,14 @@ const createGeminiClientWrapper = () => {
                 continue;
               }
 
-              // Non-retryable error — throw immediately
+              // Non-retryable error — record and throw
+              recordLlmError(err);
               throw err;
             }
           }
 
           // All models exhausted (all returned 503)
+          recordLlmError(lastError);
           throw lastError;
         },
       },

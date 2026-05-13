@@ -4,8 +4,10 @@ import dotenv from "dotenv";
 import app from "./app.js";
 import connectDB from "./config/db.js";
 
-// --- 1. INITIALIZE REDIS ---
+// --- 1. INITIALIZE REDIS & MONITORING ---
 import "./config/redis.js";
+import { setupMonitoring } from "./services/monitoring.service.js";
+import { cleanupStaleSessions } from "./services/sessionManagement.service.js";
 
 dotenv.config();
 
@@ -101,6 +103,15 @@ const startServer = async () => {
     console.log(`🔒 SESSION SECURITY: Cookie Sync Active`);
     console.log("==========================================");
   });
+
+  // ── Cleanup tasks ──
+  // Run stale session cleanup every 24 hours
+  setInterval(() => {
+    console.log("[MAINTENANCE] Running session cleanup...");
+    cleanupStaleSessions().catch((err) =>
+      console.error("[MAINTENANCE] Cleanup error:", err.message)
+    );
+  }, 24 * 60 * 60 * 1000);
 };
 
 startServer();

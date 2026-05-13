@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import axios from "axios";
 import ReactMarkdown from "react-markdown";
+import rehypeSanitize from "rehype-sanitize";
 import {
   Bot,
   MessageCircle,
@@ -122,7 +123,13 @@ const FOLLOW_UP_SUGGESTIONS = [
 const createId = () =>
   `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
+/**
+ * Get auth headers for API requests.
+ * NOTE: httpOnly cookies are automatically sent by the browser.
+ * This function can still be used for Bearer tokens if needed.
+ */
 const getAuthHeaders = () => {
+  // Try to get token from localStorage as fallback
   const token = localStorage.getItem("token");
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
@@ -379,7 +386,7 @@ const ChatBot = () => {
         "Content-Type": "application/json",
         ...getAuthHeaders(),
       },
-      credentials: "include",
+      credentials: "include", // Ensure httpOnly cookies are sent
       body: JSON.stringify({
         message: text,
         sessionId: activeSessionId,
@@ -460,7 +467,7 @@ const ChatBot = () => {
       { message: text, sessionId: activeSessionId },
       {
         headers: { ...getAuthHeaders() },
-        withCredentials: true,
+        withCredentials: true, // Ensure httpOnly cookies are sent
       }
     );
     return data;
@@ -542,7 +549,7 @@ const ChatBot = () => {
     axios
       .delete(`${API_URL}/api/chat/session/${active}`, {
         headers: { ...getAuthHeaders() },
-        withCredentials: true,
+        withCredentials: true, // Ensure httpOnly cookies are sent
       })
       .catch(() => {});
   };
@@ -687,7 +694,20 @@ const ChatBot = () => {
                           }`}
                         >
                           <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-headings:my-1.5 [&>p:first-child]:mt-0 [&>p:last-child]:mb-0 prose-strong:text-inherit">
-                            <ReactMarkdown>{msg.message}</ReactMarkdown>
+                            <ReactMarkdown
+                              rehypePlugins={[rehypeSanitize]}
+                              allowedElements={[
+                                "p", "br", "strong", "em", "code", "pre",
+                                "ul", "ol", "li", "h1", "h2", "h3", "h4", "h5", "h6",
+                                "blockquote", "hr", "table", "thead", "tbody", "tr", "td", "th",
+                                "a"
+                              ]}
+                              allowedAttributes={{
+                                "a": ["href", "title"]
+                              }}
+                            >
+                              {msg.message}
+                            </ReactMarkdown>
                           </div>
                         </div>
                         {msg.id !== "assistant-initial" && (
