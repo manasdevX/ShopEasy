@@ -20,20 +20,71 @@ const getAuthCookieOptions = (maxAgeMs = 7 * 24 * 60 * 60 * 1000) => {
   };
 };
 
+const normalizeClientIp = (value) => {
+  const rawIp = String(value || "").trim();
+  if (!rawIp) return "unknown";
+  if (rawIp === "::1" || rawIp === "::ffff:127.0.0.1") return "127.0.0.1";
+  return rawIp;
+};
+
+const getClientSessionMeta = (req) => {
+  const userAgent = req.headers["user-agent"] || "unknown";
+  const forwardedFor = req.headers["x-forwarded-for"];
+  const rawIpAddress = (Array.isArray(forwardedFor)
+    ? forwardedFor[0]
+    : forwardedFor?.split(",")[0]) || req.ip;
+  const ipAddress = normalizeClientIp(rawIpAddress);
+  const ipCandidates = [...new Set([ipAddress, String(rawIpAddress || "").trim()])].filter(Boolean);
+
+  if (ipAddress === "127.0.0.1") {
+    ipCandidates.push("::1", "::ffff:127.0.0.1");
+  }
+
+  return {
+    userAgent,
+    ipAddress,
+    ipCandidates: [...new Set(ipCandidates)],
+  };
+};
+
+const clearSameDeviceSession = async (Model, queryKey, id, req) => {
+  const { userAgent, ipAddress, ipCandidates } = getClientSessionMeta(req);
+
+  await Model.deleteMany({
+    [queryKey]: id,
+    userAgent,
+    ipAddress: { $in: ipCandidates },
+  });
+
+  return { userAgent, ipAddress };
+};
+
 /**
  * 🟢 SESSION LIMITER HELPER
  * Blocks login if the maximum number of concurrent sessions is reached.
  * Returns a 403 Forbidden error to be handled by the frontend toast.
  */
 const checkSessionLimit = async (Model, queryKey, id, limit = 2) => {
-  const sessionCount = await Model.countDocuments({ [queryKey]: id });
+  const now = new Date();
 
-  if (sessionCount >= limit) {
-    const error = new Error(
-      `Maximum of ${limit} active sessions reached. Please logout from another device first.`
-    );
-    error.statusCode = 403; // Forbidden
-    throw error;
+  // Remove stale sessions first so limits are enforced on currently active devices only.
+  await Model.deleteMany({
+    [queryKey]: id,
+    expiresAt: { $lte: now },
+  });
+
+  const activeSessions = await Model.find({
+    [queryKey]: id,
+    expiresAt: { $gt: now },
+  })
+    .sort({ createdAt: -1 })
+    .select("_id")
+    .lean();
+
+  // Keep the newest (limit - 1) sessions so the current login can become the latest one.
+  if (activeSessions.length >= limit) {
+    const sessionsToDelete = activeSessions.slice(limit - 1).map((s) => s._id);
+    await Model.deleteMany({ _id: { $in: sessionsToDelete } });
   }
 };
 
@@ -236,14 +287,15 @@ export const loginUser = async (req, res) => {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    // 🔴 HARD BLOCK: Check if user already has 2 active sessions
-    try {
-      await checkSessionLimit(Session, "user", user._id, 2);
-    } catch (limitError) {
-      return res
-        .status(limitError.statusCode)
-        .json({ message: limitError.message });
-    }
+    const { userAgent, ipAddress } = await clearSameDeviceSession(
+      Session,
+      "user",
+      user._id,
+      req
+    );
+
+    // Ensure at most 2 active sessions by pruning oldest entries before creating this one.
+    await checkSessionLimit(Session, "user", user._id, 2);
 
     const token = generateToken(user._id);
 
@@ -251,8 +303,8 @@ export const loginUser = async (req, res) => {
       user: user._id,
       refreshToken: token,
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      userAgent: req.headers["user-agent"],
-      ipAddress: req.ip,
+      userAgent,
+      ipAddress,
     });
 
     res.cookie("accessToken", token, getAuthCookieOptions());
@@ -283,18 +335,19 @@ export const googleAuth = async (req, res) => {
 
     if (user) {
       const authToken = generateToken(user._id);
+      let clientMeta;
 
-      // 🔴 HARD BLOCK: check limit before creating new Google session
-      try {
-        if (role === "seller") {
-          await checkSessionLimit(SellerSession, "seller", user._id, 2);
-        } else {
-          await checkSessionLimit(Session, "user", user._id, 2);
-        }
-      } catch (limitError) {
-        return res
-          .status(limitError.statusCode)
-          .json({ message: limitError.message });
+      if (role === "seller") {
+        clientMeta = await clearSameDeviceSession(
+          SellerSession,
+          "seller",
+          user._id,
+          req
+        );
+        await checkSessionLimit(SellerSession, "seller", user._id, 2);
+      } else {
+        clientMeta = await clearSameDeviceSession(Session, "user", user._id, req);
+        await checkSessionLimit(Session, "user", user._id, 2);
       }
 
       if (role === "seller") {
@@ -302,8 +355,8 @@ export const googleAuth = async (req, res) => {
           seller: user._id,
           refreshToken: authToken,
           expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-          userAgent: req.headers["user-agent"],
-          ipAddress: req.ip,
+          userAgent: clientMeta.userAgent,
+          ipAddress: clientMeta.ipAddress,
         });
 
         if (req.session) {
@@ -316,8 +369,8 @@ export const googleAuth = async (req, res) => {
           user: user._id,
           refreshToken: authToken,
           expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-          userAgent: req.headers["user-agent"],
-          ipAddress: req.ip,
+          userAgent: clientMeta.userAgent,
+          ipAddress: clientMeta.ipAddress,
         });
       }
 
@@ -405,8 +458,8 @@ export const logoutUser = async (req, res) => {
     // 1. Delete from custom models
     if (token) {
       await Promise.all([
-        Session.findOneAndDelete({ refreshToken: token }),
-        SellerSession.findOneAndDelete({ refreshToken: token }),
+        Session.deleteMany({ refreshToken: token }),
+        SellerSession.deleteMany({ refreshToken: token }),
       ]);
     }
 
