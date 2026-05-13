@@ -223,7 +223,7 @@ const convertGeminiResponse = (response) => {
 
   // Text-only response
   const textContent = parts
-    .filter((p) => p.text)
+    .filter((p) => p.text !== undefined)
     .map((p) => p.text)
     .join("");
 
