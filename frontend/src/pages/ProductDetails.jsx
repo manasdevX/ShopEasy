@@ -87,6 +87,18 @@ export default function ProductDetails() {
             .filter((img, index, self) => self.indexOf(img) === index);
           setAllImages(mergedImages);
           checkWishlistStatus();
+
+          // Track this product view for personalized recommendations (fire-and-forget)
+          if (isLoggedIn && data?.category) {
+            fetch(`${SAFE_API_URL}/api/user/track-interest`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({ category: data.category, productId: id }),
+            }).catch(() => {});
+          }
         } else {
           showError("Product not found");
           navigate("/");

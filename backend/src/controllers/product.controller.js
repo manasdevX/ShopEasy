@@ -3,7 +3,7 @@ import cloudinary from "cloudinary";
 import streamifier from "streamifier";
 import dotenv from "dotenv";
 import redisClient from "../config/redis.js"; // <--- 1. IMPORT REDIS CLIENT
-import { buildCatalogRegexTerms, normalizeCatalogQuery, buildSmartSearchConditions, scoreProduct , hasDirectQueryHit, hasMeaningfulLexicalMatch, normalizeCatalogQuery, suggestQueryCorrection,} from "../utils/catalogSearch.js";
+import { buildCatalogRegexTerms, normalizeCatalogQuery, buildSmartSearchConditions, scoreProduct, hasDirectQueryHit, hasMeaningfulLexicalMatch, suggestQueryCorrection } from "../utils/catalogSearch.js";
 import { validateProductImageAndTitle } from "../utils/aiValidation.js";
 import { semanticProductSearch } from "../utils/vectorStore.js";
 
