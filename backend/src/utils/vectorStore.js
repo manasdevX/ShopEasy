@@ -1,11 +1,12 @@
 /**
  * ─────────────────────────────────────────────────────────────
- *  vectorStore.js — Embedding Generation & Semantic Search
+ *  vectorStore.js — Embedding Generation & Semantic Search (v2)
  * ─────────────────────────────────────────────────────────────
- *  Uses Google's text-embedding-004 model via @google/genai
+ *  Uses Google's gemini-embedding-001 model via @google/genai
  *  to generate vector embeddings for product text, and performs
  *  cosine-similarity-based semantic search against the
- *  Product collection for RAG context retrieval.
+ *  Product collection. Now with intent-aware thresholds,
+ *  graceful failure handling, and async embedding queue.
  * ─────────────────────────────────────────────────────────────
  */
 
@@ -18,6 +19,99 @@ dotenv.config();
 const genAI = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
 });
+
+// ── In-Memory Retry Queue for Failed Embeddings ──
+
+const embeddingRetryQueue = [];
+let retryTimerActive = false;
+const MAX_RETRY_QUEUE = 50;
+const RETRY_INTERVAL_MS = 60000;
+
+const processRetryQueue = async () => {
+  if (embeddingRetryQueue.length === 0) {
+    retryTimerActive = false;
+    return;
+  }
+
+  const batch = embeddingRetryQueue.splice(0, 5);
+  for (const { productId, text } of batch) {
+    try {
+      const embedding = await generateEmbedding(text);
+      if (embedding) {
+        await Product.updateOne(
+          { _id: productId },
+          { $set: { embeddings: embedding } }
+        );
+      }
+    } catch (err) {
+      console.error(`Embedding retry failed for ${productId}: ${err.message}`);
+    }
+  }
+
+  if (embeddingRetryQueue.length > 0) {
+    setTimeout(processRetryQueue, RETRY_INTERVAL_MS);
+  } else {
+    retryTimerActive = false;
+  }
+};
+
+/**
+ * Queue a product for async embedding generation.
+ * Does NOT block the caller. Failures are silently retried.
+ */
+export const queueEmbeddingGeneration = (productId, text) => {
+  if (!productId || !text) return;
+
+  if (embeddingRetryQueue.length >= MAX_RETRY_QUEUE) {
+    embeddingRetryQueue.shift();
+  }
+
+  embeddingRetryQueue.push({ productId, text });
+
+  if (!retryTimerActive) {
+    retryTimerActive = true;
+    setTimeout(processRetryQueue, 2000);
+  }
+};
+
+/**
+ * Generate embedding for a product and save it asynchronously.
+ * This function does NOT block — it fires and forgets.
+ */
+export const generateAndSaveProductEmbedding = (product) => {
+  if (!product || !product._id) return;
+
+  const textParts = [
+    product.name,
+    product.brand,
+    product.category,
+    product.subCategory,
+    product.description,
+    ...(product.tags || []),
+  ].filter(Boolean);
+
+  const text = textParts.join(" ").slice(0, 2000);
+  if (!text.trim()) return;
+
+  generateEmbedding(text)
+    .then(async (embedding) => {
+      if (embedding) {
+        try {
+          await Product.updateOne(
+            { _id: product._id },
+            { $set: { embeddings: embedding } }
+          );
+        } catch (saveErr) {
+          console.error(`Embedding save failed for ${product._id}: ${saveErr.message}`);
+          queueEmbeddingGeneration(product._id, text);
+        }
+      }
+    })
+    .catch((err) => {
+      console.error(`Embedding generation failed for ${product._id}: ${err.message}`);
+      queueEmbeddingGeneration(product._id, text);
+    });
+};
 
 // ── Embedding Generation ──
 
@@ -34,7 +128,7 @@ export const generateEmbedding = async (text) => {
         },
       ],
       config: {
-        outputDimensionality: 768, // Match existing product embeddings dimension
+        outputDimensionality: 768,
       },
     });
 
@@ -46,7 +140,7 @@ export const generateEmbedding = async (text) => {
 
     return vector;
   } catch (err) {
-    console.error("❌ Embedding Error:", err.message);
+    console.error("Embedding generation error:", err.message);
     return null;
   }
 };
@@ -67,31 +161,27 @@ export const cosineSimilarity = (vecA, vecB) => {
   return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
 };
 
-// ── Semantic Product Search (RAG Retrieval) ──
+// ── Semantic Product Search (Intent-Aware) ──
 
 /**
  * Searches the product catalog using vector similarity.
- * 1. Generates an embedding for the user's query text.
- * 2. Fetches all products that have embeddings from MongoDB.
- * 3. Computes cosine similarity between query and each product.
- * 4. Returns the top-K most similar products above a threshold.
+ * Now uses intent-aware similarity thresholds.
  *
  * @param {string} queryText - The user's natural language query
  * @param {number} limit     - Max number of results to return (default 5)
+ * @param {Object} options   - Optional config { specificity: "broad"|"narrow"|"unknown" }
  * @returns {Array}          - Array of raw product documents
  */
-export const semanticProductSearch = async (queryText, limit = 5) => {
+export const semanticProductSearch = async (queryText, limit = 5, options = {}) => {
   try {
     const queryVector = await generateEmbedding(queryText);
     if (!queryVector) {
-      console.warn("⚠️ Semantic search: failed to generate query embedding");
       return [];
     }
 
-    // Fetch products that have embeddings and are available
     const products = await Product.find({
       embeddings: { $exists: true, $not: { $size: 0 } },
-      isAvailable: true,
+      isAvailable: { $ne: false },
       stock: { $gt: 0 },
     })
       .select(
@@ -100,33 +190,10 @@ export const semanticProductSearch = async (queryText, limit = 5) => {
       .lean();
 
     if (products.length === 0) {
-      console.warn("⚠️ Semantic search: no products with embeddings found");
       return [];
     }
 
-    // Detect apparel-intent queries to adjust scoring weights
-    const APPAREL_KEYWORDS = /\b(clothes|apparel|fashion|outfit|garment|wear|clothing|dress|shirt|pants|jacket|shoe|footwear|attire)\b/i;
-    const isApparelIntent = APPAREL_KEYWORDS.test(queryText);
-
-    // Apparel categories for boosting
-    const APPAREL_CATEGORIES = new Set([
-      "womens-dresses",
-      "mens-shirts",
-      "tops",
-      "bottoms",
-      "mens-shoes",
-      "womens-shoes",
-      "activewear",
-      "formal-wear",
-      "casual-wear",
-      "accessories",
-      "outerwear",
-      "innerwear",
-      "footwear",
-      "sunglasses",
-      "womens-watches",
-      "mens-watches",
-    ]);
+    const specificity = options.specificity || "unknown";
 
     const categoryCentroids = new Map();
     const categoryCounts = new Map();
@@ -153,11 +220,9 @@ export const semanticProductSearch = async (queryText, limit = 5) => {
       );
     }
 
-    // Adjust weights based on intent: apparel queries use heavier category weighting
-    const PRODUCT_WEIGHT = isApparelIntent ? 0.5 : 0.7;
-    const CATEGORY_WEIGHT = isApparelIntent ? 0.5 : 0.3;
+    const PRODUCT_WEIGHT = specificity === "broad" ? 0.5 : 0.7;
+    const CATEGORY_WEIGHT = specificity === "broad" ? 0.5 : 0.3;
 
-    // Score each product by a blend of product similarity and category affinity
     const scored = products.map((product) => {
       const productScore = cosineSimilarity(queryVector, product.embeddings);
       const categoryKey = String(product.category || "uncategorized").toLowerCase();
@@ -166,11 +231,7 @@ export const semanticProductSearch = async (queryText, limit = 5) => {
         categoryCentroids.get(categoryKey) || product.embeddings
       );
 
-      // For apparel-intent queries, apply category boost multiplier
-      let finalScore = (productScore * PRODUCT_WEIGHT) + (categoryScore * CATEGORY_WEIGHT);
-      if (isApparelIntent && APPAREL_CATEGORIES.has(categoryKey)) {
-        finalScore *= 1.3; // 30% boost for apparel categories during apparel-intent queries
-      }
+      const finalScore = (productScore * PRODUCT_WEIGHT) + (categoryScore * CATEGORY_WEIGHT);
 
       return {
         product,
@@ -178,16 +239,22 @@ export const semanticProductSearch = async (queryText, limit = 5) => {
       };
     });
 
-    // Sort descending by score
     scored.sort((a, b) => b.score - a.score);
 
-    // Return top-K products above the similarity threshold
-    const SIMILARITY_THRESHOLD = isApparelIntent ? 0.46 : 0.56;
+    // Intent-aware thresholds
+    let SIMILARITY_THRESHOLD;
+    if (specificity === "narrow") {
+      SIMILARITY_THRESHOLD = 0.62;
+    } else if (specificity === "broad") {
+      SIMILARITY_THRESHOLD = 0.52;
+    } else {
+      SIMILARITY_THRESHOLD = 0.56;
+    }
+
     const results = scored
       .filter((s) => s.score > SIMILARITY_THRESHOLD)
       .slice(0, limit)
       .map((s, index) => {
-        // Strip embeddings from the returned object to keep payloads small
         const { embeddings, ...productWithoutEmbeddings } = s.product;
         return {
           ...productWithoutEmbeddings,
@@ -196,13 +263,9 @@ export const semanticProductSearch = async (queryText, limit = 5) => {
         };
       });
 
-    console.log(
-      `🔍 Semantic search: "${queryText}" → ${results.length} results (top score: ${scored[0]?.score?.toFixed(3) || "N/A"})`
-    );
-
     return results;
   } catch (err) {
-    console.error("❌ Semantic Search Error:", err.message);
+    console.error("Semantic search error:", err.message);
     return [];
   }
 };

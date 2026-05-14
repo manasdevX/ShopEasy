@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import {
   Search,
   Loader2,
@@ -12,6 +12,9 @@ import {
   Check,
   XCircle,
   ArrowUpDown,
+  Sparkles,
+  ShoppingBag,
+  RefreshCw,
 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
@@ -20,8 +23,25 @@ import ProductCard from "../components/ProductCard";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
+// ── Skeleton Loader Component ──
+const ProductCardSkeleton = () => (
+  <div className="bg-white dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800 overflow-hidden animate-pulse">
+    <div className="aspect-square bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-700" />
+    <div className="p-4 space-y-3">
+      <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded-full w-3/4" />
+      <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded-full w-1/2" />
+      <div className="flex items-center gap-2">
+        <div className="h-5 bg-slate-200 dark:bg-slate-700 rounded-full w-16" />
+        <div className="h-4 bg-slate-100 dark:bg-slate-800 rounded-full w-12" />
+      </div>
+      <div className="h-3 bg-slate-100 dark:bg-slate-800 rounded-full w-1/3" />
+    </div>
+  </div>
+);
+
 export default function SearchResults() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const query = (searchParams.get("q") || searchParams.get("keyword") || "").trim();
 
   // --- States ---
@@ -31,6 +51,7 @@ export default function SearchResults() {
   const [totalCount, setTotalCount] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [correctedQuery, setCorrectedQuery] = useState(null);
+  const [queryIntent, setQueryIntent] = useState(null);
 
   const currentPage = Math.max(1, Number.parseInt(searchParams.get("page") || "1", 10) || 1);
   const selectedCategory = searchParams.get("category") || "";
@@ -100,6 +121,7 @@ export default function SearchResults() {
           setTotalCount(data.total || 0);
           setTotalPages(data.totalPages || data.pages || 1);
           setCorrectedQuery(data.correctedQuery || null);
+          setQueryIntent(data.queryIntent || null);
           if (data.facets) setFacets(data.facets);
         } else {
           throw new Error(data.message || "Failed to fetch");
@@ -186,10 +208,24 @@ export default function SearchResults() {
                     onClick={clearFilters}
                     className="flex items-center gap-1 text-[11px] font-bold text-red-500 hover:text-red-600 bg-red-50 dark:bg-red-500/10 px-2 py-1 rounded-full transition-colors"
                   >
-                    <XCircle size={12} /> Clear
+                    <XCircle size={12} />Clear
                   </button>
                 )}
               </div>
+
+              {/* Query Intent Chip */}
+              {queryIntent?.broadCategoryLabel && (
+                <div className="mb-6 flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-500/10 dark:to-amber-500/10 rounded-xl border border-orange-100 dark:border-orange-500/20">
+                  <Sparkles size={14} className="text-orange-500 shrink-0" />
+                  <span className="text-xs font-bold text-orange-700 dark:text-orange-400">
+                    Searching in{" "}
+                    <span className="capitalize">{queryIntent.broadCategoryLabel}</span>
+                    {queryIntent.specificity === "narrow" && queryIntent.primaryIntent && (
+                      <> → <span className="capitalize">{queryIntent.primaryIntent}</span></>
+                    )}
+                  </span>
+                </div>
+              )}
 
               {/* 1. DYNAMIC CATEGORIES */}
               {facets.categories?.length > 0 && (
@@ -212,7 +248,6 @@ export default function SearchResults() {
                         }`}
                       >
                         <div className="flex items-center gap-3">
-                          {/* Custom Checkbox */}
                           <div
                             className={`w-5 h-5 rounded-[6px] border-[1.5px] flex items-center justify-center transition-all ${
                               selectedCategory === cat._id
@@ -317,7 +352,6 @@ export default function SearchResults() {
                         }`}
                       >
                         <div className="flex items-center gap-3">
-                          {/* Radio Circle */}
                           <div
                             className={`w-5 h-5 rounded-full border-[1.5px] flex items-center justify-center transition-all ${
                               selectedRating === star
@@ -377,7 +411,7 @@ export default function SearchResults() {
 
           {/* --- MAIN CONTENT AREA --- */}
           <div className="flex-grow">
-            {/* ... Content Header ... */}
+            {/* Content Header */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-orange-500 font-bold text-xs uppercase tracking-[0.2em]">
@@ -401,13 +435,15 @@ export default function SearchResults() {
                     <span>?</span>
                   </div>
                 )}
-                <p className="text-slate-500 dark:text-slate-400 font-medium">
-                  We found{" "}
-                  <span className="text-slate-900 dark:text-white font-black text-lg">
-                    {totalCount}
-                  </span>{" "}
-                  products matching your criteria.
-                </p>
+                {!loading && (
+                  <p className="text-slate-500 dark:text-slate-400 font-medium">
+                    We found{" "}
+                    <span className="text-slate-900 dark:text-white font-black text-lg">
+                      {totalCount}
+                    </span>{" "}
+                    product{totalCount !== 1 ? "s" : ""} matching your criteria.
+                  </p>
+                )}
               </div>
 
               {/* Sort By Dropdown */}
@@ -434,27 +470,53 @@ export default function SearchResults() {
             </div>
 
             {loading ? (
-              <div className="flex flex-col items-center justify-center py-32">
-                <Loader2
-                  className="animate-spin text-orange-500 mb-4"
-                  size={48}
-                />
+              /* ── Skeleton Grid ── */
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <ProductCardSkeleton key={i} />
+                ))}
               </div>
             ) : items.length === 0 ? (
+              /* ── Enhanced Empty State ── */
               <div className="text-center py-24 bg-white dark:bg-slate-900/50 rounded-[3rem] border border-dashed border-slate-200 dark:border-slate-800">
-                <PackageSearch
-                  className="text-slate-300 dark:text-slate-600 mx-auto mb-6"
-                  size={48}
-                />
-                <h3 className="text-2xl font-black text-slate-800 dark:text-white">
+                <div className="mx-auto w-20 h-20 rounded-full bg-gradient-to-br from-orange-100 to-amber-100 dark:from-orange-500/10 dark:to-amber-500/10 flex items-center justify-center mb-6">
+                  <PackageSearch
+                    className="text-orange-500"
+                    size={36}
+                  />
+                </div>
+                <h3 className="text-2xl font-black text-slate-800 dark:text-white mb-2">
                   No products found
                 </h3>
-                <button
-                  onClick={clearFilters}
-                  className="mt-8 px-8 py-3 bg-slate-900 text-white font-bold rounded-2xl hover:scale-105 transition-transform"
-                >
-                  Clear All Filters
-                </button>
+                <p className="text-slate-500 dark:text-slate-400 max-w-md mx-auto mb-8">
+                  {hasFilters
+                    ? "Try adjusting your filters or search with different keywords."
+                    : `We couldn't find any products matching "${query}". Try a different search term.`}
+                </p>
+                <div className="flex flex-wrap justify-center gap-3">
+                  {hasFilters && (
+                    <button
+                      onClick={clearFilters}
+                      className="inline-flex items-center gap-2 px-6 py-3 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-bold rounded-2xl hover:scale-105 transition-transform"
+                    >
+                      <XCircle size={16} /> Clear Filters
+                    </button>
+                  )}
+                  <button
+                    onClick={() => navigate("/")}
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-orange-500 text-white font-bold rounded-2xl hover:scale-105 transition-transform"
+                  >
+                    <ShoppingBag size={16} /> Browse All Products
+                  </button>
+                  {correctedQuery && correctedQuery !== query && (
+                    <button
+                      onClick={() => updateParams({ q: correctedQuery }, { resetPage: true })}
+                      className="inline-flex items-center gap-2 px-6 py-3 border-2 border-orange-500 text-orange-500 font-bold rounded-2xl hover:bg-orange-50 dark:hover:bg-orange-500/10 transition-colors"
+                    >
+                      <RefreshCw size={16} /> Try "{correctedQuery}"
+                    </button>
+                  )}
+                </div>
               </div>
             ) : (
               <>
@@ -464,10 +526,9 @@ export default function SearchResults() {
                   ))}
                 </div>
 
-                {/* --- UPDATED PAGINATION CONTROLS (HIGH VISIBILITY) --- */}
+                {/* --- PAGINATION CONTROLS --- */}
                 {totalPages > 1 && (
                   <div className="flex justify-center items-center gap-4 mt-16 pb-8">
-                    {/* Previous Button */}
                     <button
                       onClick={() => handlePageChange(currentPage - 1)}
                       disabled={currentPage === 1}
@@ -480,7 +541,6 @@ export default function SearchResults() {
                       <ChevronLeft size={18} /> Previous
                     </button>
 
-                    {/* Page Indicator */}
                     <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800">
                       <span className="text-slate-500 text-sm font-medium">
                         Page
@@ -494,7 +554,6 @@ export default function SearchResults() {
                       </span>
                     </div>
 
-                    {/* Next Button */}
                     <button
                       onClick={() => handlePageChange(currentPage + 1)}
                       disabled={currentPage === totalPages}

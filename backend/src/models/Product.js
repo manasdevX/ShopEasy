@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { findTermInTaxonomy } from "../utils/searchTaxonomy.js";
 
 /* ======================================================
    1. REVIEW SCHEMA (Sub-document)
@@ -107,7 +108,7 @@ const productSchema = new mongoose.Schema(
     rating: {
       type: Number,
       default: 0,
-      index: true, // Added index for fast sorting/filtering
+      index: true,
     },
     numReviews: {
       type: Number,
@@ -126,8 +127,15 @@ const productSchema = new mongoose.Schema(
       default: false,
     },
     embeddings: {
-      type: [Number], // Array of numbers (vectors)
+      type: [Number],
       default: [],
+    },
+
+    // 🔹 SEARCH KEYWORDS (Auto-populated from taxonomy)
+    searchKeywords: {
+      type: [String],
+      default: [],
+      index: true,
     },
   },
   {
@@ -148,20 +156,73 @@ productSchema.pre("save", function (next) {
       ((this.mrp - this.price) / this.mrp) * 100
     );
   }
+
+  // Auto-generate search keywords from product data + taxonomy
+  try {
+    const keywords = new Set();
+
+    if (this.category) {
+      const node = findTermInTaxonomy(this.category);
+      if (node) {
+        if (node.ancestors) node.ancestors.forEach((a) => keywords.add(a.toLowerCase()));
+        if (node.synonyms) node.synonyms.forEach((s) => keywords.add(s.toLowerCase()));
+        if (node.matchedTerms) node.matchedTerms.forEach((t) => keywords.add(t.toLowerCase()));
+        keywords.add(node.term.toLowerCase());
+        if (node.rootKey) keywords.add(node.rootKey.toLowerCase());
+      }
+      keywords.add(this.category.toLowerCase());
+    }
+
+    if (this.subCategory) {
+      keywords.add(this.subCategory.toLowerCase());
+      const subNode = findTermInTaxonomy(this.subCategory);
+      if (subNode) {
+        if (subNode.ancestors) subNode.ancestors.forEach((a) => keywords.add(a.toLowerCase()));
+        if (subNode.synonyms) subNode.synonyms.forEach((s) => keywords.add(s.toLowerCase()));
+      }
+    }
+
+    // Add name tokens (non-stopword, length > 2)
+    const stopwords = new Set(["the", "a", "an", "and", "or", "for", "of", "in", "on", "to", "with", "by"]);
+    const nameTokens = (this.name || "").toLowerCase().split(/\s+/).filter((t) => t.length > 2 && !stopwords.has(t));
+    nameTokens.forEach((t) => keywords.add(t));
+
+    if (this.brand) keywords.add(this.brand.toLowerCase());
+
+    (this.tags || []).forEach((t) => {
+      if (t) keywords.add(t.toLowerCase());
+    });
+
+    this.searchKeywords = [...keywords];
+  } catch (err) {
+    // Taxonomy lookup failure should not block product save
+    console.error("searchKeywords generation failed:", err.message);
+  }
+
   next();
 });
 
-// ⭐ KEY UPDATE: Text Index for Search Bar
-// This allows you to search "black" and find it in Name, Brand, OR Tags
-productSchema.index({
-  name: "text",
-  description: "text",
-  brand: "text",
-  tags: "text",
-});
+// Text Index for Search Bar with weights
+productSchema.index(
+  {
+    name: "text",
+    description: "text",
+    brand: "text",
+    tags: "text",
+    searchKeywords: "text",
+  },
+  {
+    weights: {
+      name: 10,
+      searchKeywords: 8,
+      brand: 6,
+      tags: 5,
+      description: 1,
+    },
+  }
+);
 
-// ⭐ KEY UPDATE: Compound Index for Filters
-// Speeds up queries like "Price between 1000-5000 AND Rating >= 4"
+// Compound Index for Filters
 productSchema.index({ price: 1, rating: -1 });
 
 export default mongoose.model("Product", productSchema);
