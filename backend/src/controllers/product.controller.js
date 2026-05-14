@@ -232,9 +232,9 @@ const runTwoLayerSearchPipeline = async ({
       return new Date(b.createdAt) - new Date(a.createdAt);
     });
 
-    // Still filter out unavailable products for non-relevance sorts
+    // Still filter out unavailable products for non-relevance sorts (but keep zero stock items)
     items = items.filter((item) =>
-      Number(item.stock || 0) > 0 && item.isAvailable !== false
+      item.isAvailable !== false
     );
   }
 
@@ -340,7 +340,6 @@ export const getAllProducts = async (req, res) => {
     const effectiveMaxPrice = maxPrice ?? intent?.priceHint?.max ?? null;
 
     const baseFilters = {
-      stock: { $gt: 0 },
       isAvailable: { $ne: false },
     };
 

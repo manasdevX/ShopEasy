@@ -595,8 +595,7 @@ export const validateSearchResults = (products, intent, scores = null) => {
   let validated = [];
 
   for (const product of products) {
-    // Remove out of stock / unavailable
-    if (Number(product.stock || 0) <= 0) continue;
+    // Remove unavailable (but keep out of stock to display them with zero quantity)
     if (product.isAvailable === false) continue;
 
     // Deduplicate
