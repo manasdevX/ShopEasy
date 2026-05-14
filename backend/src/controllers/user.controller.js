@@ -612,7 +612,9 @@ export const getAiRecommendations = async (req, res) => {
   } catch (error) {
     logger.error("Failed to fetch recommendations", error);
 
-    const statusCode = error.code === ERROR_CODES.USER_NOT_FOUND ? 404 : 500;
+    const statusCode = error.code === ERROR_CODES.USER_NOT_FOUND ? 404
+      : error.code === ERROR_CODES.SERVICE_UNAVAILABLE ? 503
+      : 500;
     const message =
       error.code === ERROR_CODES.USER_NOT_FOUND
         ? "User not found"

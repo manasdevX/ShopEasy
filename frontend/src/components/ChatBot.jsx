@@ -421,7 +421,8 @@ const ChatBot = () => {
   const sendStreamMessage = async (
     text,
     assistantMessageId,
-    activeSessionId
+    activeSessionId,
+    streamState
   ) => {
     const controller = new AbortController();
     const timeoutId = setTimeout(
@@ -472,8 +473,10 @@ const ChatBot = () => {
 
         switch (parsed.eventName) {
           case "meta":
-            if (parsed.payload?.sessionId)
+            if (parsed.payload?.sessionId) {
+              streamState.sessionId = parsed.payload.sessionId;
               setSessionId(parsed.payload.sessionId);
+            }
             break;
 
           case "tool_start":
@@ -505,7 +508,7 @@ const ChatBot = () => {
 
     if (streamedText) {
       return {
-        sessionId: activeSessionId,
+        sessionId: streamState.sessionId || activeSessionId,
         reply: streamedText,
         ui: {},
       };
@@ -558,6 +561,7 @@ const ChatBot = () => {
 
     const activeSessionId =
       sessionId || localStorage.getItem(CHAT_SESSION_KEY) || null;
+    const streamState = { sessionId: activeSessionId };
 
     try {
       let payload = null;
@@ -566,18 +570,19 @@ const ChatBot = () => {
         payload = await sendStreamMessage(
           textToSend,
           assistantMessageId,
-          activeSessionId
+          activeSessionId,
+          streamState
         );
       } catch {
         payload = await retryOperation(
-          () => sendFallbackMessage(textToSend, activeSessionId),
+          () => sendFallbackMessage(textToSend, streamState.sessionId || activeSessionId),
           { retries: 1, delayMs: 700 }
         );
       }
 
       if (!payload) {
         payload = await retryOperation(
-          () => sendFallbackMessage(textToSend, activeSessionId),
+          () => sendFallbackMessage(textToSend, streamState.sessionId || activeSessionId),
           { retries: 1, delayMs: 700 }
         );
       }

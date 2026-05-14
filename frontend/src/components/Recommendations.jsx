@@ -41,6 +41,7 @@ const Recommendations = () => {
   const abortControllerRef = useRef(null);
   const retryTimeoutRef = useRef(null);
   const fetchLockRef = useRef(false); // Prevent concurrent fetches
+  const requestIdRef = useRef(0); // Generation counter — guards lock release against stale cancelled requests
   const searchRefreshTimeoutRef = useRef(null); // Debounce search-intent refreshes
 
   /**
@@ -48,6 +49,7 @@ const Recommendations = () => {
    * @param {number} retryCount - Current retry attempt number
    */
   const fetchRecsWithRetry = async (retryCount = 0) => {
+    const myId = requestIdRef.current;
     try {
       const token = localStorage.getItem("token");
       if (!token) {
@@ -97,9 +99,10 @@ const Recommendations = () => {
         `[Recommendations] Fetched ${data.products.length} products in ${fetchTime.toFixed(0)}ms`
       );
     } catch (err) {
-      // Don't retry if request was cancelled — but always free the lock
+      // Don't retry if request was cancelled. Only release the lock if this
+      // is still the active request — a newer fetchRecs() call owns it now.
       if (axios.isCancel(err)) {
-        fetchLockRef.current = false;
+        if (myId === requestIdRef.current) fetchLockRef.current = false;
         return;
       }
 
@@ -127,6 +130,7 @@ const Recommendations = () => {
 
         setRetrying(true);
         retryTimeoutRef.current = setTimeout(() => {
+          if (myId !== requestIdRef.current) return; // superseded by a newer fetchRecs() call
           fetchLockRef.current = false;
           fetchRecsWithRetry(retryCount + 1);
         }, delay);
@@ -154,7 +158,7 @@ const Recommendations = () => {
         setRetrying(false);
       }
     } finally {
-      fetchLockRef.current = false;
+      if (myId === requestIdRef.current) fetchLockRef.current = false;
     }
   };
 
@@ -167,34 +171,9 @@ const Recommendations = () => {
     }
     setError(null);
     setRetrying(false);
+    requestIdRef.current += 1; // Invalidate any in-flight request's lock ownership
     fetchLockRef.current = false;
     fetchRecsWithRetry(0);
-  };
-
-  /**
-   * Track product click for personalization
-   * Fire and forget - doesn't block UI
-   */
-  const handleTrackClick = async (product) => {
-    try {
-      const token = localStorage.getItem("token");
-      if (!token) return;
-
-      axios
-        .post(
-          `${API_URL}/api/user/track-interest`,
-          { category: product.category, productId: product._id },
-          {
-            headers: { Authorization: `Bearer ${token}` },
-            timeout: 5000,
-          }
-        )
-        .catch(() => {
-          // Silent fail - don't disrupt UX
-        });
-    } catch (err) {
-      // Prevent exception propagation
-    }
   };
 
   /**
@@ -310,14 +289,7 @@ const Recommendations = () => {
                 />
               ))
             : products.map((item) => (
-                <div
-                  key={item._id}
-                  onClick={() => handleTrackClick(item)}
-                  className="group cursor-pointer"
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`View ${item.name}`}
-                >
+                <div key={item._id} className="group cursor-pointer">
                   <ProductCard product={item} />
                 </div>
               ))}
