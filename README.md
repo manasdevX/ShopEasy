@@ -2,6 +2,9 @@
 # 🛒 ShopEasy — Full-Stack E-Commerce Platform
 
 ShopEasy is an enterprise-grade MERN-stack e-commerce ecosystem designed to bridge the gap between complex industrial marketplaces and small-scale independent merchants. The platform provides a dual-sided solution: a streamlined, high-conversion storefront for consumers and a robust, data-driven management suite for sellers.
+## 📹 Demo
+
+🎬 **Project Demonstration**: [Watch on Google Drive](https://drive.google.com/file/d/15XV0SK08kflwiejQJ_insFnd8XfidkGf/view)
 ## ✨ Features
 
 ### 👤 User Features
