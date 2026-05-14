@@ -182,7 +182,6 @@ export const semanticProductSearch = async (queryText, limit = 5, options = {}) 
     const products = await Product.find({
       embeddings: { $exists: true, $not: { $size: 0 } },
       isAvailable: { $ne: false },
-      stock: { $gt: 0 },
     })
       .select(
         "_id name price mrp stock isAvailable description thumbnail category subCategory brand tags rating numReviews discountPercentage isFeatured isBestSeller createdAt embeddings"
