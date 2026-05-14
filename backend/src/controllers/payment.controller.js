@@ -6,6 +6,7 @@ import sendEmail from "../utils/emailHelper.js";
 import redisClient from "../config/redis.js";
 import { createNotification } from "./notification.controller.js";
 import { reserveStock, releaseStock } from "../utils/stockManager.js";
+import { clearProductCache } from "./product.controller.js";
 
 dotenv.config();
 
@@ -254,6 +255,10 @@ export const verifyPayment = async (req, res) => {
         // Note: Make sure clearOrderCache is imported or defined in this file
         if (typeof clearOrderCache === 'function') {
            clearOrderCache(req.user._id, savedOrder._id);
+        }
+        
+        for (const item of mappedOrderItems) {
+           clearProductCache(item.product, item.seller).catch(() => {});
         }
 
         // 2. Save Notifications to DB

@@ -14,11 +14,7 @@ export const reserveStock = async (items) => {
 
       const updated = await Product.findOneAndUpdate(
         { _id: prodId, stock: { $gte: qty } },
-        [
-          { $set: { stock: { $subtract: ["$stock", qty] } } },
-          // After stage 1, $stock is already the new value — set isAvailable false when it reaches 0
-          { $set: { isAvailable: { $gt: ["$stock", 0] } } },
-        ],
+        { $inc: { stock: -qty, countInStock: -qty } },
         { new: true }
       );
 
@@ -26,7 +22,7 @@ export const reserveStock = async (items) => {
         // rollback previous successful decrements
         for (const s of succeeded) {
           try {
-            await Product.findByIdAndUpdate(s.product, { $inc: { stock: s.qty } });
+            await Product.findByIdAndUpdate(s.product, { $inc: { stock: s.qty, countInStock: s.qty } });
           } catch (err) {
             // best-effort rollback; log and continue
             console.error("Stock rollback failed for", s.product, err?.message || err);
@@ -43,7 +39,7 @@ export const reserveStock = async (items) => {
     // rollback on unexpected error
     for (const s of succeeded) {
       try {
-        await Product.findByIdAndUpdate(s.product, { $inc: { stock: s.qty } });
+        await Product.findByIdAndUpdate(s.product, { $inc: { stock: s.qty, countInStock: s.qty } });
       } catch (e) {
         console.error("Stock rollback failed during exception for", s.product, e?.message || e);
       }
@@ -57,10 +53,7 @@ export const releaseStock = async (items) => {
     const prodId = it.product?._id || it.product;
     const qty = Number(it.qty || it.quantity || 0);
     try {
-      await Product.findByIdAndUpdate(prodId, [
-        { $set: { stock: { $add: ["$stock", qty] } } },
-        { $set: { isAvailable: { $gt: ["$stock", 0] } } },
-      ]);
+      await Product.findByIdAndUpdate(prodId, { $inc: { stock: qty, countInStock: qty } });
     } catch (err) {
       console.error("Failed to release stock for", prodId, err?.message || err);
     }
