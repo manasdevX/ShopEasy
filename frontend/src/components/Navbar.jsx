@@ -19,6 +19,31 @@ import toast from "react-hot-toast";
 import { showSuccess } from "../utils/toast";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const SEARCH_INTENT_MARKER = "shopeasy_last_search_intent";
+
+const makeSearchSignature = (value) => String(value || "").trim().toLowerCase();
+
+const markSearchIntentTracked = (value) => {
+  try {
+    sessionStorage.setItem(
+      SEARCH_INTENT_MARKER,
+      JSON.stringify({
+        signature: makeSearchSignature(value),
+        trackedAt: Date.now(),
+      })
+    );
+  } catch {
+    // ignore
+  }
+};
+
+const dispatchSearchIntentUpdated = () => {
+  try {
+    window.dispatchEvent(new Event("search-intent-updated"));
+  } catch {
+    // ignore
+  }
+};
 
 export default function Navbar() {
   const navigate = useNavigate();
@@ -190,18 +215,27 @@ export default function Navbar() {
     [showDropdown, totalItems, activeIndex, suggestions, categoryChips]
   );
 
-  const selectSuggestion = (name) => {
+  const selectSuggestion = async (name) => {
     setSearchTerm(name);
     setShowDropdown(false);
     setActiveIndex(-1);
-    trackSearchIntent(name);
+    dispatchSearchIntentUpdated();
+    void trackSearchIntent(name);
     navigate(`/search?q=${encodeURIComponent(name)}`);
   };
 
-  const selectCategory = (categoryName) => {
+  const selectCategory = async (categoryName) => {
     setShowDropdown(false);
     setActiveIndex(-1);
-    navigate(`/search?q=${encodeURIComponent(searchTerm)}&category=${encodeURIComponent(categoryName)}`);
+    dispatchSearchIntentUpdated();
+    void trackSearchIntent(categoryName);
+
+    const params = new URLSearchParams();
+    if (searchTerm.trim()) {
+      params.set("q", searchTerm.trim());
+    }
+    params.set("category", categoryName);
+    navigate(`/search?${params.toString()}`);
   };
 
   // ✅ FETCH CART COUNT
@@ -251,7 +285,7 @@ export default function Navbar() {
     };
   }, [isLoggedIn, token]);
 
-  const handleSearch = (e) => {
+  const handleSearch = async (e) => {
     if (e) e.preventDefault();
     const query = searchTerm.trim();
 
@@ -259,9 +293,13 @@ export default function Navbar() {
     setActiveIndex(-1);
 
     if (query) {
-      trackSearchIntent(query);
+      dispatchSearchIntentUpdated();
+      void trackSearchIntent(query);
+      navigate(`/search?q=${encodeURIComponent(query)}`);
+      return;
     }
-    navigate(`/search?q=${encodeURIComponent(query)}`);
+
+    navigate("/search");
   };
 
   // ✅ LOGOUT FUNCTION
@@ -290,7 +328,7 @@ export default function Navbar() {
           }
         }
         localStorage.removeItem(CHAT_SESSION_KEY);
-        sessionStorage.removeItem(CHAT_MESSAGES_KEY);
+        localStorage.removeItem(CHAT_MESSAGES_KEY);
         try {
           window.dispatchEvent(new Event("chat-cleared"));
         } catch (e) {
@@ -329,12 +367,12 @@ export default function Navbar() {
     if (!isLoggedIn || !query || query.trim().length < 2) return;
     try {
       const currentToken = localStorage.getItem("token");
+      markSearchIntentTracked(query);
       await axios.post(
         `${API_URL}/api/user/track-search-intent`,
         { query: query.trim() },
         { headers: { Authorization: `Bearer ${currentToken}` } }
       );
-      window.dispatchEvent(new Event("search-intent-updated"));
     } catch (err) {
       console.debug("AI Tracking skipped");
     }

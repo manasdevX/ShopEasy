@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
+import axios from "axios";
 import {
   Search,
   Loader2,
@@ -22,6 +23,40 @@ import { showError } from "../utils/toast";
 import ProductCard from "../components/ProductCard";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const SEARCH_INTENT_MARKER = "shopeasy_last_search_intent";
+
+const makeSearchSignature = (value) => String(value || "").trim().toLowerCase();
+
+const shouldSkipTracking = (value) => {
+  try {
+    const raw = sessionStorage.getItem(SEARCH_INTENT_MARKER);
+    if (!raw) return false;
+
+    const parsed = JSON.parse(raw);
+    if (!parsed?.signature) return false;
+
+    return (
+      parsed.signature === makeSearchSignature(value) &&
+      Date.now() - Number(parsed.trackedAt || 0) < 5000
+    );
+  } catch {
+    return false;
+  }
+};
+
+const markSearchIntentTracked = (value) => {
+  try {
+    sessionStorage.setItem(
+      SEARCH_INTENT_MARKER,
+      JSON.stringify({
+        signature: makeSearchSignature(value),
+        trackedAt: Date.now(),
+      })
+    );
+  } catch {
+    // ignore
+  }
+};
 
 // ── Skeleton Loader Component ──
 const ProductCardSkeleton = () => (
@@ -183,6 +218,47 @@ export default function SearchResults() {
 
   const hasFilters =
     minPrice || maxPrice || selectedRating > 0 || selectedCategory;
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    const trackingValue = query || selectedCategory;
+
+    if (!trackingValue || trackingValue.trim().length < 2) {
+      return;
+    }
+
+    window.dispatchEvent(new Event("search-intent-updated"));
+
+    if (!token) {
+      return;
+    }
+
+    if (shouldSkipTracking(trackingValue)) {
+      return;
+    }
+
+    const controller = new AbortController();
+
+    axios
+      .post(
+        `${API_URL}/api/user/track-search-intent`,
+        { query: trackingValue.trim() },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal,
+          withCredentials: true,
+        }
+      )
+      .then(() => {
+        markSearchIntentTracked(trackingValue);
+        window.dispatchEvent(new Event("search-intent-updated"));
+      })
+      .catch(() => {
+        // Ignore tracking failures; search results still render normally.
+      });
+
+    return () => controller.abort();
+  }, [query, selectedCategory]);
 
   return (
     <div className="bg-[#F8FAFC] dark:bg-[#020617] min-h-screen flex flex-col font-sans transition-colors duration-300">

@@ -39,15 +39,28 @@ export const addOrderItems = async (req, res) => {
       shippingPrice = 0,
     } = req.body;
 
-    if (orderItems && orderItems.length === 0) {
+    if (!Array.isArray(orderItems) || orderItems.length === 0) {
       return res.status(400).json({ message: "No order items" });
     }
 
+    if (
+      !shippingAddress ||
+      !shippingAddress.address ||
+      !shippingAddress.city ||
+      !shippingAddress.postalCode ||
+      !shippingAddress.phone
+    ) {
+      return res.status(400).json({ message: "Shipping address is required" });
+    }
+
+    const normalizedShippingPrice = Number(shippingPrice) || 0;
+
     // 1. Fetch Real Products from DB
     const productIds = orderItems.map((item) => item.product || item._id);
-    const dbProducts = await Product.find({ _id: { $in: productIds } });
+    const uniqueProductIds = [...new Set(productIds.map((id) => id.toString()))];
+    const dbProducts = await Product.find({ _id: { $in: uniqueProductIds } });
 
-    if (dbProducts.length !== orderItems.length) {
+    if (dbProducts.length !== uniqueProductIds.length) {
       return res
         .status(400)
         .json({ message: "One or more products not found" });
@@ -65,10 +78,14 @@ export const addOrderItems = async (req, res) => {
     const mappedOrderItems = orderItems.map((item) => {
         const productId = item.product || item._id;
         const realProduct = productMap[productId];
-        const orderQty = item.qty || item.quantity;
+        const orderQty = Number(item.qty ?? item.quantity);
 
       if (!realProduct) {
         throw new Error(`Product not found: ${productId}`);
+      }
+
+      if (!Number.isFinite(orderQty) || orderQty <= 0) {
+        throw new Error(`Invalid quantity for product ${productId}`);
       }
 
       if (realProduct.stock < orderQty) {
@@ -103,7 +120,7 @@ export const addOrderItems = async (req, res) => {
 
     // 3. Calculate Totals
     const taxPrice = 0;
-    const totalPrice = calculatedItemsPrice + taxPrice + shippingPrice;
+    const totalPrice = calculatedItemsPrice + taxPrice + normalizedShippingPrice;
 
     // 4. Reserve Stock Atomically for all items before creating the order
     const itemsToReserve = itemsToUpdate.map((it) => ({
@@ -132,7 +149,7 @@ export const addOrderItems = async (req, res) => {
       paymentMethod,
       itemsPrice: calculatedItemsPrice,
       taxPrice,
-      shippingPrice,
+      shippingPrice: normalizedShippingPrice,
       totalPrice,
       isPaid: paymentMethod === "COD" ? false : true,
       paidAt: paymentMethod === "COD" ? null : Date.now(),

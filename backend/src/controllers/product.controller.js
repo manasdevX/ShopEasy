@@ -53,6 +53,8 @@ const toFiniteNumber = (value) => {
   return Number.isFinite(num) ? num : null;
 };
 
+const escapeRegex = (value = "") => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 const buildFacetPipeline = (matchQuery) => [
   { $match: matchQuery },
   {
@@ -343,7 +345,10 @@ export const getAllProducts = async (req, res) => {
     };
 
     if (category) {
-      baseFilters.category = category;
+      baseFilters.category = {
+        $regex: `^${escapeRegex(category)}$`,
+        $options: "i",
+      };
     }
 
     if (effectiveMinPrice != null || effectiveMaxPrice != null) {
