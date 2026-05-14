@@ -2,12 +2,20 @@ import Product from "../models/Product.js";
 import cloudinary from "cloudinary";
 import streamifier from "streamifier";
 import dotenv from "dotenv";
-import redisClient from "../config/redis.js"; // <--- 1. IMPORT REDIS CLIENT
-import { buildCatalogRegexTerms, normalizeCatalogQuery, buildSmartSearchConditions, scoreProduct, hasDirectQueryHit, hasMeaningfulLexicalMatch, suggestQueryCorrection } from "../utils/catalogSearch.js";
+import redisClient from "../config/redis.js";
+import {
+  buildCatalogRegexTerms,
+  normalizeCatalogQuery,
+  buildSmartSearchConditions,
+  scoreProduct,
+  hasMeaningfulLexicalMatch,
+  suggestQueryCorrection,
+  validateSearchResults,
+} from "../utils/catalogSearch.js";
+import { parseSearchIntent, intentCacheHash } from "../utils/searchIntent.js";
 import { validateProductImageAndTitle } from "../utils/aiValidation.js";
-import { semanticProductSearch } from "../utils/vectorStore.js";
+import { semanticProductSearch, generateAndSaveProductEmbedding } from "../utils/vectorStore.js";
 
-// Load environment variables
 dotenv.config();
 
 /**
@@ -91,10 +99,6 @@ const buildFacetSummaryFromItems = (items = []) => {
   }];
 };
 
-const APPAREL_QUERY_PATTERN = /\b(clothes|apparel|fashion|outfit|garment|wear|clothing|dress|shirt|pants|jacket|shoe|footwear|attire)\b/i;
-const BROAD_APPAREL_QUERY_PATTERN = /\b(clothes|apparel|fashion|outfit|garment|wear|clothing)\b/i;
-const STRICT_SHIRT_QUERY_PATTERN = /\b(shirt|shirts|tshirt|tshirts|tee|tees)\b/i;
-
 // Layer 1: Database Retrieval & Layer 2: Application Ranking
 const runTwoLayerSearchPipeline = async ({
   matchQuery,
@@ -104,21 +108,24 @@ const runTwoLayerSearchPipeline = async ({
   limit,
   sort,
   qRaw,
+  intent,
 }) => {
   const candidateLimit = Math.min(2500, Math.max(600, page * limit * 12));
+  const specificity = intent?.specificity || "unknown";
 
   const semanticPromise = hasQuery
-    ? semanticProductSearch(qRaw, candidateLimit).catch(() => [])
+    ? semanticProductSearch(qRaw, candidateLimit, { specificity }).catch(() => [])
     : Promise.resolve([]);
 
-  // Layer 1: Candidate Retrieval (text index + smart field matching + semantic fallback)
+  // Layer 1: Candidate Retrieval
   const [count, facetsResult, rawCandidates, textCandidates, semanticCandidates] = await Promise.all([
     Product.countDocuments(matchQuery),
     Product.aggregate(buildFacetPipeline(matchQuery)),
     Product.find(matchQuery, {
       name: 1, price: 1, mrp: 1, discountPercentage: 1, thumbnail: 1, images: 1,
       category: 1, subCategory: 1, brand: 1, stock: 1, rating: 1, numReviews: 1,
-      isFeatured: 1, isBestSeller: 1, createdAt: 1, description: 1, tags: 1
+      isFeatured: 1, isBestSeller: 1, createdAt: 1, description: 1, tags: 1,
+      isAvailable: 1, searchKeywords: 1,
     })
       .limit(candidateLimit)
       .lean(),
@@ -129,23 +136,10 @@ const runTwoLayerSearchPipeline = async ({
             $text: { $search: qRaw },
           },
           {
-            name: 1,
-            price: 1,
-            mrp: 1,
-            discountPercentage: 1,
-            thumbnail: 1,
-            images: 1,
-            category: 1,
-            subCategory: 1,
-            brand: 1,
-            stock: 1,
-            rating: 1,
-            numReviews: 1,
-            isFeatured: 1,
-            isBestSeller: 1,
-            createdAt: 1,
-            description: 1,
-            tags: 1,
+            name: 1, price: 1, mrp: 1, discountPercentage: 1, thumbnail: 1, images: 1,
+            category: 1, subCategory: 1, brand: 1, stock: 1, rating: 1, numReviews: 1,
+            isFeatured: 1, isBestSeller: 1, createdAt: 1, description: 1, tags: 1,
+            isAvailable: 1, searchKeywords: 1,
             _textScore: { $meta: "textScore" },
           }
         )
@@ -158,7 +152,7 @@ const runTwoLayerSearchPipeline = async ({
   ]);
 
   const mergedById = new Map();
-  const mergeCandidate = (candidate, { fromText = false, fromSemantic = false, semanticRank = 0 } = {}) => {
+  const mergeCandidate = (candidate, { fromText = false, fromSemantic = false } = {}) => {
     const key = String(candidate._id);
     const existing = mergedById.get(key);
 
@@ -181,60 +175,73 @@ const runTwoLayerSearchPipeline = async ({
 
   rawCandidates.forEach((item) => mergeCandidate(item, { fromText: false }));
   textCandidates.forEach((item) => mergeCandidate(item, { fromText: true }));
-  semanticCandidates.forEach((item, index) => mergeCandidate(item, { fromSemantic: true, semanticRank: index + 1 }));
+  semanticCandidates.forEach((item) => mergeCandidate(item, { fromSemantic: true }));
 
   let items = [...mergedById.values()];
 
-  const hasApparelIntent = APPAREL_QUERY_PATTERN.test(qRaw);
-  const isSingleTokenQuery = qRaw.trim().split(/[\s\-_/.,+]+/).filter(Boolean).length === 1;
-  const isBroadApparelQuery = BROAD_APPAREL_QUERY_PATTERN.test(qRaw);
-  const isStrictShirtQuery = STRICT_SHIRT_QUERY_PATTERN.test(qRaw);
-  const hasStrongLexicalAnchor = items.some((item) => hasMeaningfulLexicalMatch(item, qRaw));
-
-  if (hasQuery && isSingleTokenQuery && !isBroadApparelQuery && isStrictShirtQuery) {
-    items = items.filter((item) => hasDirectQueryHit(item, qRaw));
-  }
-
-  if (hasQuery && !hasApparelIntent && !hasStrongLexicalAnchor) {
-    items = items.filter(
-      (item) => {
-        const semanticScore = Number(item._semanticScore || 0);
-        return hasMeaningfulLexicalMatch(item, qRaw) || semanticScore >= 0.62;
-      }
-    );
-  }
-
-  // Layer 2: Application-Level Logic-Based Ranking
+  // Layer 2: Application-Level Scoring
   if (hasQuery && sort === "relevance") {
-    items = items.map((item) => ({
-      ...item,
-      _relevanceScore:
-        scoreProduct(item, qRaw) +
+    const scoreMap = new Map();
+
+    items = items.map((item) => {
+      const relevanceScore =
+        scoreProduct(item, qRaw, intent) +
         Math.round((item._textScore || 0) * 80) +
         (item._sourceBoost ? 120 : 0) +
-        (item._semanticBoost || 0),
-    }));
+        (item._semanticBoost || 0);
 
-    // Sort primarily by computed relevance, tie-breaker by newest
+      scoreMap.set(String(item._id), relevanceScore);
+
+      return {
+        ...item,
+        _relevanceScore: relevanceScore,
+      };
+    });
+
     items.sort((a, b) => {
       if (b._relevanceScore !== a._relevanceScore) {
         return b._relevanceScore - a._relevanceScore;
       }
       return new Date(b.createdAt) - new Date(a.createdAt);
     });
+
+    // Validate results with taxonomy enforcement
+    const validated = validateSearchResults(items, intent, scoreMap);
+
+    if (validated.noResultsReason) {
+      return {
+        count: 0,
+        facetsResult: buildFacetSummaryFromItems([]),
+        items: [],
+        correctedQuery: hasQuery ? suggestQueryCorrection(qRaw, [...mergedById.values()].slice(0, 50)) : null,
+        noResultsReason: validated.noResultsReason,
+      };
+    }
+
+    items = validated.items;
   } else {
-    // Standard explicit sorts (price, rating, newest)
+    // Standard explicit sorts
     items.sort((a, b) => {
       if (sort === "price_asc") return a.price - b.price || new Date(b.createdAt) - new Date(a.createdAt);
       if (sort === "price_desc") return b.price - a.price || new Date(b.createdAt) - new Date(a.createdAt);
       if (sort === "rating_desc" || sort === "rating") {
         return (b.rating || 0) - (a.rating || 0) || (b.numReviews || 0) - (a.numReviews || 0);
       }
-      return new Date(b.createdAt) - new Date(a.createdAt); // default: newest
+      return new Date(b.createdAt) - new Date(a.createdAt);
     });
+
+    // Still filter out unavailable products for non-relevance sorts
+    items = items.filter((item) =>
+      Number(item.stock || 0) > 0 && item.isAvailable !== false
+    );
   }
 
-  const fallbackFacets = count > 0 ? facetsResult : buildFacetSummaryFromItems(items);
+  // Rebuild facets from validated items when taxonomy enforcement was applied,
+  // so excluded categories (e.g., "laptops" in a "shirt" query) don't leak into sidebar
+  const useValidatedFacets = hasQuery && sort === "relevance" && intent?.specificity === "narrow";
+  const fallbackFacets = useValidatedFacets
+    ? buildFacetSummaryFromItems(items)
+    : count > 0 ? facetsResult : buildFacetSummaryFromItems(items);
 
   // Application-level pagination
   const startIndex = (page - 1) * limit;
@@ -243,10 +250,16 @@ const runTwoLayerSearchPipeline = async ({
 
   // Clean up internal metadata fields
   const finalItems = paginatedItems.map(
-    ({ description, tags, _relevanceScore, _textScore, _sourceBoost, _semanticScore, _semanticBoost, _semanticRank, ...rest }) => rest
+    ({ description, tags, searchKeywords, _relevanceScore, _textScore, _sourceBoost, _semanticScore, _semanticBoost, _semanticRank, ...rest }) => rest
   );
 
-  return { count: hasQuery ? items.length : count, facetsResult: fallbackFacets, items: finalItems, correctedQuery };
+  return {
+    count: hasQuery ? items.length : count,
+    facetsResult: fallbackFacets,
+    items: finalItems,
+    correctedQuery,
+    noResultsReason: null,
+  };
 };
 
 const getSearchCacheVersion = async () => {
@@ -269,26 +282,20 @@ const bumpSearchCacheVersion = async () => {
 
 /**
  * Helper: Clear Product Caches
- * Clears specific product ID and any list/search caches to ensure data freshness
  */
 const clearProductCache = async (productId = null, sellerId = null) => {
   try {
-    // Invalidate all search/list cache entries using version bump.
     await bumpSearchCacheVersion();
 
-    // Clear specific product detail cache.
     if (productId) {
       await redisClient.del(`product:${productId}`);
     }
 
-    // Clear specific seller list cache.
     if (sellerId) {
       await redisClient.del(`seller_products:${sellerId}`);
     }
-
-    console.log("🧹 Redis Cache Cleared (Lists & Details)");
   } catch (error) {
-    console.error("Cache Clear Error:", error);
+    console.error("Cache clear error:", error.message);
   }
 };
 
@@ -302,8 +309,16 @@ const clearProductCache = async (productId = null, sellerId = null) => {
 export const getAllProducts = async (req, res) => {
   try {
     const qRaw = (req.query.q || req.query.keyword || "").toString().trim();
-    
-    // 1. Normalize user query without changing search intent.
+
+    // 1. Parse intent from raw query
+    let intent = null;
+    try {
+      intent = parseSearchIntent(qRaw);
+    } catch (e) {
+      intent = null;
+    }
+
+    // 2. Normalize user query
     const q = normalizeCatalogQuery(qRaw).slice(0, 120);
 
     const page = toPositiveInt(req.query.page || req.query.pageNumber, 1);
@@ -318,6 +333,10 @@ export const getAllProducts = async (req, res) => {
     const category = (req.query.category || "").toString().trim();
     const sort = (req.query.sort || "relevance").toString().trim();
 
+    // Apply price hint from intent if no explicit price filters
+    const effectiveMinPrice = minPrice ?? intent?.priceHint?.min ?? null;
+    const effectiveMaxPrice = maxPrice ?? intent?.priceHint?.max ?? null;
+
     const baseFilters = {
       stock: { $gt: 0 },
       isAvailable: { $ne: false },
@@ -327,34 +346,35 @@ export const getAllProducts = async (req, res) => {
       baseFilters.category = category;
     }
 
-    if (minPrice != null || maxPrice != null) {
+    if (effectiveMinPrice != null || effectiveMaxPrice != null) {
       baseFilters.price = {};
-      if (minPrice != null) baseFilters.price.$gte = minPrice;
-      if (maxPrice != null) baseFilters.price.$lte = maxPrice;
+      if (effectiveMinPrice != null) baseFilters.price.$gte = effectiveMinPrice;
+      if (effectiveMaxPrice != null) baseFilters.price.$lte = effectiveMaxPrice;
     }
 
     if (ratingMin != null) {
       baseFilters.rating = { $gte: ratingMin };
     }
 
+    const intentHash = intent ? intentCacheHash(intent) : "none";
     const normalizedQueryForCache = {
       q,
       page,
       limit,
-      minPrice,
-      maxPrice,
+      minPrice: effectiveMinPrice,
+      maxPrice: effectiveMaxPrice,
       ratingMin,
       category,
       sort,
+      ih: intentHash,
     };
 
     const cacheVersion = await getSearchCacheVersion();
     const cacheKey = `products:v${cacheVersion}:${JSON.stringify(normalizedQueryForCache)}`;
 
-    // 2. Check Redis
+    // 3. Check Redis
     const cachedResult = await redisClient.get(cacheKey);
     if (cachedResult) {
-      console.log("⚡ Serving Search Results from Redis");
       return res.json(JSON.parse(cachedResult));
     }
 
@@ -362,8 +382,7 @@ export const getAllProducts = async (req, res) => {
     const regexQuery = { ...baseFilters };
 
     if (hasQuery) {
-      // LAYER 1: Retrieve broad candidates using lightweight regex OR conditions
-      const smartConditions = buildSmartSearchConditions(qRaw);
+      const smartConditions = buildSmartSearchConditions(qRaw, intent);
       if (smartConditions.length > 0) {
         regexQuery.$or = smartConditions;
       } else {
@@ -391,13 +410,14 @@ export const getAllProducts = async (req, res) => {
         limit,
         sort,
         qRaw,
+        intent,
       });
     } catch (primaryError) {
-      console.error("Two-Layer Search Pipeline Failed:", primaryError.message);
+      console.error("Search pipeline error:", primaryError.message);
       throw primaryError;
     }
 
-    const { count, facetsResult, items, correctedQuery } = result;
+    const { count, facetsResult, items, correctedQuery, noResultsReason } = result;
 
     const responseData = {
       items,
@@ -409,18 +429,27 @@ export const getAllProducts = async (req, res) => {
       query: q,
       originalQuery: qRaw,
       correctedQuery,
+      noResultsReason: noResultsReason || null,
+
+      // Intent metadata for frontend
+      queryIntent: intent ? {
+        specificity: intent.specificity,
+        broadCategory: intent.broadCategory,
+        broadCategoryLabel: intent.broadCategoryLabel,
+        primaryIntent: intent.primaryIntent,
+      } : null,
 
       // Backward compatibility fields
       products: items,
       pages: Math.ceil(count / limit),
     };
 
-    // 3. Save to Redis (TTL: 1 hour)
+    // 4. Save to Redis (TTL: 15 minutes)
     await redisClient.setEx(cacheKey, 900, JSON.stringify(responseData));
 
     res.json(responseData);
   } catch (error) {
-    console.error("Search Error:", error);
+    console.error("Search error:", error.message);
     res.status(500).json({ message: error.message });
   }
 };
@@ -432,21 +461,17 @@ export const getProductById = async (req, res) => {
   try {
     const cacheKey = `product:${req.params.id}`;
 
-    // 1. Check Redis
     const cachedProduct = await redisClient.get(cacheKey);
     if (cachedProduct) {
-      console.log("⚡ Serving Product Detail from Redis");
       return res.json(JSON.parse(cachedProduct));
     }
 
-    // 2. Fetch from DB
     const product = await Product.findById(req.params.id).populate(
       "reviews.user",
       "name"
     );
 
     if (product) {
-      // 3. Save to Redis (TTL: 1 hour)
       await redisClient.setEx(cacheKey, 3600, JSON.stringify(product));
       res.json(product);
     } else {
@@ -468,10 +493,8 @@ export const getSellerProducts = async (req, res) => {
   try {
     const cacheKey = `seller_products:${req.seller._id}`;
 
-    // 1. Check Redis
     const cachedSellerProducts = await redisClient.get(cacheKey);
     if (cachedSellerProducts) {
-      console.log("⚡ Serving Seller Products from Redis");
       return res.json(JSON.parse(cachedSellerProducts));
     }
 
@@ -479,7 +502,6 @@ export const getSellerProducts = async (req, res) => {
       createdAt: -1,
     });
 
-    // 2. Save to Redis
     await redisClient.setEx(cacheKey, 3600, JSON.stringify(products));
 
     res.json(products);
@@ -521,7 +543,7 @@ export const createProduct = async (req, res) => {
 
     if (req.files && req.files.thumbnail) {
       const thumbnailFile = req.files.thumbnail[0];
-      
+
       // AI VALIDATION & TAG GENERATION
       const aiResult = await validateProductImageAndTitle(
         thumbnailFile.buffer,
@@ -533,11 +555,11 @@ export const createProduct = async (req, res) => {
       );
 
       if (!aiResult.isValid) {
-        return res.status(400).json({ 
-          message: aiResult.reason || "Uploaded images do not appear to match the product details." 
+        return res.status(400).json({
+          message: aiResult.reason || "Uploaded images do not appear to match the product details."
         });
       }
-      
+
       aiGeneratedTags = aiResult.generatedTags;
       thumbnail = await uploadToCloudinary(thumbnailFile.buffer);
     }
@@ -578,7 +600,10 @@ export const createProduct = async (req, res) => {
       isBestSeller: isBestSeller === "true" || isBestSeller === true,
     });
 
-    // ✅ INVALIDATE CACHE
+    // Generate embeddings asynchronously (non-blocking)
+    generateAndSaveProductEmbedding(product);
+
+    // INVALIDATE CACHE
     await clearProductCache(null, req.seller._id);
 
     res.status(201).json(product);
@@ -667,7 +692,10 @@ export const updateProduct = async (req, res) => {
 
     const updatedProduct = await product.save();
 
-    // ✅ INVALIDATE CACHE
+    // Re-generate embeddings asynchronously
+    generateAndSaveProductEmbedding(updatedProduct);
+
+    // INVALIDATE CACHE
     await clearProductCache(product._id, req.seller._id);
 
     res.json(updatedProduct);
@@ -693,7 +721,7 @@ export const deleteProduct = async (req, res) => {
 
       await product.deleteOne();
 
-      // ✅ INVALIDATE CACHE
+      // INVALIDATE CACHE
       await clearProductCache(req.params.id, req.seller._id);
 
       res.json({ message: "Product removed" });
@@ -745,7 +773,7 @@ export const createProductReview = async (req, res) => {
 
       await product.save();
 
-      // ✅ INVALIDATE CACHE
+      // INVALIDATE CACHE
       await clearProductCache(product._id);
 
       res.status(201).json({ message: "Review added" });
