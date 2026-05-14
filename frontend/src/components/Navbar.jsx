@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import useDarkSide from "../hooks/useDarkSide";
-import axios from "axios"; // ✅ AXIOS for robust Logout
+import axios from "axios";
 import {
   Moon,
   Sun,
@@ -12,6 +12,8 @@ import {
   Search,
   LogOut,
   Loader2,
+  TrendingUp,
+  Tag,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { showSuccess } from "../utils/toast";
@@ -22,11 +24,14 @@ export default function Navbar() {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
 
-  // --- RECOMMENDATION STATES ---
+  // --- SEARCH STATES ---
   const [suggestions, setSuggestions] = useState([]);
+  const [categoryChips, setCategoryChips] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
   const dropdownRef = useRef(null);
+  const inputRef = useRef(null);
 
   const [cartCount, setCartCount] = useState(0);
   const [colorTheme, setTheme] = useDarkSide();
@@ -49,27 +54,30 @@ export default function Navbar() {
     const handleClickOutside = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
         setShowDropdown(false);
+        setActiveIndex(-1);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // ✅ LIVE SEARCH LOGIC
+  // ✅ LIVE SEARCH LOGIC (with category chips)
   useEffect(() => {
     const controller = new AbortController();
 
     const fetchSuggestions = async () => {
       if (searchTerm.trim().length < 1) {
         setSuggestions([]);
+        setCategoryChips([]);
         setShowDropdown(false);
+        setActiveIndex(-1);
         return;
       }
 
       setIsSearching(true);
       try {
         const res = await fetch(
-          `${API_URL}/api/products?q=${encodeURIComponent(searchTerm)}&limit=10&page=1&sort=relevance`,
+          `${API_URL}/api/products?q=${encodeURIComponent(searchTerm)}&limit=8&page=1&sort=relevance`,
           { signal: controller.signal }
         );
         const data = await res.json();
@@ -77,9 +85,50 @@ export default function Navbar() {
           const products = Array.isArray(data)
             ? data
             : data.items || data.products || [];
-          const names = [...new Set(products.map((p) => p.name))];
-          setSuggestions(names);
+
+          // Deduplicate product names
+          const nameSet = new Set();
+          const uniqueProducts = [];
+          for (const p of products) {
+            const name = p.name?.trim();
+            if (name && !nameSet.has(name.toLowerCase())) {
+              nameSet.add(name.toLowerCase());
+              uniqueProducts.push({
+                name,
+                category: p.category || "",
+                brand: p.brand || "",
+                thumbnail: p.thumbnail || "",
+                price: p.price,
+              });
+            }
+          }
+          setSuggestions(uniqueProducts.slice(0, 6));
+
+          // Extract category chips from facets or products
+          const facetCategories = data.facets?.categories || [];
+          if (facetCategories.length > 0) {
+            setCategoryChips(
+              facetCategories
+                .slice(0, 4)
+                .map((c) => ({ name: c._id, count: c.count }))
+            );
+          } else {
+            const catCounts = {};
+            for (const p of products) {
+              if (p.category) {
+                catCounts[p.category] = (catCounts[p.category] || 0) + 1;
+              }
+            }
+            setCategoryChips(
+              Object.entries(catCounts)
+                .sort(([, a], [, b]) => b - a)
+                .slice(0, 4)
+                .map(([name, count]) => ({ name, count }))
+            );
+          }
+
           setShowDropdown(true);
+          setActiveIndex(-1);
         }
       } catch (err) {
         if (err?.name === "AbortError") return;
@@ -96,13 +145,72 @@ export default function Navbar() {
     };
   }, [searchTerm]);
 
+  // Total interactive items for keyboard navigation
+  const totalItems = suggestions.length + categoryChips.length;
+
+  // ✅ KEYBOARD NAVIGATION
+  const handleKeyDown = useCallback(
+    (e) => {
+      if (!showDropdown || totalItems === 0) {
+        if (e.key === "Enter") {
+          handleSearch();
+        }
+        return;
+      }
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setActiveIndex((prev) => (prev < totalItems - 1 ? prev + 1 : 0));
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setActiveIndex((prev) => (prev > 0 ? prev - 1 : totalItems - 1));
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (activeIndex >= 0) {
+          if (activeIndex < suggestions.length) {
+            // Selected a product suggestion
+            const selected = suggestions[activeIndex];
+            selectSuggestion(selected.name);
+          } else {
+            // Selected a category chip
+            const chipIndex = activeIndex - suggestions.length;
+            const chip = categoryChips[chipIndex];
+            if (chip) {
+              selectCategory(chip.name);
+            }
+          }
+        } else {
+          handleSearch();
+        }
+      } else if (e.key === "Escape") {
+        setShowDropdown(false);
+        setActiveIndex(-1);
+      }
+    },
+    [showDropdown, totalItems, activeIndex, suggestions, categoryChips]
+  );
+
+  const selectSuggestion = (name) => {
+    setSearchTerm(name);
+    setShowDropdown(false);
+    setActiveIndex(-1);
+    trackSearchIntent(name);
+    navigate(`/search?q=${encodeURIComponent(name)}`);
+  };
+
+  const selectCategory = (categoryName) => {
+    setShowDropdown(false);
+    setActiveIndex(-1);
+    navigate(`/search?q=${encodeURIComponent(searchTerm)}&category=${encodeURIComponent(categoryName)}`);
+  };
+
   // ✅ FETCH CART COUNT
   const updateCartCount = async () => {
     const currentToken = localStorage.getItem("token");
     if (currentToken) {
       try {
         const res = await fetch(`${API_URL}/api/cart`, {
-          credentials: "include", // ✅ CRITICAL: Sends Cookies for verification
+          credentials: "include",
           headers: { Authorization: `Bearer ${currentToken}` },
         });
         if (res.ok) {
@@ -143,52 +251,46 @@ export default function Navbar() {
     };
   }, [isLoggedIn, token]);
 
-  const handleSearch = async (e) => {
+  const handleSearch = (e) => {
     if (e) e.preventDefault();
     const query = searchTerm.trim();
 
     setShowDropdown(false);
+    setActiveIndex(-1);
 
-    // Only track intent if there is actually a query
     if (query) {
-      await trackSearchIntent(query);
+      trackSearchIntent(query);
     }
     navigate(`/search?q=${encodeURIComponent(query)}`);
   };
 
-  // ✅ LOGOUT FUNCTION (The Bug Fix)
+  // ✅ LOGOUT FUNCTION
   const handleLogout = async () => {
     try {
-      // 1. Call Backend to remove Session from DB
       await axios.post(
         `${API_URL}/api/auth/logout`,
         {},
-        { withCredentials: true } // ✅ Essential: Sends the cookie so backend knows which session to delete
+        { withCredentials: true }
       );
 
-      // 2. Clear Local State
-      // Clear auth & user
       localStorage.removeItem("token");
       localStorage.removeItem("user");
 
-      // Clear chat session + messages
       try {
         const CHAT_SESSION_KEY = "shopeasy_chat_session_id";
         const CHAT_MESSAGES_KEY = "shopeasy_chat_messages";
         const sessionId = localStorage.getItem(CHAT_SESSION_KEY);
         if (sessionId) {
-          // best-effort delete server session
           try {
             await axios.delete(`${API_URL}/api/chat/session/${sessionId}`, {
               withCredentials: true,
             });
           } catch (e) {
-            // ignore server delete errors
+            // ignore
           }
         }
         localStorage.removeItem(CHAT_SESSION_KEY);
         sessionStorage.removeItem(CHAT_MESSAGES_KEY);
-        // Notify other components (e.g., ChatBot) to clear state immediately
         try {
           window.dispatchEvent(new Event("chat-cleared"));
         } catch (e) {
@@ -208,7 +310,6 @@ export default function Navbar() {
       }, 1000);
     } catch (err) {
       console.error("Logout failed", err);
-      // Fallback: Force clear local state even if backend fails
       localStorage.clear();
       setTimeout(() => {
         window.location.href = "/";
@@ -228,7 +329,6 @@ export default function Navbar() {
     if (!isLoggedIn || !query || query.trim().length < 2) return;
     try {
       const currentToken = localStorage.getItem("token");
-      // We send a request to the server, we don't process DB logic here
       await axios.post(
         `${API_URL}/api/user/track-search-intent`,
         { query: query.trim() },
@@ -238,6 +338,26 @@ export default function Navbar() {
     } catch (err) {
       console.debug("AI Tracking skipped");
     }
+  };
+
+  // Highlight matching part in suggestion text
+  const highlightMatch = (text, query) => {
+    if (!query || !text) return text;
+    const lowerText = text.toLowerCase();
+    const lowerQuery = query.toLowerCase().trim();
+    const matchIdx = lowerText.indexOf(lowerQuery);
+
+    if (matchIdx === -1) return text;
+
+    return (
+      <>
+        {text.slice(0, matchIdx)}
+        <span className="font-semibold text-orange-500 dark:text-orange-400">
+          {text.slice(matchIdx, matchIdx + lowerQuery.length)}
+        </span>
+        {text.slice(matchIdx + lowerQuery.length)}
+      </>
+    );
   };
 
   return (
@@ -250,16 +370,20 @@ export default function Navbar() {
           ShopEasy
         </Link>
 
-        {/* --- SEARCH BAR WITH RECOMMENDATIONS --- */}
+        {/* --- SEARCH BAR WITH GROUPED SUGGESTIONS --- */}
         <div className="relative flex-1" ref={dropdownRef}>
-          <div className="flex bg-gray-100 dark:bg-gray-800/50 border border-transparent dark:border-gray-700 rounded-2xl overflow-hidden focus-within:ring-2 focus-within:ring-orange-500/50 transition-all">
+          <form 
+            onSubmit={handleSearch}
+            className="flex bg-gray-100 dark:bg-gray-800/50 border border-transparent dark:border-gray-700 rounded-2xl overflow-hidden focus-within:ring-2 focus-within:ring-orange-500/50 transition-all"
+          >
             <input
+              ref={inputRef}
               type="text"
               placeholder="Search products..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-              onFocus={() => searchTerm.length >= 2 && setShowDropdown(true)}
+              onKeyDown={handleKeyDown}
+              onFocus={() => searchTerm.length >= 1 && suggestions.length > 0 && setShowDropdown(true)}
               className="px-5 py-2.5 w-full outline-none bg-transparent text-gray-800 dark:text-gray-100 font-medium"
             />
             <div className="flex items-center pr-3 bg-transparent">
@@ -271,45 +395,103 @@ export default function Navbar() {
               )}
             </div>
             <button
-              onClick={handleSearch}
+              type="submit"
               className="px-6 bg-orange-500 text-white hover:bg-orange-600 transition-colors"
             >
               <Search size={18} />
             </button>
-          </div>
+          </form>
 
-          {/* RECOMMENDATIONS DROPDOWN */}
-          {/* RECOMMENDATIONS DROPDOWN */}
-          {showDropdown && suggestions.length > 0 && (
-            <div className="absolute top-full left-0 w-full mt-1 bg-white dark:bg-[#0f172a] rounded-b-2xl shadow-2xl border border-gray-100 dark:border-slate-800 overflow-hidden z-[999]">
-              <div className="py-1">
-                {suggestions.map((suggestion, index) => (
-                  <button
-                    key={index}
-                    onClick={async () => {
-                      setSearchTerm(suggestion);
-                      setShowDropdown(false);
-                      await trackSearchIntent(suggestion);
-                      navigate(`/search?q=${encodeURIComponent(suggestion)}`);
-                    }}
-                    // We keep 'group' here so ONLY this row triggers the hover state for its children
-                    className="w-full flex items-center gap-4 px-5 py-2.5 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors text-left group"
-                  >
-                    <Search
-                      size={16}
-                      className="text-slate-400 group-hover:text-orange-500 transition-colors"
-                    />
-                    <span className="text-sm font-medium text-slate-700 dark:text-slate-200 transition-colors group-hover:text-orange-500 dark:group-hover:text-orange-400">
-                      <span className="font-normal text-slate-400 transition-colors group-hover:text-orange-500/70">
-                        {searchTerm.toLowerCase()}
-                      </span>
-                      {suggestion
-                        .toLowerCase()
-                        .replace(searchTerm.toLowerCase(), "")}
+          {/* ENHANCED SUGGESTIONS DROPDOWN */}
+          {showDropdown && (suggestions.length > 0 || categoryChips.length > 0) && (
+            <div className="absolute top-full left-0 w-full mt-1 bg-white dark:bg-[#0f172a] rounded-2xl shadow-2xl border border-gray-100 dark:border-slate-800 overflow-hidden z-[999]">
+              {/* Product Suggestions */}
+              {suggestions.length > 0 && (
+                <div className="py-1">
+                  {suggestions.map((suggestion, index) => (
+                    <button
+                      key={`s-${index}`}
+                      onClick={() => selectSuggestion(suggestion.name)}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 transition-colors text-left group ${
+                        activeIndex === index
+                          ? "bg-orange-50 dark:bg-orange-500/10"
+                          : "hover:bg-gray-50 dark:hover:bg-slate-800"
+                      }`}
+                    >
+                      {suggestion.thumbnail ? (
+                        <img
+                          src={suggestion.thumbnail}
+                          alt=""
+                          className="w-8 h-8 rounded-lg object-cover shrink-0 border border-gray-200 dark:border-slate-700"
+                          onError={(e) => {
+                            e.target.style.display = "none";
+                          }}
+                        />
+                      ) : (
+                        <div className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-slate-700 flex items-center justify-center shrink-0">
+                          <Search size={14} className="text-slate-400" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm text-slate-700 dark:text-slate-200 block truncate">
+                          {highlightMatch(suggestion.name, searchTerm)}
+                        </span>
+                        {suggestion.category && (
+                          <span className="text-[11px] text-slate-400 dark:text-slate-500 block truncate">
+                            in {suggestion.category}
+                            {suggestion.brand ? ` · ${suggestion.brand}` : ""}
+                          </span>
+                        )}
+                      </div>
+                      {suggestion.price != null && (
+                        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 shrink-0">
+                          ₹{suggestion.price.toLocaleString("en-IN")}
+                        </span>
+                      )}
+                      <TrendingUp
+                        size={14}
+                        className={`shrink-0 transition-colors ${
+                          activeIndex === index
+                            ? "text-orange-500"
+                            : "text-slate-300 dark:text-slate-600 group-hover:text-orange-500"
+                        }`}
+                      />
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Category Chips */}
+              {categoryChips.length > 0 && (
+                <>
+                  <div className="border-t border-gray-100 dark:border-slate-800" />
+                  <div className="px-4 py-2.5">
+                    <span className="text-[11px] uppercase tracking-wider font-bold text-slate-400 dark:text-slate-500 mb-1.5 block">
+                      Categories
                     </span>
-                  </button>
-                ))}
-              </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {categoryChips.map((chip, index) => {
+                        const chipGlobalIndex = suggestions.length + index;
+                        return (
+                          <button
+                            key={`c-${index}`}
+                            onClick={() => selectCategory(chip.name)}
+                            className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-all ${
+                              activeIndex === chipGlobalIndex
+                                ? "bg-orange-500 text-white"
+                                : "bg-gray-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-orange-100 dark:hover:bg-orange-500/20 hover:text-orange-600 dark:hover:text-orange-400"
+                            }`}
+                          >
+                            <Tag size={10} />
+                            {chip.name}
+                            <span className="opacity-60">({chip.count})</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>

@@ -1,10 +1,16 @@
-/*
-  Production Search Core
-  - No hardcoded query-to-category remapping
-  - Deterministic normalization and tokenization
-  - Smart regex retrieval helpers
-  - Weighted relevance scoring with typo tolerance
-*/
+/**
+ * ─────────────────────────────────────────────────────────────
+ *  catalogSearch.js — Production Search Core (v2)
+ * ─────────────────────────────────────────────────────────────
+ *  Intent-aware query building, weighted relevance scoring,
+ *  result validation with taxonomy enforcement.
+ *  Deterministic normalization and tokenization.
+ *  Typo-tolerant matching via Damerau-Levenshtein.
+ * ─────────────────────────────────────────────────────────────
+ */
+
+import { findTermInTaxonomy, buildTaxonomyRegex, getAllTermsForCategory } from "./searchTaxonomy.js";
+import { parseSearchIntent } from "./searchIntent.js";
 
 const STOPWORDS = new Set([
   "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of",
@@ -18,7 +24,7 @@ const normalizeUnicode = (text = "") =>
   String(text)
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[����]/g, "'")
+    .replace(/['']/g, "'")
     .replace(/[^\w\s\-]/g, " ")
     .replace(/\s+/g, " ")
     .trim()
@@ -104,6 +110,8 @@ const getQueryContext = (rawQuery = "") => {
   };
 };
 
+// ─── Exports ────────────────────────────────────────────────
+
 export const normalizeCatalogQuery = (value = "") => {
   if (!value) return "";
   return tokenizeQuery(value).join(" ").slice(0, 240);
@@ -148,7 +156,92 @@ export const buildSmartRegexPatterns = (value = "") => {
   };
 };
 
-export const buildSmartSearchConditions = (rawQuery = "") => {
+/**
+ * Build intent-aware MongoDB search conditions.
+ * For narrow queries, constrains to taxonomy subset.
+ * For broad queries, expands to all children.
+ */
+export const buildSmartSearchConditions = (rawQuery = "", intent = null) => {
+  if (!intent) {
+    try {
+      intent = parseSearchIntent(rawQuery);
+    } catch (e) {
+      intent = null;
+    }
+  }
+
+  const taxonomyMatch = intent?.taxonomyMatch;
+  const specificity = intent?.specificity;
+
+  if (taxonomyMatch && specificity === "narrow") {
+    return buildNarrowSearchConditions(rawQuery, taxonomyMatch, intent);
+  }
+
+  if (taxonomyMatch && specificity === "broad") {
+    return buildBroadSearchConditions(rawQuery, taxonomyMatch, intent);
+  }
+
+  return buildFallbackSearchConditions(rawQuery);
+};
+
+const buildNarrowSearchConditions = (rawQuery, taxonomyMatch, intent) => {
+  const matchedTerms = taxonomyMatch.matchedTerms || [taxonomyMatch.term];
+  const synonyms = taxonomyMatch.synonyms || [];
+  const allNarrowTerms = [...new Set([...matchedTerms, ...synonyms, taxonomyMatch.term])];
+
+  const termRegex = buildTaxonomyRegex(allNarrowTerms);
+  const conditions = [];
+
+  if (termRegex) {
+    conditions.push({ name: { $regex: termRegex } });
+    conditions.push({ tags: { $in: allNarrowTerms.map((t) => new RegExp(escapeRegex(t), "i")) } });
+    conditions.push({ category: { $regex: termRegex } });
+    conditions.push({ subCategory: { $regex: termRegex } });
+    conditions.push({ searchKeywords: { $in: allNarrowTerms.map((t) => new RegExp(escapeRegex(t), "i")) } });
+  }
+
+  if (intent?.brandHint) {
+    conditions.push({ brand: { $regex: new RegExp(escapeRegex(intent.brandHint), "i") } });
+  }
+
+  if (intent?.filterTerms?.length) {
+    for (const ft of intent.filterTerms) {
+      if (ft.length >= 3) {
+        conditions.push({ name: { $regex: new RegExp(escapeRegex(ft), "i") } });
+        conditions.push({ description: { $regex: new RegExp(escapeRegex(ft), "i") } });
+      }
+    }
+  }
+
+  return conditions;
+};
+
+const buildBroadSearchConditions = (rawQuery, taxonomyMatch, intent) => {
+  const allChildren = taxonomyMatch.allChildren || taxonomyMatch.matchedTerms || [];
+  const aliases = taxonomyMatch.aliases || [];
+  const allTerms = [...new Set([...allChildren, ...aliases])];
+
+  const conditions = [];
+
+  if (allTerms.length > 0) {
+    const termRegex = buildTaxonomyRegex(allTerms);
+    if (termRegex) {
+      conditions.push({ name: { $regex: termRegex } });
+      conditions.push({ category: { $regex: termRegex } });
+      conditions.push({ subCategory: { $regex: termRegex } });
+      conditions.push({ tags: { $in: allTerms.map((t) => new RegExp(escapeRegex(t), "i")) } });
+      conditions.push({ searchKeywords: { $in: allTerms.map((t) => new RegExp(escapeRegex(t), "i")) } });
+    }
+  }
+
+  if (intent?.brandHint) {
+    conditions.push({ brand: { $regex: new RegExp(escapeRegex(intent.brandHint), "i") } });
+  }
+
+  return conditions;
+};
+
+const buildFallbackSearchConditions = (rawQuery = "") => {
   const { exactPatterns, prefixPatterns, fuzzyPatterns, tokens } = buildSmartRegexPatterns(rawQuery);
   const conditions = [];
   const primaryFields = ["name", "brand", "category", "subCategory", "tags"];
@@ -171,6 +264,8 @@ export const buildSmartSearchConditions = (rawQuery = "") => {
 
   return conditions;
 };
+
+// ─── Token Matching ─────────────────────────────────────────
 
 const scoreTokenMatch = (queryToken, targetToken) => {
   if (!queryToken || !targetToken) return 0;
@@ -243,6 +338,8 @@ const scoreFieldMatch = (queryTokens, fieldValue) => {
   return Math.min(score, 1);
 };
 
+// ─── Lexical Match Helpers ──────────────────────────────────
+
 export const hasMeaningfulLexicalMatch = (product, rawQuery = "") => {
   if (!product || !rawQuery) return false;
 
@@ -296,6 +393,8 @@ export const hasDirectQueryHit = (product, rawQuery = "") => {
     });
   });
 };
+
+// ─── Query Correction ───────────────────────────────────────
 
 const buildProductTextVocabulary = (products = []) => {
   const vocab = new Set();
@@ -357,47 +456,227 @@ export const suggestQueryCorrection = (rawQuery = "", products = []) => {
   return correctedQuery === normalizeCatalogQuery(rawQuery) ? null : correctedQuery;
 };
 
-export const scoreProduct = (product, rawQuery = "") => {
+// ─── Product Scoring (v2 — Multi-Signal Weighted) ───────────
+
+const MINIMUM_RELEVANCE_THRESHOLD = 25;
+
+const SCORE_WEIGHTS = {
+  EXACT_NAME_MATCH: 100,
+  NAME_TOKEN_MATCH: 60,
+  TAXONOMY_CATEGORY_MATCH: 80,
+  TAGS_MATCH: 50,
+  DESCRIPTION_MATCH: 20,
+  BRAND_MATCH: 30,
+  RATING_MAX: 15,
+  REVIEW_VOLUME_MAX: 10,
+  FEATURED_BONUS: 8,
+  BESTSELLER_BONUS: 5,
+  STOCK_BONUS: 3,
+  FRESHNESS_MAX: 5,
+  TAXONOMY_PENALTY: -200,
+};
+
+export const scoreProduct = (product, rawQuery = "", intent = null) => {
   if (!product || !rawQuery) return 0;
 
   const { tokens, normalized } = getQueryContext(rawQuery);
   if (!tokens.length) return 0;
 
-  const fieldWeights = {
-    name: 0.4,
-    brand: 0.16,
-    category: 0.14,
-    subCategory: 0.1,
-    tags: 0.12,
-    description: 0.08,
-  };
-
-  let lexicalScore = 0;
-
-  Object.entries(fieldWeights).forEach(([field, weight]) => {
-    const value = Array.isArray(product[field]) ? product[field].join(" ") : product[field];
-    lexicalScore += scoreFieldMatch(tokens, value) * weight;
-  });
-
-  const normalizedName = normalizeUnicode(product.name || "");
-  if (normalized.length >= 3 && normalizedName.includes(normalized)) {
-    lexicalScore += 0.18;
+  if (!intent) {
+    try {
+      intent = parseSearchIntent(rawQuery);
+    } catch (e) {
+      intent = null;
+    }
   }
 
-  const qualitySignal =
-    Math.min((product.rating || 0) / 5, 1) * 0.08 +
-    Math.min(Math.log10((product.numReviews || 0) + 1) / 3, 1) * 0.06 +
-    (product.isBestSeller ? 0.03 : 0) +
-    (product.isFeatured ? 0.02 : 0);
+  let totalScore = 0;
 
+  // 1. Exact name match
+  const normalizedName = normalizeUnicode(product.name || "");
+  if (normalizedName.includes(normalized) && normalized.length >= 3) {
+    totalScore += SCORE_WEIGHTS.EXACT_NAME_MATCH;
+  }
+
+  // 2. Name token match
+  const nameTokens = tokenize(product.name || "");
+  const nameMatchCount = tokens.filter((qt) =>
+    nameTokens.some((nt) => scoreTokenMatch(qt, nt) >= 0.8)
+  ).length;
+  if (nameMatchCount === tokens.length && tokens.length > 0) {
+    totalScore += SCORE_WEIGHTS.NAME_TOKEN_MATCH;
+  } else if (nameMatchCount > 0) {
+    totalScore += Math.round(SCORE_WEIGHTS.NAME_TOKEN_MATCH * (nameMatchCount / tokens.length) * 0.6);
+  }
+
+  // 3. Taxonomy category match
+  if (intent?.taxonomyMatch) {
+    const productCategory = normalizeUnicode(product.category || "");
+    const productSubCategory = normalizeUnicode(product.subCategory || "");
+    const matchedTerms = intent.taxonomyMatch.matchedTerms || [];
+    const allRelevant = [...matchedTerms, intent.taxonomyMatch.term, ...(intent.taxonomyMatch.aliases || [])];
+
+    const categoryHit = allRelevant.some((term) => {
+      const normalizedTerm = term.toLowerCase();
+      return (
+        productCategory.includes(normalizedTerm) ||
+        productSubCategory.includes(normalizedTerm)
+      );
+    });
+
+    if (categoryHit) {
+      totalScore += SCORE_WEIGHTS.TAXONOMY_CATEGORY_MATCH;
+    }
+
+    // Taxonomy penalty: product category is in a completely different branch
+    if (intent.specificity === "narrow" && !categoryHit) {
+      const productCatNode = findTermInTaxonomy(productCategory) || findTermInTaxonomy(productSubCategory);
+      if (productCatNode && productCatNode.rootKey !== intent.taxonomyMatch.rootKey) {
+        totalScore += SCORE_WEIGHTS.TAXONOMY_PENALTY;
+      }
+    }
+  }
+
+  // 4. Tags match
+  const productTags = (Array.isArray(product.tags) ? product.tags : []).map((t) => normalizeUnicode(t));
+  const tagMatchCount = tokens.filter((qt) =>
+    productTags.some((tag) => tag.includes(qt) || scoreTokenMatch(qt, tag) >= 0.8)
+  ).length;
+  if (tagMatchCount > 0) {
+    totalScore += Math.round(SCORE_WEIGHTS.TAGS_MATCH * (tagMatchCount / tokens.length));
+  }
+
+  // 5. Description match
+  const descScore = scoreFieldMatch(tokens, product.description || "");
+  if (descScore > 0.15) {
+    totalScore += Math.round(SCORE_WEIGHTS.DESCRIPTION_MATCH * Math.min(descScore, 1));
+  }
+
+  // 6. Brand match
+  if (intent?.brandHint) {
+    const productBrand = normalizeUnicode(product.brand || "");
+    if (productBrand.includes(intent.brandHint)) {
+      totalScore += SCORE_WEIGHTS.BRAND_MATCH;
+    }
+  }
+
+  // 7. Rating quality
+  const rating = Math.min(Number(product.rating || 0), 5);
+  totalScore += Math.round((rating / 5) * SCORE_WEIGHTS.RATING_MAX);
+
+  // 8. Review volume
+  const reviewVolume = Math.min(Math.log10(Number(product.numReviews || 0) + 1) / 3, 1);
+  totalScore += Math.round(reviewVolume * SCORE_WEIGHTS.REVIEW_VOLUME_MAX);
+
+  // 9. Featured & Best Seller
+  if (product.isFeatured) totalScore += SCORE_WEIGHTS.FEATURED_BONUS;
+  if (product.isBestSeller) totalScore += SCORE_WEIGHTS.BESTSELLER_BONUS;
+
+  // 10. Stock availability
+  if (Number(product.stock || 0) > 10) totalScore += SCORE_WEIGHTS.STOCK_BONUS;
+
+  // 11. Freshness
   const freshnessDays = Math.max(
     0,
     (Date.now() - new Date(product.createdAt || Date.now()).getTime()) / (1000 * 60 * 60 * 24)
   );
-  const freshnessSignal = freshnessDays <= 30 ? 0.03 : freshnessDays <= 90 ? 0.015 : 0;
+  if (freshnessDays <= 30) totalScore += SCORE_WEIGHTS.FRESHNESS_MAX;
+  else if (freshnessDays <= 90) totalScore += Math.round(SCORE_WEIGHTS.FRESHNESS_MAX * 0.5);
 
-  const stockSignal = product.stock > 0 ? 0.02 : -0.08;
-
-  const finalScore = lexicalScore + qualitySignal + freshnessSignal + stockSignal;
-  return Math.round(Math.max(0, finalScore) * 1000);
+  return Math.max(0, totalScore);
 };
+
+// ─── Result Validation ──────────────────────────────────────
+
+export const validateSearchResults = (products, intent, scores = null) => {
+  if (!Array.isArray(products)) return { items: [], total: 0, noResultsReason: "invalid_input" };
+
+  const seenIds = new Set();
+  let validated = [];
+
+  for (const product of products) {
+    // Remove out of stock / unavailable
+    if (Number(product.stock || 0) <= 0) continue;
+    if (product.isAvailable === false) continue;
+
+    // Deduplicate
+    const id = String(product._id);
+    if (seenIds.has(id)) continue;
+    seenIds.add(id);
+
+    // Check minimum relevance threshold
+    const score = scores?.get(id) ?? product._relevanceScore ?? 0;
+    if (score < MINIMUM_RELEVANCE_THRESHOLD) continue;
+
+    // For narrow intent, enforce taxonomy boundary
+    if (intent?.specificity === "narrow" && intent?.taxonomyMatch) {
+      const productCategory = normalizeUnicode(product.category || "");
+      const productSubCategory = normalizeUnicode(product.subCategory || "");
+      const productName = normalizeUnicode(product.name || "");
+      const productTags = (Array.isArray(product.tags) ? product.tags : []).map((t) => normalizeUnicode(t));
+
+      const matchedTerms = intent.taxonomyMatch.matchedTerms || [intent.taxonomyMatch.term];
+
+      // Word-boundary check to prevent substring false positives
+      // e.g. "top" must NOT match "laptop" / "laptops"
+      const wordBoundaryMatch = (text, term) => {
+        if (!text || !term) return false;
+        if (text === term) return true;
+        try {
+          const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          return new RegExp(`(?:^|[\\s\\-_/])${escaped}(?:s|es)?(?:[\\s\\-_/]|$)`, "i").test(text);
+        } catch {
+          return text === term;
+        }
+      };
+
+      const termHit = matchedTerms.some((term) => {
+        const normalizedTerm = term.toLowerCase();
+        return (
+          wordBoundaryMatch(productCategory, normalizedTerm) ||
+          wordBoundaryMatch(productSubCategory, normalizedTerm) ||
+          wordBoundaryMatch(productName, normalizedTerm) ||
+          productTags.some((tag) => wordBoundaryMatch(tag, normalizedTerm))
+        );
+      });
+
+      if (!termHit) {
+        // For narrow intent, no term hit means the product is likely off-taxonomy.
+        // Only allow it through if its category resolves to the SAME root branch.
+        const productCatNode = findTermInTaxonomy(productCategory) || findTermInTaxonomy(productSubCategory);
+
+        if (!productCatNode) {
+          // Category not in taxonomy at all — exclude unless name has a direct match
+          const intentTerm = (intent.taxonomyMatch.term || "").toLowerCase();
+          if (!productName.includes(intentTerm)) {
+            continue;
+          }
+        } else if (productCatNode.rootKey !== intent.taxonomyMatch.rootKey) {
+          // Different taxonomy branch entirely — hard exclude
+          continue;
+        } else {
+          // Same root but different subcategory — check siblings
+          const siblingTerms = intent.taxonomyMatch.siblings || [];
+          const isSibling = siblingTerms.some((sibling) => {
+            const normalizedSibling = sibling.toLowerCase();
+            return productCategory.includes(normalizedSibling) || productSubCategory.includes(normalizedSibling);
+          });
+          if (isSibling) continue;
+        }
+      }
+    }
+
+    validated.push(product);
+  }
+
+  // Cap at 200 final candidates
+  validated = validated.slice(0, 200);
+
+  if (validated.length === 0) {
+    return { items: [], total: 0, noResultsReason: "no_relevant_products" };
+  }
+
+  return { items: validated, total: validated.length, noResultsReason: null };
+};
+
+export { MINIMUM_RELEVANCE_THRESHOLD };
