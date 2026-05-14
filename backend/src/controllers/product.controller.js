@@ -283,7 +283,7 @@ const bumpSearchCacheVersion = async () => {
 /**
  * Helper: Clear Product Caches
  */
-const clearProductCache = async (productId = null, sellerId = null) => {
+export const clearProductCache = async (productId = null, sellerId = null) => {
   try {
     await bumpSearchCacheVersion();
 
