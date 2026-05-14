@@ -4,6 +4,7 @@ import { reserveStock, releaseStock } from "../utils/stockManager.js";
 import { createNotification } from "./notification.controller.js";
 import sendEmail from "../utils/emailHelper.js";
 import redisClient from "../config/redis.js";
+import { clearProductCache } from "./product.controller.js";
 
 /**
  * Helper: Clear Order Caches (Fail-Safe)
@@ -189,6 +190,10 @@ export const addOrderItems = async (req, res) => {
       try {
         // Clear Cache
         clearOrderCache(req.user._id);
+        
+        for (const item of mappedOrderItems) {
+           clearProductCache(item.product, item.seller).catch(() => {});
+        }
 
         // Save Notifications to DB
         for (const sellerId of sellersToNotify) {
@@ -376,6 +381,7 @@ export const cancelOrder = async (req, res) => {
       const product = await Product.findById(item.product);
       if (product) {
         product.stock += item.qty;
+        product.countInStock += item.qty;
         await product.save();
       }
     }
@@ -383,6 +389,10 @@ export const cancelOrder = async (req, res) => {
     await order.save();
 
     clearOrderCache(order.user, order._id); // Non-blocking
+
+    for (const item of order.orderItems) {
+       clearProductCache(item.product, item.seller).catch(() => {});
+    }
 
     const sellersToNotify = [
       ...new Set(order.orderItems.map((item) => item.seller.toString())),
@@ -447,6 +457,7 @@ export const requestReturn = async (req, res) => {
       const product = await Product.findById(item.product);
       if (product) {
         product.stock += item.qty;
+        product.countInStock += item.qty;
         await product.save();
       }
     }
@@ -459,6 +470,10 @@ export const requestReturn = async (req, res) => {
     await order.save();
 
     clearOrderCache(order.user, order._id);
+
+    for (const item of order.orderItems) {
+       clearProductCache(item.product, item.seller).catch(() => {});
+    }
 
     const sellersToNotify = [
       ...new Set(order.orderItems.map((item) => item.seller.toString())),
