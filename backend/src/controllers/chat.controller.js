@@ -235,7 +235,7 @@ export const streamChatMessage = async (req, res) => {
         ...history,
         { role: "user", content: String(message).trim() },
         { role: "assistant", content: fullReply },
-      ].slice(-20);
+      ].slice(-16);
 
       await saveChatSessionHistory(resolvedSessionId, nextHistory);
     }

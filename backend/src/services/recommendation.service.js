@@ -490,7 +490,8 @@ export const trackSearchIntent = async (userId, query, logger) => {
 
     if (!matchingProduct) {
       logger.debug("No matching product found", { searchTerm });
-      return; // Silent fail - don't throw
+      await invalidateCache(userId);
+      return;
     }
 
     const category = matchingProduct.category;

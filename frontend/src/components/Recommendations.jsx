@@ -41,6 +41,7 @@ const Recommendations = () => {
   const abortControllerRef = useRef(null);
   const retryTimeoutRef = useRef(null);
   const fetchLockRef = useRef(false); // Prevent concurrent fetches
+  const requestIdRef = useRef(0); // Generation counter — guards lock release against stale cancelled requests
   const searchRefreshTimeoutRef = useRef(null); // Debounce search-intent refreshes
 
   /**
@@ -48,12 +49,9 @@ const Recommendations = () => {
    * @param {number} retryCount - Current retry attempt number
    */
   const fetchRecsWithRetry = async (retryCount = 0) => {
+    const myId = requestIdRef.current;
     try {
       const token = localStorage.getItem("token");
-      if (!token) {
-        setLoading(false);
-        return;
-      }
 
       // Prevent concurrent fetch requests
       if (fetchLockRef.current) {
@@ -63,22 +61,34 @@ const Recommendations = () => {
 
       // Cancel any previous request
       if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
+        try {
+          abortControllerRef.current.abort();
+        } catch (e) {
+          // ignore
+        }
       }
       abortControllerRef.current = new AbortController();
 
       const startTime = performance.now();
 
-      const { data } = await axios.get(
-        `${API_URL}/api/user/recommendations`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+      let data;
+      if (token) {
+        const res = await axios.get(`${API_URL}/api/user/recommendations`, {
+          headers: { Authorization: `Bearer ${token}` },
           signal: abortControllerRef.current.signal,
           timeout: 10000,
-        }
-      );
+        });
+        data = res.data;
+      } else {
+        // Public fallback: fetch trending / high-rated products so unauthenticated
+        // users still see updated recommendations on search events.
+        const res = await axios.get(`${API_URL}/api/products?sort=rating&limit=12`, {
+          signal: abortControllerRef.current.signal,
+          timeout: 10000,
+        });
+        const products = Array.isArray(res.data) ? res.data : res.data.items || res.data.products || [];
+        data = { products: products.slice(0, RECOMMENDATION_CONFIG.RECOMMENDATIONS.TARGET_COUNT), personalized: false };
+      }
 
       const fetchTime = performance.now() - startTime;
 
@@ -88,18 +98,17 @@ const Recommendations = () => {
       }
 
       setProducts(data.products || []);
-      setIsPersonalized(data.personalized || false);
+      setIsPersonalized(Boolean(data.personalized));
       setError(null);
       setRetrying(false);
       setLoading(false);
 
-      console.log(
-        `[Recommendations] Fetched ${data.products.length} products in ${fetchTime.toFixed(0)}ms`
-      );
+      console.log(`[Recommendations] Fetched ${data.products.length} products in ${fetchTime.toFixed(0)}ms`);
     } catch (err) {
-      // Don't retry if request was cancelled — but always free the lock
+      // Don't retry if request was cancelled. Only release the lock if this
+      // is still the active request — a newer fetchRecs() call owns it now.
       if (axios.isCancel(err)) {
-        fetchLockRef.current = false;
+        if (myId === requestIdRef.current) fetchLockRef.current = false;
         return;
       }
 
@@ -127,6 +136,7 @@ const Recommendations = () => {
 
         setRetrying(true);
         retryTimeoutRef.current = setTimeout(() => {
+          if (myId !== requestIdRef.current) return; // superseded by a newer fetchRecs() call
           fetchLockRef.current = false;
           fetchRecsWithRetry(retryCount + 1);
         }, delay);
@@ -154,7 +164,7 @@ const Recommendations = () => {
         setRetrying(false);
       }
     } finally {
-      fetchLockRef.current = false;
+      if (myId === requestIdRef.current) fetchLockRef.current = false;
     }
   };
 
@@ -167,34 +177,9 @@ const Recommendations = () => {
     }
     setError(null);
     setRetrying(false);
+    requestIdRef.current += 1; // Invalidate any in-flight request's lock ownership
     fetchLockRef.current = false;
     fetchRecsWithRetry(0);
-  };
-
-  /**
-   * Track product click for personalization
-   * Fire and forget - doesn't block UI
-   */
-  const handleTrackClick = async (product) => {
-    try {
-      const token = localStorage.getItem("token");
-      if (!token) return;
-
-      axios
-        .post(
-          `${API_URL}/api/user/track-interest`,
-          { category: product.category, productId: product._id },
-          {
-            headers: { Authorization: `Bearer ${token}` },
-            timeout: 5000,
-          }
-        )
-        .catch(() => {
-          // Silent fail - don't disrupt UX
-        });
-    } catch (err) {
-      // Prevent exception propagation
-    }
   };
 
   /**
@@ -210,6 +195,19 @@ const Recommendations = () => {
         clearTimeout(searchRefreshTimeoutRef.current);
       }
       searchRefreshTimeoutRef.current = setTimeout(() => {
+        // Abort any in-flight request so we always fetch fresh data
+        if (abortControllerRef.current) {
+          try {
+            abortControllerRef.current.abort();
+          } catch (e) {
+            // ignore
+          }
+        }
+
+        // Bump request id to invalidate previous fetch ownership
+        requestIdRef.current += 1;
+        fetchLockRef.current = false;
+
         fetchRecs();
       }, 400);
     };
@@ -310,14 +308,7 @@ const Recommendations = () => {
                 />
               ))
             : products.map((item) => (
-                <div
-                  key={item._id}
-                  onClick={() => handleTrackClick(item)}
-                  className="group cursor-pointer"
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`View ${item.name}`}
-                >
+                <div key={item._id} className="group cursor-pointer">
                   <ProductCard product={item} />
                 </div>
               ))}
