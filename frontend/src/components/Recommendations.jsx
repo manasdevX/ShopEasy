@@ -52,10 +52,6 @@ const Recommendations = () => {
     const myId = requestIdRef.current;
     try {
       const token = localStorage.getItem("token");
-      if (!token) {
-        setLoading(false);
-        return;
-      }
 
       // Prevent concurrent fetch requests
       if (fetchLockRef.current) {
@@ -65,22 +61,34 @@ const Recommendations = () => {
 
       // Cancel any previous request
       if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
+        try {
+          abortControllerRef.current.abort();
+        } catch (e) {
+          // ignore
+        }
       }
       abortControllerRef.current = new AbortController();
 
       const startTime = performance.now();
 
-      const { data } = await axios.get(
-        `${API_URL}/api/user/recommendations`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+      let data;
+      if (token) {
+        const res = await axios.get(`${API_URL}/api/user/recommendations`, {
+          headers: { Authorization: `Bearer ${token}` },
           signal: abortControllerRef.current.signal,
           timeout: 10000,
-        }
-      );
+        });
+        data = res.data;
+      } else {
+        // Public fallback: fetch trending / high-rated products so unauthenticated
+        // users still see updated recommendations on search events.
+        const res = await axios.get(`${API_URL}/api/products?sort=rating&limit=12`, {
+          signal: abortControllerRef.current.signal,
+          timeout: 10000,
+        });
+        const products = Array.isArray(res.data) ? res.data : res.data.items || res.data.products || [];
+        data = { products: products.slice(0, RECOMMENDATION_CONFIG.RECOMMENDATIONS.TARGET_COUNT), personalized: false };
+      }
 
       const fetchTime = performance.now() - startTime;
 
@@ -90,14 +98,12 @@ const Recommendations = () => {
       }
 
       setProducts(data.products || []);
-      setIsPersonalized(data.personalized || false);
+      setIsPersonalized(Boolean(data.personalized));
       setError(null);
       setRetrying(false);
       setLoading(false);
 
-      console.log(
-        `[Recommendations] Fetched ${data.products.length} products in ${fetchTime.toFixed(0)}ms`
-      );
+      console.log(`[Recommendations] Fetched ${data.products.length} products in ${fetchTime.toFixed(0)}ms`);
     } catch (err) {
       // Don't retry if request was cancelled. Only release the lock if this
       // is still the active request — a newer fetchRecs() call owns it now.
@@ -189,6 +195,19 @@ const Recommendations = () => {
         clearTimeout(searchRefreshTimeoutRef.current);
       }
       searchRefreshTimeoutRef.current = setTimeout(() => {
+        // Abort any in-flight request so we always fetch fresh data
+        if (abortControllerRef.current) {
+          try {
+            abortControllerRef.current.abort();
+          } catch (e) {
+            // ignore
+          }
+        }
+
+        // Bump request id to invalidate previous fetch ownership
+        requestIdRef.current += 1;
+        fetchLockRef.current = false;
+
         fetchRecs();
       }, 400);
     };
